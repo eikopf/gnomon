@@ -1,10 +1,10 @@
 specs (
   {
-    name sundial
+    name gnomon
 
     include (
-      spec/sundial.md
-      spec/sundial/**/*.md
+      spec/gnomon.md
+      spec/gnomon/**/*.md
     )
 
     impls (

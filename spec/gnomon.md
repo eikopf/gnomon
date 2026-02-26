@@ -1,24 +1,10 @@
-# Sundial Specification
+# Gnomon Specification
 
 A plaintext language for authoring and maintaining calendars, designed to compile to iCalendar and JSCalendar.
 
 ## Introduction
 
 TODO: write prose introduction
-
-## Principles
-
-r[principle.records]
-Every structured value MUST be a record. Familiar literal forms (dates, times, durations) are syntactic sugar over records.
-
-r[principle.layers]
-The language MUST have two syntactic layers: a full syntax where every piece of data is an explicit record field, and a short syntax that desugars to the full syntax.
-
-r[principle.identity]
-Concrete UIDs MUST NOT be stored in the data model. Component identity MUST be a function from a root UUID to a derived UUID, evaluated only at render time.
-
-r[principle.unknown-fields]
-Unknown fields MUST be allowed by default and MUST participate fully in the data model.
 
 ## Lexical Syntax
 
@@ -60,7 +46,7 @@ The input format normalization rules MUST be applied in order: the byte order ma
 
 ### Comments
 
-Sundial uses Lisp-style semicolon comments for no reason other than that the semicolon is an otherwise unused character.
+Gnomon uses Lisp-style semicolon comments for no reason other than that the semicolon is an otherwise unused character.
 
 r[lexer.comment]
 Comments MUST begin with `;` and extend to the end of the line.
@@ -78,7 +64,7 @@ A whitespace character is any character with the `Pattern_White_Space` Unicode p
 r[lexer.whitespace]
 Any character with the `Pattern_White_Space` Unicode property MUST be treated as whitespace.
 
-Whitespace does not have any semantic significance, and replacing any whitespace string with any other whitespace string does not change the meaning of a Sundial program.
+Whitespace does not have any semantic significance, and replacing any whitespace string with any other whitespace string does not change the meaning of a Gnomon program.
 
 ### Punctuation
 
@@ -118,7 +104,7 @@ Note that hyphens are allowed in order to support iCalendar extension names like
 
 ### Keywords
 
-Sundial distinguishes between strict and weak keywords. A strict keyword may only be used as keyword, whereas a weak keyword decays into an identifier outside of the designated contexts in which it operates as a keyword.
+Gnomon distinguishes between strict and weak keywords. A strict keyword may only be used as keyword, whereas a weak keyword decays into an identifier outside of the designated contexts in which it operates as a keyword.
 
 The strict keywords are `true`, `false`, and `undefined`.
 
@@ -244,26 +230,43 @@ duration unit    = "w" | "d" | "h" | "m" | "s" ;
 
 ### Literal Expressions
 
-TODO: fill out
+A literal expression is a string literal, integer literal, `true`, or `false`.
+
+```ebnf
+literal expr = string literal
+             | integer literal
+             | "true"
+             | "false"
+             ;
+```
+
+### Records
+
+A record is a table mapping from identifiers to values. An identifier may occur at most once as a key in a record.
+
+```ebnf
+record = "{", [ fields ], "}" ;
+fields = field, { ",", field }, [ "," ] ;
+field  = identifier, ":", expr ;
+```
+
+r[expr.record.syntax]
+Records MUST use braces with comma-separated fields. Trailing commas MUST be allowed.
+
+r[expr.record.keys]
+An identifier MUST NOT appear more than once as a key in a record.
+
+### Lists
+
+A list is a contiguous sequence of zero or more values.
+
+r[type.list.syntax]
+Lists MUST use square brackets with comma-separated values. Single-element lists MUST require brackets — no sugar for single-element lists.
 
 ### Dot-Path Access
 
 r[syntax.dot-path]
 Nested fields MAY be set using dot-path syntax (e.g., `recurs.from: 2025-07-01`) as an alternative to a full nested block. Both forms MUST be valid.
-
-### Records
-
-r[type.record.syntax]
-Records MUST use braces with comma-separated fields. Trailing commas MUST be allowed. Newlines MAY substitute for commas.
-
-r[type.record.field]
-Record fields MUST follow the pattern `Path ':' '='? Value`, where Path is a dot-separated identifier chain.
-
-### Lists
-
-r[type.list.syntax]
-Lists MUST use square brackets with comma-separated values. Single-element lists MUST require brackets — no sugar for single-element lists.
-
 
 ### Recurrence
 
@@ -271,7 +274,7 @@ r[syntax.recur.every]
 The `every` prefix MUST replace the date position in an event or todo to indicate recurrence.
 
 r[syntax.recur.every-grammar]
-The `every` mini-grammar MUST support the following mappings:
+The `every` mini-grammar MUST support the forms: `every <weekday>` (weekly), `every <n> weeks <weekday>` (biweekly), `every <ord> <weekday>` (monthly), `every day` (daily), and `every year <MM-DD>` (yearly). Anything outside this grammar MUST use the full form.
 
 | Pattern | Desugared |
 |---------|-----------|
@@ -286,7 +289,7 @@ Anything that does not fit this grammar MUST use the full form.
 ### Value Parsing Priority
 
 r[type.parse-priority]
-For unknown fields, the parser MUST interpret values in this order:
+For unknown fields, the parser MUST interpret values in priority order: keyword, date literal, time literal, duration literal, integer, bare identifier, quoted string.
 
 1. Keyword (`true`, `false`, `undefined`, `local`, weekday names, freq names)
 2. Date literal (`2025-07-14`, `07-14`)
@@ -347,7 +350,7 @@ A calendar-level or file-level `tz` MUST set the default for contained component
 ### Enums
 
 r[type.enum]
-Enums MUST NOT be a separate primitive type. They MUST be bare identifiers in specific field contexts, validated by the parser:
+Enums MUST NOT be a separate primitive type. They MUST be bare identifiers in specific field contexts, validated by the parser.
 
 - `freq`: `daily` | `weekly` | `biweekly` | `monthly` | `yearly`
 - `priority`: `low` | `normal` | `high`
@@ -446,7 +449,7 @@ r[identity.unnamed]
 Unnamed components MUST derive their UID from a canonical content signature: `UUIDv5(calendar_root_uuid, "kind|date|time|title")`.
 
 r[identity.sub-component]
-Sub-component and override identity MUST derive from the parent's UID:
+Sub-component and override identity MUST derive from the parent's UID, as `UUIDv5(parent_uid, instance_key)` where the instance key is the override date or alarm signature.
 
 - Override: `UUIDv5(event_uid, "YYYY-MM-DD")`
 - Alarm: `UUIDv5(event_uid, "alarm|duration|before")`

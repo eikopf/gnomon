@@ -1,0 +1,161 @@
+(* ======================================================================= *)
+(* Gnomon — EBNF Grammar                                                 *)
+(* A plaintext calendar language that compiles to iCalendar / JSCalendar   *)
+(* ======================================================================= *)
+
+
+(* ----------------------------------------------------------------------- *)
+(* 1. File structure                                                       *)
+(* ----------------------------------------------------------------------- *)
+
+file = { declaration } ;
+
+declaration = calendar
+            | include
+            | bind
+            | component
+            | override
+            | comment ;
+
+calendar  = "calendar" , string , record ;
+include   = "include"  , string ;
+bind      = "bind"     , name , string ;
+override  = "override" , name , date literal , [ record ] ;
+
+comment = "--" , { any char - newline } , newline ;
+
+
+(* ----------------------------------------------------------------------- *)
+(* 2. Components                                                           *)
+(* ----------------------------------------------------------------------- *)
+
+component = event | todo ;
+
+event = full event | short event ;
+todo  = full todo  | short todo ;
+
+full event  = "event" , record ;
+full todo   = "todo"  , record ;
+
+short event = "event" , [ name ] , temporal event , string , { alarm } , [ record ] ;
+short todo  = "todo"  , [ name ] , [ date literal ] , string , [ record ] ;
+
+temporal event = recurrence pattern
+               | date literal , [ time or span , [ duration literal ] ] ;
+
+(* A time position can be a single time or a time span (14:00-16:00).      *)
+(* A span implies both start and end, so no separate duration follows.     *)
+time or span = time literal , [ "-" , time literal ] ;
+
+
+(* ----------------------------------------------------------------------- *)
+(* 3. Recurrence patterns (short form)                                     *)
+(* ----------------------------------------------------------------------- *)
+
+recurrence pattern = "every" , recurrence body ;
+
+recurrence body = "day"                                       (* daily            *)
+                | integer literal , "weeks" , weekday         (* e.g. every 2 weeks Monday *)
+                | ordinal , weekday                           (* e.g. every 2nd Wednesday  *)
+                | weekday                                     (* weekly           *)
+                | "year" , month day literal ;                (* yearly on MM-DD  *)
+
+ordinal = integer literal , ordinal suffix ;
+ordinal suffix = "st" | "nd" | "rd" | "th" ;
+
+weekday = "Monday" | "Tuesday"  | "Wednesday" | "Thursday"
+        | "Friday" | "Saturday" | "Sunday" ;
+
+
+(* ----------------------------------------------------------------------- *)
+(* 4. Alarms (short form)                                                  *)
+(* ----------------------------------------------------------------------- *)
+
+alarm = "!" , duration literal ;
+
+
+(* ----------------------------------------------------------------------- *)
+(* 5. Records and fields                                                   *)
+(* ----------------------------------------------------------------------- *)
+
+record = "{" , [ field list ] , "}" ;
+
+field list = field , { field separator , field } , [ field separator ] ;
+field separator = "," | newline ;
+
+field = path , ":" , [ "=" ] , value ;
+
+path = ident , { "." , ident } ;
+
+
+(* ----------------------------------------------------------------------- *)
+(* 6. Values                                                               *)
+(* ----------------------------------------------------------------------- *)
+
+(* Value parsing priority for unknown fields:                              *)
+(*   keyword > date > time > duration > int > ident > string > record/list *)
+
+value = keyword
+      | date literal
+      | datetime literal
+      | time literal
+      | duration literal
+      | integer literal
+      | ident
+      | string
+      | record
+      | list ;
+
+keyword = "true" | "false" | "undefined" | "local" ;
+
+list = "[" , [ value list ] , "]" ;
+value list = value , { "," , value } , [ "," ] ;
+
+
+(* ----------------------------------------------------------------------- *)
+(* 7. Temporal literals                                                    *)
+(* ----------------------------------------------------------------------- *)
+
+date literal      = full date | month day literal ;
+full date         = year , "-" , month , "-" , day ;
+month day literal = month , "-" , day ;
+
+time literal      = hour , ":" , minute , [ ":" , second ] ;
+
+datetime literal  = full date , "T" , time literal ;
+
+duration literal  = duration part , { duration part } ;
+duration part     = integer literal , duration unit ;
+duration unit     = "w" | "d" | "h" | "m" | "s" ;
+
+year   = digit , digit , digit , digit ;
+month  = digit , digit ; (* 01..=12 *)
+day    = digit , digit ; (* 01..=31 *)
+hour   = digit , digit ; (* 00..=23 *)
+minute = digit , digit ; (* 00..=60 *)
+second = digit , digit ; (* 00..=61 *)
+
+
+(* ----------------------------------------------------------------------- *)
+(* 8. Lexical primitives                                                   *)
+(* ----------------------------------------------------------------------- *)
+
+name = "@" , ident , { "." , ident } ;
+
+ident = ident start , { ident continuation } ;
+ident start        = letter | "_" ;
+ident continuation = letter | digit | "_" | "-" ;
+
+integer literal = digit , { digit } ;
+
+string = '"' , { string char } , '"' ;
+string char = any char - ( '"' | "\\" )
+            | "\\" , escape char ;
+escape char = '"' | "\\" | "n" | "t" ;
+
+letter   = "a" | "b" | (* ... *) "z"
+         | "A" | "B" | (* ... *) "Z" ;
+digit    = "0" | "1" | "2" | "3" | "4"
+         | "5" | "6" | "7" | "8" | "9" ;
+newline  = "\n" ;
+any char = ? any Unicode scalar value ? ;
