@@ -1,0 +1,17 @@
+specs (
+  {
+    name sundial
+
+    include (
+      spec/sundial.md
+      spec/sundial/**/*.md
+    )
+
+    impls (
+      {
+        name main
+        include (src/**/*.rs)
+      }
+    )
+  }
+)
