@@ -2,6 +2,10 @@
 
 A plaintext language for authoring and maintaining calendars, designed to compile to iCalendar and JSCalendar.
 
+## Introduction
+
+TODO: write prose introduction
+
 ## Principles
 
 r[principle.records]
@@ -16,78 +20,227 @@ Concrete UIDs MUST NOT be stored in the data model. Component identity MUST be a
 r[principle.unknown-fields]
 Unknown fields MUST be allowed by default and MUST participate fully in the data model.
 
-## File Structure
+## Lexical Syntax
 
-### Directory Layout
+What follows here is syntax used by the lexer, which converts UTF-8 strings into sequences of tokens. Much of this is modelled on [section 2 of the Rust Reference](https://doc.rust-lang.org/stable/reference/lexical-structure.html).
 
-r[file.layout.directory]
-A calendar MUST be a directory containing exactly one calendar file and any number of item files.
+### Input Format
 
-r[file.layout.extension]
-All `.cal` files in the directory MUST be assembled by the compiler. Membership is by co-location — no explicit imports.
+For the purposes of lexical syntax, a character is a Unicode scalar value. We also single out the null character for special handling.
 
-r[file.layout.isolation]
-The language MUST operate on one calendar at a time. Orchestration across calendars is a tool-level concern.
-
-### Calendar File
-
-r[file.calendar.uniqueness]
-There MUST be exactly one calendar file per calendar directory.
-
-r[file.calendar.syntax]
-The calendar file MUST use the `calendar` keyword followed by a string title and a record containing at least `id` and `tz` fields.
-
-```
-calendar "oliver/personal" {
-  id: 6ba7b810-9dad-11d1-80b4-00c04fd430c8,
-  tz: Europe/Zurich,
-}
+```ebnf
+char = ? a Unicode scalar value ? ;
+nul  = ? U+0000 ? ;
 ```
 
-### Item Files
+All source data is interpreted as a sequence of characters encoded in UTF-8. It is an error if the file is not valid UTF-8.
 
-r[file.item.components]
-Item files MUST contain components only and MUST inherit configuration from the calendar file.
+r[lexer.input-format.utf-8]
+All source data MUST be interpreted as a sequence of characters encoded in UTF-8.
 
-r[file.item.defaults]
-Item files MAY declare a `defaults` block to override calendar-level defaults for all components in that file.
+r[lexer.input-format.malformed]
+An error MUST be produced if any source data is not valid UTF-8.
 
-```
-defaults {
-  tz: America/New_York,
-}
+Before the source data can be processed by a lexer, the following rules are applied in order:
+1. If the first character in the data is U+FEFF (BYTE ORDER MARK), it is removed.
+2. Each CRLF sequence (U+000D followed by U+000A) is replaced by a single U+000A.
+3. If the remaining sequence begins with the characters `#!`, the first line is removed.
 
-event 2025-08-01 09:00 2h "Museum visit"
-event 2025-08-02 19:00 3h "Dinner"
-```
+r[lexer.input-format.bom-removal]
+If the source data begins with U+FEFF, it MUST be removed.
 
-### Assembled Output
+r[lexer.input-format.crlf-normalization]
+Each CRLF sequence in the source data MUST be replaced by U+000A.
 
-r[file.assembled]
-The assembled output of all files MUST be a single record with configuration as named fields and all components in a single `items` list discriminated by a `kind` field.
+r[lexer.input-format.shebang-removal]
+If the source data begins with `#!`, the first line MUST be removed.
 
-## Syntax
+r[lexer.input-format.rule-order]
+The input format normalization rules MUST be applied in order: the byte order mark removal precedes CRLF normalization precedes shebang removal.
 
 ### Comments
 
-r[syntax.comment]
-Comments MUST begin with `--` and extend to the end of the line.
+Sundial uses Lisp-style semicolon comments for no reason other than that the semicolon is an otherwise unused character.
+
+r[lexer.comment]
+Comments MUST begin with `;` and extend to the end of the line.
+
+```ebnf
+comment  = ";", { any char - newline }, newline ;
+newline  = ? U+000A ? ;
+any char = ? any Unicode scalar value ? ;
+```
+
+### Whitespace
+
+A whitespace character is any character with the `Pattern_White_Space` Unicode property, and a whitespace string is any non-empty string consisting only of whitespace characters.
+
+r[lexer.whitespace]
+Any character with the `Pattern_White_Space` Unicode property MUST be treated as whitespace.
+
+Whitespace does not have any semantic significance, and replacing any whitespace string with any other whitespace string does not change the meaning of a Sundial program.
+
+### Punctuation
+
+r[lexer.punctuation]
+Any character matching the regex `[\{\}\[\]:,=!\.\-]` MUST be recognized as punctuation.
+
+| Token | Name |
+|-------|------|
+| `{` | Left brace |
+| `}` | Right brace |
+| `[` | Left bracket |
+| `]` | Right bracket |
+| `:` | Colon |
+| `,` | Comma |
+| `=` | Equals |
+| `!` | Bang |
+| `.` | Dot |
+| `-` | Hyphen |
+
 
 ### Identifiers
 
-r[syntax.ident]
-Identifiers MUST match `[a-zA-Z_][a-zA-Z0-9_-]*`. Hyphens MUST be allowed to support iCal extension names like `x-custom-field` without quoting.
+r[lexer.ident]
+Identifiers MUST match the regex `[a-zA-Z_][a-zA-Z0-9_-]*`.
+
+```ebnf
+identifier = identifier start, { identifier continuation } ;
+identifier start = letter | "_" ;
+identifier continuation = letter | digit | "_" | "-" ;
+letter   = "a" | "b" | (* ... *) "z"
+         | "A" | "B" | (* ... *) "Z" ;
+digit    = "0" | "1" | "2" | "3" | "4"
+         | "5" | "6" | "7" | "8" | "9" ;
+```
+
+Note that hyphens are allowed in order to support iCalendar extension names like `x-custom-field` without quoting.
+
+### Keywords
+
+Sundial distinguishes between strict and weak keywords. A strict keyword may only be used as keyword, whereas a weak keyword decays into an identifier outside of the designated contexts in which it operates as a keyword.
+
+The strict keywords are `true`, `false`, and `undefined`.
+
+r[lexer.keyword.strict]
+The keywords `true`, `false`, and `undefined` MUST be treated as strict.
+
+All other keywords are weak. These keywords are:
+- `calendar`
+- `include`
+- `bind`
+- `override`
+- `event`
+- `todo`
+- `every`
+- `day`
+- `weeks`
+- `year`
+- `st`, `nd`, `rd`, `th` (ordinal suffixes)
+- `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
+- `local`
+
+r[lexer.keyword.weak]
+All keywords other than `true`, `false`, and `undefined` MUST be treated as weak.
 
 ### Names
 
+A name is a non-empty sequence of identifiers used to refer to an object.
+
 r[syntax.name]
-Names MUST be prefixed with `@` followed by an identifier. Names are scoped to the calendar, not the file.
+Names MUST be prefixed with `@` followed by a non-empty period-delimited sequence of identifiers.
 
-r[syntax.name.unique]
-Duplicate names across files within the same calendar MUST be a compile error.
+```ebnf
+name = "@", identifier, { ".", identifier } ;
+```
 
-r[syntax.name.unresolved]
-Unresolvable name references MUST be a compile error.
+### Integer Literals
+
+An integer literal represents a non-negative integer not exceeding `u64::MAX`.
+
+r[lexer.integer]
+An integer literal MUST be a non-empty sequence of ASCII digits.
+
+r[lexer.integer.max]
+It is an error for an integer literal to have a value exceeding `u64::MAX`.
+
+```ebnf
+integer literal = digit, { digit } ;
+```
+
+### String Literals
+
+r[lexer.string]
+A string literal MUST be delimited by double-quote characters (`"`).
+
+r[lexer.string.escape]
+The following escape sequences MUST be recognized within a string literal: `\"` (double quote), `\\` (backslash), `\n` (newline), and `\t` (tab).
+
+r[lexer.string.no-multiline]
+String literals MUST NOT span multiple lines. An unescaped newline within a string literal is an error.
+
+```ebnf
+string      = '"', { string char }, '"' ;
+string char = any char - ( '"' | "\\" | newline )
+            | "\\", escape char ;
+escape char = '"' | "\\" | "n" | "t" ;
+```
+
+### Date Literals
+
+r[lexer.date.full]
+A full date literal MUST have the form `YYYY-MM-DD`, where each component is a fixed-width decimal number (4 digits for year, 2 digits for month and day).
+
+r[lexer.date.month-day]
+A month-day literal MUST have the form `MM-DD`, where each component is a 2-digit decimal number.
+
+```ebnf
+date literal      = full date | month day literal ;
+full date         = year, "-", month, "-", day ;
+month day literal = month, "-", day ;
+
+year  = digit, digit, digit, digit ;
+month = digit, digit ;   (* 01..=12 *)
+day   = digit, digit ;   (* 01..=31 *)
+```
+
+### Time Literals
+
+r[lexer.time]
+A time literal MUST have the form `HH:MM` or `HH:MM:SS`, where each component is a 2-digit decimal number.
+
+```ebnf
+time literal = hour, ":", minute, [ ":", second ] ;
+
+hour   = digit, digit ;   (* 00..=23 *)
+minute = digit, digit ;   (* 00..=59 *)
+second = digit, digit ;   (* 00..=60, allowing leap second *)
+```
+
+### DateTime Literals
+
+r[lexer.datetime]
+A datetime literal MUST have the form `YYYY-MM-DDTHH:MM` or `YYYY-MM-DDTHH:MM:SS`, joining a full date and a time literal with the character `T`.
+
+```ebnf
+datetime literal = full date, "T", time literal ;
+```
+
+### Duration Literals
+
+r[lexer.duration]
+A duration literal MUST consist of one or more duration parts with no intervening whitespace.
+
+r[lexer.duration.part]
+Each duration part MUST be an integer literal immediately followed by a unit suffix: `w` (weeks), `d` (days), `h` (hours), `m` (minutes), or `s` (seconds).
+
+```ebnf
+duration literal = duration part, { duration part } ;
+duration part    = integer literal, duration unit ;
+duration unit    = "w" | "d" | "h" | "m" | "s" ;
+```
+
+## Syntax
 
 ### Component Short Syntax
 
