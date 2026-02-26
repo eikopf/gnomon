@@ -240,7 +240,121 @@ duration part    = integer literal, duration unit ;
 duration unit    = "w" | "d" | "h" | "m" | "s" ;
 ```
 
-## Syntax
+## Expressions
+
+### Literal Expressions
+
+TODO: fill out
+
+### Dot-Path Access
+
+r[syntax.dot-path]
+Nested fields MAY be set using dot-path syntax (e.g., `recurs.from: 2025-07-01`) as an alternative to a full nested block. Both forms MUST be valid.
+
+### Records
+
+r[type.record.syntax]
+Records MUST use braces with comma-separated fields. Trailing commas MUST be allowed. Newlines MAY substitute for commas.
+
+r[type.record.field]
+Record fields MUST follow the pattern `Path ':' '='? Value`, where Path is a dot-separated identifier chain.
+
+### Lists
+
+r[type.list.syntax]
+Lists MUST use square brackets with comma-separated values. Single-element lists MUST require brackets — no sugar for single-element lists.
+
+
+### Recurrence
+
+r[syntax.recur.every]
+The `every` prefix MUST replace the date position in an event or todo to indicate recurrence.
+
+r[syntax.recur.every-grammar]
+The `every` mini-grammar MUST support the following mappings:
+
+| Pattern | Desugared |
+|---------|-----------|
+| `every Monday` | `{ freq: weekly, day: Monday }` |
+| `every 2 weeks Monday` | `{ freq: biweekly, day: Monday }` |
+| `every 2nd Wednesday` | `{ freq: monthly, ord: 2, day: Wednesday }` |
+| `every day` | `{ freq: daily }` |
+| `every year 03-15` | `{ freq: yearly, date: { month: 3, day: 15 } }` |
+
+Anything that does not fit this grammar MUST use the full form.
+
+### Value Parsing Priority
+
+r[type.parse-priority]
+For unknown fields, the parser MUST interpret values in this order:
+
+1. Keyword (`true`, `false`, `undefined`, `local`, weekday names, freq names)
+2. Date literal (`2025-07-14`, `07-14`)
+3. Time literal (`09:00`, `09:00:30`)
+4. Duration literal (`1h30m`, `2d`)
+5. Integer (`42`)
+6. Bare identifier (`opaque`, `some-value`)
+7. Quoted string (`"anything goes"`)
+
+r[type.parse-known]
+Known fields MUST validate against their expected type.
+
+## Types
+
+### Primitives
+
+r[type.primitives]
+The language MUST support these true primitive types: `Int`, `String`, `Ident`, `Bool`, and `undefined`. Everything else is a record with syntactic sugar.
+
+| Type | Examples |
+|------|----------|
+| `Int` | `42`, `0`, `15` |
+| `String` | `"Room 3"`, `"hello\nworld"` |
+| `Ident` | `work`, `opaque`, `high` |
+| `Bool` | `true`, `false` |
+| `undefined` | `undefined` |
+
+### Strings
+
+r[type.string.syntax]
+Strings MUST be quoted with double quotes and MUST support escape sequences: `\"`, `\\`, `\n`. No multiline literals.
+
+r[type.string.bare-ident]
+Bare identifiers MUST be permitted where unambiguous: enum-like fields, tags, and `@names`.
+
+### Temporal Types
+
+r[type.date]
+Date literals (`YYYY-MM-DD` or `MM-DD`) MUST desugar to records with `year`, `month`, `day` integer fields. Omitted fields default to `0` (or `undefined` for partial dates like month-day pairs in yearly recurrences).
+
+r[type.time]
+Time literals (`HH:MM` or `HH:MM:SS`) MUST desugar to records with `hour`, `minute`, `second` integer fields.
+
+r[type.datetime]
+DateTime literals (`YYYY-MM-DDTHH:MM`) MUST desugar to records with `date`, `time`, and `tz` fields.
+
+r[type.duration]
+Duration literals (e.g., `1h30m`, `2d`) MUST desugar to records with `weeks`, `days`, `hours`, `minutes`, `seconds` integer fields. No spaces between components.
+
+### Timezone Semantics
+
+r[type.tz.default]
+The default value for the `tz` field MUST be `local` (floating time).
+
+r[type.tz.cascade]
+A calendar-level or file-level `tz` MUST set the default for contained components. A component MAY opt back into floating time with explicit `tz: local`.
+
+### Enums
+
+r[type.enum]
+Enums MUST NOT be a separate primitive type. They MUST be bare identifiers in specific field contexts, validated by the parser:
+
+- `freq`: `daily` | `weekly` | `biweekly` | `monthly` | `yearly`
+- `priority`: `low` | `normal` | `high`
+- `day`: `Monday` | `Tuesday` | `Wednesday` | `Thursday` | `Friday` | `Saturday` | `Sunday`
+- `type`: `display` | `email` | `audio`
+
+## Declarations
 
 ### Component Short Syntax
 
@@ -320,133 +434,6 @@ event @meeting 2025-07-14 14:00 2h "Review" {
   ],
 }
 ```
-
-### Recurrence
-
-#### Short Syntax
-
-r[syntax.recur.every]
-The `every` prefix MUST replace the date position in an event or todo to indicate recurrence.
-
-r[syntax.recur.every-grammar]
-The `every` mini-grammar MUST support the following mappings:
-
-| Pattern | Desugared |
-|---------|-----------|
-| `every Monday` | `{ freq: weekly, day: Monday }` |
-| `every 2 weeks Monday` | `{ freq: biweekly, day: Monday }` |
-| `every 2nd Wednesday` | `{ freq: monthly, ord: 2, day: Wednesday }` |
-| `every day` | `{ freq: daily }` |
-| `every year 03-15` | `{ freq: yearly, date: { month: 3, day: 15 } }` |
-
-Anything that does not fit this grammar MUST use the full form.
-
-#### Full Syntax
-
-r[syntax.recur.full]
-Recurrence MUST be expressible as a `recurs` record with the following fields:
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `freq` | enum | yes | `daily`, `weekly`, `biweekly`, `monthly`, `yearly` |
-| `day` | weekday or list | depends on freq | required for weekly/biweekly/monthly |
-| `ord` | ordinal | no | e.g. `ord: 2, day: Wednesday` |
-| `from` | date | no | defaults to first matching date |
-| `until` | date | no | open-ended if omitted |
-| `except` | date list | no | |
-| `count` | int | no | alternative to `until` |
-
-r[syntax.recur.count-until]
-`count` and `until` MUST be mutually exclusive alternatives for bounding recurrence. Both MAY be omitted for open-ended recurrence.
-
-### Dot-Path Access
-
-r[syntax.dot-path]
-Nested fields MAY be set using dot-path syntax (e.g., `recurs.from: 2025-07-01`) as an alternative to a full nested block. Both forms MUST be valid.
-
-## Value Types
-
-### Primitives
-
-r[type.primitives]
-The language MUST support these true primitive types: `Int`, `String`, `Ident`, `Bool`, and `undefined`. Everything else is a record with syntactic sugar.
-
-| Type | Examples |
-|------|----------|
-| `Int` | `42`, `0`, `15` |
-| `String` | `"Room 3"`, `"hello\nworld"` |
-| `Ident` | `work`, `opaque`, `high` |
-| `Bool` | `true`, `false` |
-| `undefined` | `undefined` |
-
-### Strings
-
-r[type.string.syntax]
-Strings MUST be quoted with double quotes and MUST support escape sequences: `\"`, `\\`, `\n`. No multiline literals.
-
-r[type.string.bare-ident]
-Bare identifiers MUST be permitted where unambiguous: enum-like fields, tags, and `@names`.
-
-### Records
-
-r[type.record.syntax]
-Records MUST use braces with comma-separated fields. Trailing commas MUST be allowed. Newlines MAY substitute for commas.
-
-r[type.record.field]
-Record fields MUST follow the pattern `Path ':' '='? Value`, where Path is a dot-separated identifier chain.
-
-### Lists
-
-r[type.list.syntax]
-Lists MUST use square brackets with comma-separated values. Single-element lists MUST require brackets — no sugar for single-element lists.
-
-### Temporal Types
-
-r[type.date]
-Date literals (`YYYY-MM-DD` or `MM-DD`) MUST desugar to records with `year`, `month`, `day` integer fields. Omitted fields default to `0` (or `undefined` for partial dates like month-day pairs in yearly recurrences).
-
-r[type.time]
-Time literals (`HH:MM` or `HH:MM:SS`) MUST desugar to records with `hour`, `minute`, `second` integer fields.
-
-r[type.datetime]
-DateTime literals (`YYYY-MM-DDTHH:MM`) MUST desugar to records with `date`, `time`, and `tz` fields.
-
-r[type.duration]
-Duration literals (e.g., `1h30m`, `2d`) MUST desugar to records with `weeks`, `days`, `hours`, `minutes`, `seconds` integer fields. No spaces between components.
-
-### Timezone Semantics
-
-r[type.tz.default]
-The default value for the `tz` field MUST be `local` (floating time).
-
-r[type.tz.cascade]
-A calendar-level or file-level `tz` MUST set the default for contained components. A component MAY opt back into floating time with explicit `tz: local`.
-
-### Enums
-
-r[type.enum]
-Enums MUST NOT be a separate primitive type. They MUST be bare identifiers in specific field contexts, validated by the parser:
-
-- `freq`: `daily` | `weekly` | `biweekly` | `monthly` | `yearly`
-- `priority`: `low` | `normal` | `high`
-- `day`: `Monday` | `Tuesday` | `Wednesday` | `Thursday` | `Friday` | `Saturday` | `Sunday`
-- `type`: `display` | `email` | `audio`
-
-### Value Parsing Priority
-
-r[type.parse-priority]
-For unknown fields, the parser MUST interpret values in this order:
-
-1. Keyword (`true`, `false`, `undefined`, `local`, weekday names, freq names)
-2. Date literal (`2025-07-14`, `07-14`)
-3. Time literal (`09:00`, `09:00:30`)
-4. Duration literal (`1h30m`, `2d`)
-5. Integer (`42`)
-6. Bare identifier (`opaque`, `some-value`)
-7. Quoted string (`"anything goes"`)
-
-r[type.parse-known]
-Known fields MUST validate against their expected type.
 
 ## Identity Model
 
