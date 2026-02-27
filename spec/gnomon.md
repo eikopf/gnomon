@@ -124,12 +124,13 @@ All other keywords are weak.
 > - `todo`
 > - `every`
 > - `day`
-> - `weeks`
 > - `year`
+> - `on`
+> - `until`
+> - `times`
 > - `omit`
 > - `forward`
 > - `backward`
-> - `st`, `nd`, `rd`, `th` (ordinal suffixes)
 > - `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
 > - `local`
 
@@ -376,7 +377,7 @@ An identifier MUST NOT appear more than once as a key in a record.
 
 A list is a contiguous sequence of zero or more values.
 
-> r[type.list.syntax]
+> r[expr.list.syntax]
 > The grammar for list expressions is as follows:
 >
 > ```ebnf
@@ -388,57 +389,87 @@ A list is a contiguous sequence of zero or more values.
 
 A recurrence rule is a record describing how a calendar item recurs, and has the semantics of an RFC 5545 recurrence rule.
 
-```gnomon
-;; a record approximating a recurrence rule
-{
-    ;; yearly | monthly | weekly | daily | hourly | minutely | secondly
-    frequency: daily
-    ;; positive integer, defaulting to 1
-    interval: 1
-    ;; omit | backward | forward, defaulting to omit
-    skip: omit
-    ;; a weekday, defaulting to monday
-    first_day_of_week: monday
-    ;; local datetime | integer | undefined, defaulting to undefined
-    termination: undefined,
-    ;; list of { day: weekday, offset: signed integer } 
-    by_day: [],
-    ;; list of signed integers in ranges -31..=1 and 1..=31
-    by_month_day: [],
-    ;; list of { month: integer, leap: bool }
-    by_month: [],
-    ;; list of signed integers in ranges -366..=1 and 1..=366
-    by_year_day: [],
-    ;; list of signed integers in ranges -53..=1 and 1..=53
-    by_week_no: [],
-    ;; list of integers in range 0..=23
-    by_hour: [],
-    ;; list of integers in range 0..=59
-    by_minute: [],
-    ;; list of integers in range 0..=60
-    by_second: [],
-    ;; list of signed integers
-    by_set_position: [],
-}
-```
+Before defining the precise fields of a recurrence rule, we need some helper definitions. First, a weekday is one of the seven conventional days of the week.
 
-#### `every`
+r[expr.rrule.weekday]
+A weekday MUST be `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, or `sunday`.
 
-r[syntax.recur.every]
-The `every` prefix MUST replace the date position in an event or todo to indicate recurrence.
+Next, an N-day is the record type used by the `by_day` field on recurrence rules; it represents either a weekday or a specific instance of a weekday within the recurrence period.
 
-r[syntax.recur.every-grammar]
-The `every` mini-grammar MUST support the forms: `every <weekday>` (weekly), `every <n> weeks <weekday>` (biweekly), `every <ord> <weekday>` (monthly), `every day` (daily), and `every year <MM-DD>` (yearly). Anything outside this grammar MUST use the full form.
+r[expr.rrule.n-day]
+An N-day MUST be a record with a mandatory field `day` and an optional field `nth`. The value of the `day` field MUST be a weekday, and the value of the `nth` field MUST be a nonzero signed integer if set.
 
-| Pattern | Desugared |
-|---------|-----------|
-| `every Monday` | `{ freq: weekly, day: Monday }` |
-| `every 2 weeks Monday` | `{ freq: biweekly, day: Monday }` |
-| `every 2nd Wednesday` | `{ freq: monthly, ord: 2, day: Wednesday }` |
-| `every day` | `{ freq: daily }` |
-| `every year 03-15` | `{ freq: yearly, date: { month: 3, day: 15 } }` |
+Lastly, a leap-month is the record type used by the `by_month` field on recurrence rules; it represents a month together with a flag determining whether it is a leap month or not. While we currently only support the Gregorian calendar, which has only a single leap month, recurrence rules are the one place where alternative calendar scales are commonly used and arbitrary leap month support will eventually be necessary for them.
 
-Anything that does not fit this grammar MUST use the full form.
+r[expr.rrule.leap-month]
+A leap-month MUST be a record with two mandatory fields `month` and `leap`. The value of the `month` field MUST be a strictly positive integer, and the value of the `leap` field MUST be `true` or `false`.
+
+Now we can provide an unambiguous definition for recurrence rules:
+
+> r[expr.rrule.syntax]
+> A recurrence rule is a record with the following fields:
+>
+> | Field         | Value Type | Meaning |
+> |----------|----|---------|
+> | `frequency` | `yearly` \| `monthly` \| `weekly` \| `daily` \| `hourly` \| `minutely` \| `secondly` | The time span covered by each iteration of this rule. |
+> | `interval` | Strictly positive integer (default: `1`) | The interval of iteration periods at which the rule repeats. |
+> | `skip` | `omit` \| `forward` \| `backward` (default: `omit`) | The behaviour of the rule when an invalid date is generated. |
+> | `week_start` | A weekday (default: `monday`) | The first day of the week. |
+> | `termination` | A local datetime or unsigned integer or `undefined` (default: `undefined`) | The termination criterion for the rule. This subsumes the `COUNT` and `UNTIL` parts from RFC 5545 |
+> | `by_day` | A list of N-day records | The days of the week on which to repeat. |
+> | `by_month_day` | A list of nonzero signed integers in the range `-31..=31` | The days of the month on which to repeat. |
+> | `by_month` | A list of leap-month records | The months on which to repeat. |
+> | `by_year_day` | A list of nonzero signed integers in the range `-366..=366` | The days of the year on which to repeat. |
+> | `by_week_no` | A list of nonzero signed integers in the range `-53..=53` | The weeks of the year in which to repeat. |
+> | `by_hour` | A list of integers in the range 0..=23 | The hours of the day in which to repeat. |
+> | `by_minute` | A list of integers in the range 0..=59 | The minutes of the day in which to repeat. |
+> | `by_second` | A list of integers in the range 0..=60 | The seconds of the day in which to repeat. |
+> | `by_set_position` | A list of signed integers | The occurrences within the recurrence interval to include in the final results. |
+>
+> All fields except `frequency` are optional.
+
+
+#### `every` Expressions
+
+Writing recurrence rules as records is annoying, and so Gnomon includes a small DSL for writing the most common subset of recurrence rules. Expressions in this DSL are called `every` expressions.
+
+
+> r[syntax.recur.every]
+> The syntax of an `every` expression is the following:
+>
+> ```ebnf
+> every expr       = "every", every subject, [ "until", every terminator ] ;
+> every subject    = "day"
+>                  | "year", "on", month day literal
+>                  | weekday
+>                  ;
+> every terminator = datetime literal
+>                  | integer literal, "times"
+>                  ;
+> ```
+
+The exact desugaring of these expressions is left underspecified; there are multiple ways that an arbitrary `every` expression could be desugared and we guarantee only that all possible desugarings will be equivalent under the RFC 5545 interpretation of recurrence rules.
+
+r[syntax.recur.every.desugar.equivalence]
+The exact desugaring of an `every` expression is implementation-defined, but the chosen desugaring MUST be equivalent to all other valid desugarings.
+
+With that warning in mind, we have the following requirements for desugaring such expressions:
+
+r[syntax.recur.every.desugar.subject.day]
+If the subject of an `every` expression is the `day` keyword, the `frequency` field in the desugared record MUST be set to the value `daily`.
+
+r[syntax.recur.every.desugar.subject.year-on-month-day]
+If the subject of an `every` expression is of the form `year on MM-DD`, the `frequency` field in the desugared record MUST be set to the value `yearly` and the `by_year_day` field in the desugared record MUST be set to the singleton list value `[D]` where `D` is the number of days from the start of a non-leap year to `MM-DD`.
+
+r[syntax.recur.every.desugar.subject.weekday]
+If the subject of an `every` expression is a weekday, the `frequency` field in the desugared record MUST be set to the value `weekly` and the `by_day` field in the desugared record MUST be set to the singleton list value `[{ day: D }]` where `D` is the index of the given weekday (starting from `1` for `monday`).
+
+r[syntax.recur.every.desugar.terminator]
+If the terminator of an `every` expression is given, its value (the datetime or integer literal) MUST be assigned to the `termination` field in the desugared record. If the terminator is omitted, the `termination` field in the desugared record MUST be omitted or set to `undefined`.
+
+#### Evaluation
+
+TODO: describe the evaluation semantics of recurrence rules
 
 ## Declarations
 
