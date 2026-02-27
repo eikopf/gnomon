@@ -68,21 +68,21 @@ Whitespace does not have any semantic significance, and replacing any whitespace
 
 ### Punctuation
 
-r[lexer.punctuation]
-Any character matching the regex `[\{\}\[\]:,=!\.\-]` MUST be recognized as punctuation.
-
-| Token | Name |
-|-------|------|
-| `{` | Left brace |
-| `}` | Right brace |
-| `[` | Left bracket |
-| `]` | Right bracket |
-| `:` | Colon |
-| `,` | Comma |
-| `=` | Equals |
-| `!` | Bang |
-| `.` | Dot |
-| `-` | Hyphen |
+> r[lexer.punctuation]
+> The following characters MUST be recognized as punctuation:
+> 
+> | Token | Name |
+> |-------|------|
+> | `{` | Left brace |
+> | `}` | Right brace |
+> | `[` | Left bracket |
+> | `]` | Right bracket |
+> | `:` | Colon |
+> | `,` | Comma |
+> | `=` | Equals |
+> | `!` | Bang |
+> | `.` | Dot |
+> | `-` | Hyphen |
 
 
 ### Identifiers
@@ -111,23 +111,28 @@ The strict keywords are `true`, `false`, and `undefined`.
 r[lexer.keyword.strict]
 The keywords `true`, `false`, and `undefined` MUST be treated as strict.
 
-All other keywords are weak. These keywords are:
-- `calendar`
-- `include`
-- `bind`
-- `override`
-- `event`
-- `todo`
-- `every`
-- `day`
-- `weeks`
-- `year`
-- `st`, `nd`, `rd`, `th` (ordinal suffixes)
-- `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
-- `local`
+All other keywords are weak.
 
-r[lexer.keyword.weak]
-All keywords other than `true`, `false`, and `undefined` MUST be treated as weak.
+> r[lexer.keyword.weak]
+> All keywords other than `true`, `false`, and `undefined` MUST be treated as weak; these keywords are
+> 
+> - `calendar`
+> - `include`
+> - `bind`
+> - `override`
+> - `event`
+> - `todo`
+> - `every`
+> - `day`
+> - `weeks`
+> - `year`
+> - `omit`
+> - `forward`
+> - `backward`
+> - `st`, `nd`, `rd`, `th` (ordinal suffixes)
+> - `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
+> - `local`
+
 
 ### Names
 
@@ -174,84 +179,179 @@ escape char = '"' | "\\" | "n" | "t" ;
 
 ### Date Literals
 
-r[lexer.date.full]
-A full date literal MUST have the form `YYYY-MM-DD`, where each component is a fixed-width decimal number (4 digits for year, 2 digits for month and day).
+A date literal represents an ISO 8601/RFC 3339 date.
 
-r[lexer.date.month-day]
-A month-day literal MUST have the form `MM-DD`, where each component is a 2-digit decimal number.
+> r[lexer.date]
+> The syntax of a date literal is the following:
+>
+> ```ebnf
+> date literal = year, "-", month, "-", day ;
+> 
+> year  = digit, digit, digit, digit ;
+> month = digit, digit ;   (* 01..=12 *)
+> day   = digit, digit ;   (* 01..=31 *)
+> ```
 
-```ebnf
-date literal      = full date | month day literal ;
-full date         = year, "-", month, "-", day ;
-month day literal = month, "-", day ;
+Date literals desugar into records with three integer fields named `year`, `month`, and `day`.
 
-year  = digit, digit, digit, digit ;
-month = digit, digit ;   (* 01..=12 *)
-day   = digit, digit ;   (* 01..=31 *)
-```
+r[lexer.date.desugar]
+The date literal `YYYY-MM-DD` MUST desugar into the record `{ year: YYYY, month: MM, day: DD }`.
+
+### Month-Day Literals
+A month-day literal represents an ISO 8601/RFC 3339 date with the year omitted.
+
+> r[lexer.month-day]
+> The syntax of a month-day literal is the following:
+>
+> ```ebnf
+> month day literal = month, "-", day ;
+> 
+> month = digit, digit ;   (* 01..=12 *)
+> day   = digit, digit ;   (* 01..=31 *)
+> ```
+
+Month-day literals desugar into records with two integer fields named `month` and `day`.
+
+r[lexer.month-day.desugar]
+The month-day literal `MM-DD` MUST desugar into the record `{ month: MM, day: DD }`.
 
 ### Time Literals
+A time literal represents an ISO 8601/RFC 3339 time with no fractional second component.
 
-r[lexer.time]
-A time literal MUST have the form `HH:MM` or `HH:MM:SS`, where each component is a 2-digit decimal number.
+> r[lexer.time]
+> The syntax of a time literal is the following:
+> 
+> ```ebnf
+> time literal = hour, ":", minute, [ ":", second ] ;
+> 
+> hour   = digit, digit ;   (* 00..=23 *)
+> minute = digit, digit ;   (* 00..=59 *)
+> second = digit, digit ;   (* 00..=60 *)
+> ```
 
-```ebnf
-time literal = hour, ":", minute, [ ":", second ] ;
+When the `second` is omitted, it is treated as zero.
 
-hour   = digit, digit ;   (* 00..=23 *)
-minute = digit, digit ;   (* 00..=59 *)
-second = digit, digit ;   (* 00..=60, allowing leap second *)
-```
+r[lexer.time.default-second]
+The time literal `HH:MM` MUST be equivalent to `HH:MM:00`.
 
-### DateTime Literals
+Time literals desugar into records with three integer fields named `hour`, `minute`, and `second`.
 
-r[lexer.datetime]
-A datetime literal MUST have the form `YYYY-MM-DDTHH:MM` or `YYYY-MM-DDTHH:MM:SS`, joining a full date and a time literal with the character `T`.
+r[lexer.time.desugar]
+The time literal `HH:MM:SS` MUST desugar into the record `{ hour: HH, minute: MM, second: SS }`. 
 
-```ebnf
-datetime literal = full date, "T", time literal ;
-```
+### Datetime Literals
+
+A datetime literal represents the composite of a [date literal](#lexical-syntax--date-literals) and a [time literal](#lexical-syntax--time-literals).
+
+> r[lexer.datetime]
+> The syntax of a datetime literal is the following:
+>
+> ```ebnf
+> datetime literal = date literal, "T", time literal ;
+> ```
+
+Datetime literals desugar into records with two fields named `date` and `time`; each field contains the desugared record of the corresponding component.
+
+> r[lexer.datetime.desugar]
+> The datetime literal `YYYY-MM-DDTHH:mm:SS` must desugar into the following record:
+>
+> ```gnomon
+> {
+>    date: {
+>        year: YYYY,
+>        month: MM,
+>        day: DD,
+>    },
+>    time: {
+>        hour: HH,
+>        minute: mm,
+>        second: SS,
+>    },
+> } 
+> ```
 
 ### Duration Literals
 
-r[lexer.duration]
-A duration literal MUST consist of one or more duration parts with no intervening whitespace.
+A duration literal represents an RFC 5545 duration.
 
-r[lexer.duration.part]
-Each duration part MUST be an integer literal immediately followed by a unit suffix: `w` (weeks), `d` (days), `h` (hours), `m` (minutes), or `s` (seconds).
+> r[lexer.duration]
+> The syntax of a duration literal is the following:
+> 
+> ```ebnf
+> duration literal = [ sign ], duration part, { duration part } ;
+> duration part    = integer literal, duration unit ;
+> duration unit    = "w" | "d" | "h" | "m" | "s" ;
+> sign             = "+" | "-" ;
+> ```
 
-```ebnf
-duration literal = duration part, { duration part } ;
-duration part    = integer literal, duration unit ;
-duration unit    = "w" | "d" | "h" | "m" | "s" ;
-```
+No unit may occur more than once in the same duration literal.
+
+r[lexer.duration.part.multiplicity]
+Each duration unit MUST occur at most once in a duration literal.
+
+Following with the convention of RFC 5545, the sign defaults to positive.
+
+r[lexer.duration.sign]
+If the sign is omitted from a duration literal, it MUST be treated as though it has a positive sign.
+
+Likewise any omitted unit is treated as having a value of zero.
+
+r[lexer.duration.part.default]
+Any omitted duration unit MUST be treated as though it had been given with the integer literal `0`.
+
+Duration literals desugar into records with five integer fields named `weeks`, `days`, `hours`, `minutes`, and `seconds`.
+
+> r[lexer.duration.desugar]
+> Let `DUR` be a duration literal with weeks `W`, days `D`, hours `H`, minutes `M`, and seconds `S`; then `DUR` MUST desugar into the following record:
+> 
+> ```gnomon
+> {
+>    weeks: W,
+>    days: D,
+>    hours: H,
+>    minutes: M,
+>    seconds: S,
+> }
+> ```
 
 ## Expressions
 
 ### Literal Expressions
 
-A literal expression is a string literal, integer literal, `true`, or `false`.
+A literal expression is a string literal, integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, `true`, or `false`.
 
-```ebnf
-literal expr = string literal
-             | integer literal
-             | "true"
-             | "false"
-             ;
-```
+> r[expr.literal.syntax]
+> The grammar for literal expressions is as follows:
+>
+> ```ebnf
+> literal expr = string literal
+>              | integer literal
+>              | date literal
+>              | month day literal
+>              | time literal
+>              | datetime literal
+>              | duration literal
+>              | "true"
+>              | "false"
+>              ;
+> ```
+
+Date, month-day, time, datetime, and duration literals are syntax sugar for records with specific fields set. In practice, an implementation should probably not desugar these values until a user explicitly asks them to (e.g. during rendering, or as an option when displaying values) in order to provide easier-to-read outputs.
 
 ### Records
 
-A record is a table mapping from identifiers to values. An identifier may occur at most once as a key in a record.
+A record is a table mapping from identifiers to values.
 
-```ebnf
-record = "{", [ fields ], "}" ;
-fields = field, { ",", field }, [ "," ] ;
-field  = identifier, ":", expr ;
-```
+> r[expr.record.syntax]
+> The grammar for record expressions is as follows:
+> 
+> ```ebnf
+> record = "{", [ fields ], "}" ;
+> fields = field, { ",", field }, [ "," ] ;
+> field  = identifier, ":", expr ;
+> ```
 
-r[expr.record.syntax]
-Records MUST use braces with comma-separated fields. Trailing commas MUST be allowed.
+An identifier may occur at most once as a key in a record.
 
 r[expr.record.keys]
 An identifier MUST NOT appear more than once as a key in a record.
@@ -260,15 +360,53 @@ An identifier MUST NOT appear more than once as a key in a record.
 
 A list is a contiguous sequence of zero or more values.
 
-r[type.list.syntax]
-Lists MUST use square brackets with comma-separated values. Single-element lists MUST require brackets — no sugar for single-element lists.
+> r[type.list.syntax]
+> The grammar for list expressions is as follows:
+>
+> ```ebnf
+> list = "[", list elements, "]" ;
+> list elements = expr, { ",", expr }, [ "," ] ;
+> ```
 
-### Dot-Path Access
+### Recurrence Rules
 
-r[syntax.dot-path]
-Nested fields MAY be set using dot-path syntax (e.g., `recurs.from: 2025-07-01`) as an alternative to a full nested block. Both forms MUST be valid.
+A recurrence rule is a record describing how a calendar item recurs, and has the semantics of an RFC 5545 recurrence rule.
 
-### Recurrence
+```gnomon
+;; a record approximating a recurrence rule
+{
+    ;; yearly | monthly | weekly | daily | hourly | minutely | secondly
+    frequency: daily
+    ;; positive integer, defaulting to 1
+    interval: 1
+    ;; omit | backward | forward, defaulting to omit
+    skip: omit
+    ;; a weekday, defaulting to monday
+    first_day_of_week: monday
+    ;; local datetime | integer | undefined, defaulting to undefined
+    termination: undefined,
+    ;; list of { day: weekday, offset: signed integer } 
+    by_day: [],
+    ;; list of signed integers in ranges -31..=1 and 1..=31
+    by_month_day: [],
+    ;; list of { month: integer, leap: bool }
+    by_month: [],
+    ;; list of signed integers in ranges -366..=1 and 1..=366
+    by_year_day: [],
+    ;; list of signed integers in ranges -53..=1 and 1..=53
+    by_week_no: [],
+    ;; list of integers in range 0..=23
+    by_hour: [],
+    ;; list of integers in range 0..=59
+    by_minute: [],
+    ;; list of integers in range 0..=60
+    by_second: [],
+    ;; list of signed integers
+    by_set_position: [],
+}
+```
+
+#### `every`
 
 r[syntax.recur.every]
 The `every` prefix MUST replace the date position in an event or todo to indicate recurrence.
@@ -285,77 +423,6 @@ The `every` mini-grammar MUST support the forms: `every <weekday>` (weekly), `ev
 | `every year 03-15` | `{ freq: yearly, date: { month: 3, day: 15 } }` |
 
 Anything that does not fit this grammar MUST use the full form.
-
-### Value Parsing Priority
-
-r[type.parse-priority]
-For unknown fields, the parser MUST interpret values in priority order: keyword, date literal, time literal, duration literal, integer, bare identifier, quoted string.
-
-1. Keyword (`true`, `false`, `undefined`, `local`, weekday names, freq names)
-2. Date literal (`2025-07-14`, `07-14`)
-3. Time literal (`09:00`, `09:00:30`)
-4. Duration literal (`1h30m`, `2d`)
-5. Integer (`42`)
-6. Bare identifier (`opaque`, `some-value`)
-7. Quoted string (`"anything goes"`)
-
-r[type.parse-known]
-Known fields MUST validate against their expected type.
-
-## Types
-
-### Primitives
-
-r[type.primitives]
-The language MUST support these true primitive types: `Int`, `String`, `Ident`, `Bool`, and `undefined`. Everything else is a record with syntactic sugar.
-
-| Type | Examples |
-|------|----------|
-| `Int` | `42`, `0`, `15` |
-| `String` | `"Room 3"`, `"hello\nworld"` |
-| `Ident` | `work`, `opaque`, `high` |
-| `Bool` | `true`, `false` |
-| `undefined` | `undefined` |
-
-### Strings
-
-r[type.string.syntax]
-Strings MUST be quoted with double quotes and MUST support escape sequences: `\"`, `\\`, `\n`. No multiline literals.
-
-r[type.string.bare-ident]
-Bare identifiers MUST be permitted where unambiguous: enum-like fields, tags, and `@names`.
-
-### Temporal Types
-
-r[type.date]
-Date literals (`YYYY-MM-DD` or `MM-DD`) MUST desugar to records with `year`, `month`, `day` integer fields. Omitted fields default to `0` (or `undefined` for partial dates like month-day pairs in yearly recurrences).
-
-r[type.time]
-Time literals (`HH:MM` or `HH:MM:SS`) MUST desugar to records with `hour`, `minute`, `second` integer fields.
-
-r[type.datetime]
-DateTime literals (`YYYY-MM-DDTHH:MM`) MUST desugar to records with `date`, `time`, and `tz` fields.
-
-r[type.duration]
-Duration literals (e.g., `1h30m`, `2d`) MUST desugar to records with `weeks`, `days`, `hours`, `minutes`, `seconds` integer fields. No spaces between components.
-
-### Timezone Semantics
-
-r[type.tz.default]
-The default value for the `tz` field MUST be `local` (floating time).
-
-r[type.tz.cascade]
-A calendar-level or file-level `tz` MUST set the default for contained components. A component MAY opt back into floating time with explicit `tz: local`.
-
-### Enums
-
-r[type.enum]
-Enums MUST NOT be a separate primitive type. They MUST be bare identifiers in specific field contexts, validated by the parser.
-
-- `freq`: `daily` | `weekly` | `biweekly` | `monthly` | `yearly`
-- `priority`: `low` | `normal` | `high`
-- `day`: `Monday` | `Tuesday` | `Wednesday` | `Thursday` | `Friday` | `Saturday` | `Sunday`
-- `type`: `display` | `email` | `audio`
 
 ## Declarations
 
