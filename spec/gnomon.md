@@ -397,22 +397,22 @@ A recurrence rule is a record describing how a calendar item recurs, and has the
 
 Before defining the precise fields of a recurrence rule, we need some helper definitions. First, a weekday is one of the seven conventional days of the week.
 
-r[expr.rrule.weekday]
+r[record.rrule.weekday]
 A weekday MUST be `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, or `sunday`.
 
 Next, an N-day is the record type used by the `by_day` field on recurrence rules; it represents either a weekday or a specific instance of a weekday within the recurrence period.
 
-r[expr.rrule.n-day]
+r[record.rrule.n-day]
 An N-day MUST be a record with a mandatory field `day` and an optional field `nth`. The value of the `day` field MUST be a weekday, and the value of the `nth` field MUST be a nonzero signed integer if set.
 
 Lastly, a leap-month is the record type used by the `by_month` field on recurrence rules; it represents a month together with a flag determining whether it is a leap month or not. While we currently only support the Gregorian calendar, which has only a single leap month, recurrence rules are the one place where alternative calendar scales are commonly used and arbitrary leap month support will eventually be necessary for them.
 
-r[expr.rrule.leap-month]
+r[record.rrule.leap-month]
 A leap-month MUST be a record with two mandatory fields `month` and `leap`. The value of the `month` field MUST be a strictly positive integer, and the value of the `leap` field MUST be `true` or `false`.
 
 Now we can provide an unambiguous definition for recurrence rules:
 
-> r[expr.rrule.syntax]
+> r[record.rrule.syntax]
 > A recurrence rule is a record with the following fields:
 >
 > | Field         | Value Type | Meaning |
@@ -440,7 +440,7 @@ Now we can provide an unambiguous definition for recurrence rules:
 Writing recurrence rules as records is annoying, and so Gnomon includes a small DSL for writing the most common subset of recurrence rules. Expressions in this DSL are called `every` expressions.
 
 
-> r[syntax.recur.every]
+> r[record.rrule.every]
 > The syntax of an `every` expression is the following:
 >
 > ```ebnf
@@ -456,26 +456,29 @@ Writing recurrence rules as records is annoying, and so Gnomon includes a small 
 
 The exact desugaring of these expressions is left underspecified; there are multiple ways that an arbitrary `every` expression could be desugared and we guarantee only that all possible desugarings will be equivalent under the RFC 5545 interpretation of recurrence rules.
 
-r[syntax.recur.every.desugar.equivalence]
+r[record.rrule.every.desugar.equivalence]
 The exact desugaring of an `every` expression is implementation-defined, but the chosen desugaring MUST be equivalent to all other valid desugarings.
 
 With that warning in mind, we have the following requirements for desugaring such expressions:
 
-r[syntax.recur.every.desugar.subject.day]
+r[record.rrule.every.desugar.subject.day]
 If the subject of an `every` expression is the `day` keyword, the `frequency` field in the desugared record MUST be set to the value `daily`.
 
-r[syntax.recur.every.desugar.subject.year-on-month-day]
+r[record.rrule.every.desugar.subject.year-on-month-day]
 If the subject of an `every` expression is of the form `year on MM-DD`, the `frequency` field in the desugared record MUST be set to the value `yearly` and the `by_year_day` field in the desugared record MUST be set to the singleton list value `[D]` where `D` is the number of days from the start of a non-leap year to `MM-DD`.
 
-r[syntax.recur.every.desugar.subject.weekday]
+r[record.rrule.every.desugar.subject.weekday]
 If the subject of an `every` expression is a weekday, the `frequency` field in the desugared record MUST be set to the value `weekly` and the `by_day` field in the desugared record MUST be set to the singleton list value `[{ day: D }]` where `D` is the index of the given weekday (starting from `1` for `monday`).
 
-r[syntax.recur.every.desugar.terminator]
+r[record.rrule.every.desugar.terminator]
 If the terminator of an `every` expression is given, its value (the datetime or integer literal) MUST be assigned to the `termination` field in the desugared record. If the terminator is omitted, the `termination` field in the desugared record MUST be omitted or set to `undefined`.
 
 #### Evaluation
 
 TODO: describe the evaluation semantics of recurrence rules
+
+r[record.rrule.eval.empty]
+An error SHOULD be produced if a recurrence rule is empty.
 
 ## Declarations
 
