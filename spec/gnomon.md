@@ -385,6 +385,12 @@ A list is a contiguous sequence of zero or more values.
 > list elements = expr, { ",", expr }, [ "," ] ;
 > ```
 
+## Record Types
+
+### Events
+
+### Todos
+
 ### Recurrence Rules
 
 A recurrence rule is a record describing how a calendar item recurs, and has the semantics of an RFC 5545 recurrence rule.
