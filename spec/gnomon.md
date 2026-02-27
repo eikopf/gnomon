@@ -159,6 +159,21 @@ It is an error for an integer literal to have a value exceeding `u64::MAX`.
 integer literal = digit, { digit } ;
 ```
 
+### Signed Integer Literals
+
+A signed integer literal represents an integer in the range `i64::MIN..=i64::MAX`, inclusive.
+
+r[lexer.signed-integer]
+A signed integer literal MUST be a sign character (`+` or `-`) followed immediately by a non-empty sequence of ASCII digits.
+
+r[lexer.signed-integer.range]
+It is an error for a signed integer literal to have a value outside the range `i64::MIN..=i64::MAX`.
+
+```ebnf
+signed integer literal = sign, digit, { digit } ;
+sign                   = "+" | "-" ;
+```
+
 ### String Literals
 
 r[lexer.string]
@@ -318,7 +333,7 @@ Duration literals desugar into records with five integer fields named `weeks`, `
 
 ### Literal Expressions
 
-A literal expression is a string literal, integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, `true`, or `false`.
+A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, `true`, or `false`.
 
 > r[expr.literal.syntax]
 > The grammar for literal expressions is as follows:
@@ -326,6 +341,7 @@ A literal expression is a string literal, integer literal, date literal, month-d
 > ```ebnf
 > literal expr = string literal
 >              | integer literal
+>              | signed integer literal
 >              | date literal
 >              | month day literal
 >              | time literal
@@ -616,7 +632,7 @@ Ident      ::= [a-zA-Z_] [a-zA-Z0-9_-]*
 Path       ::= Ident ('.' Ident)*
 
 Value      ::= Keyword | DateLit | TimeLit | DurationLit
-             | Int | Ident | String
+             | Int | SignedInt | Ident | String
              | Record | List
 Record     ::= '{' (Field (',' Field)* ','?)? '}'
 Field      ::= Path ':' '='? Value
@@ -626,6 +642,7 @@ DateLit    ::= YYYY-MM-DD | MM-DD
 TimeLit    ::= HH:MM | HH:MM:SS
 DurationLit::= (<int>w | <int>d | <int>h | <int>m | <int>s)+
 Int        ::= [0-9]+
+SignedInt  ::= [+-] [0-9]+
 String     ::= '"' ... '"'
 Keyword    ::= 'true' | 'false' | 'undefined' | 'local' | ...
 ```
