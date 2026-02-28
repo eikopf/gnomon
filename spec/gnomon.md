@@ -121,7 +121,7 @@ All other keywords are weak.
 > - `bind`
 > - `override`
 > - `event`
-> - `todo`
+> - `task`
 > - `every`
 > - `day`
 > - `year`
@@ -404,7 +404,7 @@ The optional `uid` field on events is always assigned a value, which will defaul
 r[record.event.uid]
 Records representing events MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
 
-### Todos
+### Tasks
 
 ### Recurrence Rules
 
@@ -506,8 +506,8 @@ TODO: optional record fields which have similar or identical meanings on multipl
 r[syntax.short.event]
 The event short syntax MUST follow the form: `event` Name? (RecurPat | DateLit) TimeLit? DurationLit? String Alarm* Record?
 
-r[syntax.short.todo]
-The todo short syntax MUST follow the form: `todo` Name? DateLit? String Record?
+r[syntax.short.task]
+The task short syntax MUST follow the form: `task` Name? DateLit? String Record?
 
 r[syntax.short.name-position]
 A name, if present, MUST appear immediately after the keyword.
@@ -518,8 +518,8 @@ A field provided both positionally and in the braced block MUST be an error.
 ```
 event @standup every Monday 09:00 1h "Standup" !15m { tag: work }
 event @deep-work 2025-07-14 14:00-16:00 "Deep work block"
-todo @invoice 2025-07-15 "Submit invoice" { priority: high }
-todo "Read RFC 7986" { tag: reading }
+task @invoice 2025-07-15 "Submit invoice" { priority: high }
+task "Read RFC 7986" { tag: reading }
 ```
 
 ### Component Full Syntax
