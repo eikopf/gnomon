@@ -406,6 +406,16 @@ Records representing events MUST have a field named `uid` whose value is either 
 
 ### Tasks
 
+Tasks represent action items, assignments, TODO items, or other similar objects. They can be given a specific relationship to time, but by default nothing is required except a `name` field whose value is a name.
+
+r[record.task.name]
+Records representing tasks MUST have a field named `name` whose value is a name.
+
+The optional `uid` field on tasks is always assigned a value, which will default to the name of the task if it is omitted.
+
+r[record.task.uid]
+Records representing tasks MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
+
 ### Recurrence Rules
 
 A recurrence rule is a record describing how a calendar item recurs, and has the semantics of an RFC 5545 recurrence rule.
@@ -497,7 +507,45 @@ An error SHOULD be produced if a recurrence rule is empty.
 
 ## Common Record Fields
 
-TODO: optional record fields which have similar or identical meanings on multiple record types
+### `uid`
+Name: `uid`
+
+Value: string (no default)
+
+Meaning: The unique identifier of the object. This will usually be a UUID, but older implementations of iCalendar can still use arbitrary strings as unique identifiers. If the value is omitted, a stable UUIDv5 is computed using the `name` field of the object as the local key and the `uid` of the calendar as the namespace.
+
+r[field.uid.type]
+If present, the `uid` field MUST have a string value.
+
+### `title`
+Name: `title`
+
+Value: string (no default)
+
+Meaning: A short summary of the object.
+
+r[field.title.type]
+If present, the `title` field MUST have a string value.
+
+### `description`
+Name: `description`
+
+Value: string or record `{ type: string, content: string }` (no default)
+
+Meaning: A longer description of the object. If the value is a record, the `content` field is the body of the description and the `type` is an RFC 6838 media type. If the value is a string, the implied media type is `text/plain`.
+
+r[field.description.type]
+If present, the `description` field MUST have a string or record value.
+
+r[field.description.type.string]
+If the value of the `description` field is a string, it MUST be equivalent to specifying the value as a record whose `type` field has the value `"text/plain"` and whose `content` field matches the given string value.
+
+r[field.description.type.record]
+If the value of the `description` field is a record, it MUST have fields named `type` and `content` whose values MUST be strings. The value of the `type` field MUST be an RFC 6838 media type, MUST be a subtype of the `text` type, and SHOULD be `text/plain` or `text/html`. The given media type MAY include parameters, and the `charset` parameter value MUST be `utf-8` if specified.
+
+## More Fields
+
+TODO: define the most commonly used fields in both event and task (see JSCalendar spec for details)
 
 ## Declarations
 
@@ -579,38 +627,6 @@ event @meeting 2025-07-14 14:00 2h "Review" {
   ],
 }
 ```
-
-## Identity Model
-
-### UUIDv5 Derivation
-
-r[identity.named]
-Named components MUST derive their UID as `UUIDv5(calendar_root_uuid, name_string)`.
-
-r[identity.unnamed]
-Unnamed components MUST derive their UID from a canonical content signature: `UUIDv5(calendar_root_uuid, "kind|date|time|title")`.
-
-r[identity.sub-component]
-Sub-component and override identity MUST derive from the parent's UID, as `UUIDv5(parent_uid, instance_key)` where the instance key is the override date or alarm signature.
-
-- Override: `UUIDv5(event_uid, "YYYY-MM-DD")`
-- Alarm: `UUIDv5(event_uid, "alarm|duration|before")`
-
-### Renaming
-
-r[identity.alias]
-When a component has an `alias` field, the compiler MUST derive the UID from the alias name instead of the current name, preserving identity continuity across renames.
-
-```
-event @daily-sync every Monday 09:00 1h "Daily Sync" {
-  alias: @standup,
-}
-```
-
-### Root UUID
-
-r[identity.root]
-The calendar's root UUID MUST be declared in the calendar file. It MUST be a UUIDv4, generated once on calendar initialization. It is configuration for the rendering backend, not intrinsic to the data model.
 
 ## Override Semantics
 
