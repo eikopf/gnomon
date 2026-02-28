@@ -387,7 +387,22 @@ A list is a contiguous sequence of zero or more values.
 
 ## Record Types
 
+Gnomon distinguishes specific record types for use in certain contexts. These types are identified by their fields (which may be mandatory or optional), and by the types of the values associated with those fields.
+
 ### Events
+
+Events represent scheduled amounts of time on a calendar; they are required to start at a certain point in time and usually have a non-zero duration. They have two mandatory fields, `name` and `start`; these have as values a name and a local datetime respectively.
+
+r[record.event.name]
+Records representing events MUST have a field named `name` whose value is a name.
+
+r[record.event.start]
+Records representing events MUST have a field named `start` whose value is a local datetime.
+
+The optional `uid` field on events is always assigned a value, which will default to the name of the event if it is omitted.
+
+r[record.event.uid]
+Records representing events MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
 
 ### Todos
 
@@ -479,6 +494,10 @@ TODO: describe the evaluation semantics of recurrence rules
 
 r[record.rrule.eval.empty]
 An error SHOULD be produced if a recurrence rule is empty.
+
+## Common Record Fields
+
+TODO: optional record fields which have similar or identical meanings on multiple record types
 
 ## Declarations
 
