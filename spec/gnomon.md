@@ -332,6 +332,18 @@ Duration literals desugar into records with five integer fields named `weeks`, `
 
 ## Expressions
 
+Gnomon's expression syntax consists of only three grammar rules: literal expressions, record expressions, and list expressions.
+
+> r[expr.syntax]
+> The grammar for expressions is as follows:
+>
+> ```ebnf
+> expr = literal expr
+>      | record expr
+>      | list expr
+>      ;
+> ```
+
 ### Literal Expressions
 
 A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, `true`, or `false`.
@@ -548,6 +560,46 @@ If the value of the `description` field is a record, it MUST have fields named `
 TODO: define the most commonly used fields in both event and task (see JSCalendar spec for details)
 
 ## Declarations
+
+Declarations are the top-level grammar element in Gnomon, and source data is ultimately parsed as a sequence of declarations.
+
+> r[syntax.start]
+> Source data MUST be parsed as a sequence of declarations.
+>
+> ```ebnf
+> START = { decl } ;
+> ```
+
+> r[decl.syntax]
+> The grammar for declarations is as follows:
+>
+> ```ebnf
+> decl = inclusion
+>      | binding
+>      | short event
+>      | short task
+>      | decl prefix, record expr
+>      ;
+>
+> inclusion = "include", string literal ;
+>
+> binding = "bind", name, string literal ;
+>
+> decl prefix = "calendar"
+>             | "event"
+>             | "task"
+>             | "override"
+>             ;
+>
+> short event = "event", name,  short span,  [ string literal ], [ record expr ] ;
+> short task  = "task",  name, [ short dt ], [ string literal ], [ record expr ] ;
+>
+> short span = short dt, [ duration literal ] ;
+>
+> short dt   = date literal, time literal
+>            | datetime literal
+>            ;
+> ```
 
 ### Component Short Syntax
 
