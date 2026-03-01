@@ -1,6 +1,10 @@
+[workspace]
+members = ["crates/gnomon-parser"]
+
 [package]
 name = "gnomon"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+gnomon-parser = { path = "crates/gnomon-parser" }
