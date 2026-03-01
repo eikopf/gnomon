@@ -52,3 +52,24 @@ impl ParseResult<'_> {
         gnomon_parser::ast::SourceFile::cast(self.syntax_node(db)).unwrap()
     }
 }
+
+#[salsa::tracked]
+pub struct SyntaxCheckResult<'db> {
+    pub parse_has_errors: bool,
+}
+
+#[salsa::tracked]
+pub fn check_syntax(db: &dyn crate::Db, source: SourceFile) -> SyntaxCheckResult<'_> {
+    let parse_result = parse(db, source);
+    let root = parse_result.syntax_node(db);
+    let errors = gnomon_parser::validate_syntax(&root);
+    for err in errors {
+        Diagnostic {
+            range: err.range,
+            severity: Severity::Error,
+            message: err.message,
+        }
+        .accumulate(db);
+    }
+    SyntaxCheckResult::new(db, parse_result.has_errors(db))
+}

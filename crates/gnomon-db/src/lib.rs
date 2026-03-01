@@ -2,7 +2,7 @@ pub mod input;
 pub mod queries;
 
 pub use input::SourceFile;
-pub use queries::{parse, Diagnostic, ParseResult, Severity};
+pub use queries::{check_syntax, parse, Diagnostic, ParseResult, Severity, SyntaxCheckResult};
 
 #[salsa::db]
 pub trait Db: salsa::Database {}
@@ -62,6 +62,36 @@ mod tests {
         let green2 = result2.green_node(&db).clone();
 
         assert_eq!(green1, green2);
+    }
+
+    #[test]
+    fn check_syntax_accumulates_validation_errors() {
+        let db = Database::default();
+        let source = SourceFile::new(
+            &db,
+            PathBuf::from("dup.gnomon"),
+            "calendar { uid: \"a\", uid: \"b\" }".into(),
+        );
+        let result = check_syntax(&db, source);
+        assert!(!result.parse_has_errors(&db));
+        let diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source);
+        assert!(diagnostics.iter().any(|d| d.message.contains("duplicate field")));
+    }
+
+    #[test]
+    fn check_syntax_accumulates_parse_and_validation_errors() {
+        let db = Database::default();
+        // "~~~" causes a parse error; overflow causes a validation error
+        let source = SourceFile::new(
+            &db,
+            PathBuf::from("both.gnomon"),
+            "~~~ calendar { count: 99999999999999999999999 }".into(),
+        );
+        let result = check_syntax(&db, source);
+        assert!(result.parse_has_errors(&db));
+        let diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source);
+        assert!(diagnostics.iter().any(|d| d.message.contains("expected")));
+        assert!(diagnostics.iter().any(|d| d.message.contains("overflows")));
     }
 
     #[test]
