@@ -477,7 +477,7 @@ Now we can provide an unambiguous definition for recurrence rules:
 Writing recurrence rules as records is annoying, and so Gnomon includes a small DSL for writing the most common subset of recurrence rules. Expressions in this DSL are called `every` expressions.
 
 
-> r[record.rrule.every]
+> r[record.rrule.every+2]
 > The syntax of an `every` expression is the following:
 >
 > ```ebnf
@@ -487,6 +487,7 @@ Writing recurrence rules as records is annoying, and so Gnomon includes a small 
 >                  | weekday
 >                  ;
 > every terminator = datetime literal
+>                  | date literal
 >                  | integer literal, "times"
 >                  ;
 > ```
@@ -507,8 +508,8 @@ If the subject of an `every` expression is of the form `year on MM-DD`, the `fre
 r[record.rrule.every.desugar.subject.weekday]
 If the subject of an `every` expression is a weekday, the `frequency` field in the desugared record MUST be set to the value `weekly` and the `by_day` field in the desugared record MUST be set to the singleton list value `[{ day: D }]` where `D` is the index of the given weekday (starting from `1` for `monday`).
 
-r[record.rrule.every.desugar.terminator]
-If the terminator of an `every` expression is given, its value (the datetime or integer literal) MUST be assigned to the `termination` field in the desugared record. If the terminator is omitted, the `termination` field in the desugared record MUST be omitted or set to `undefined`.
+r[record.rrule.every.desugar.terminator+2]
+If the terminator of an `every` expression is given, its value (the datetime or integer literal) MUST be assigned to the `termination` field in the desugared record. If the terminator is omitted, the `termination` field in the desugared record MUST be omitted or set to `undefined`. If the terminator is a date literal, it MUST be treated as the corresponding datetime literal where the time component is `00:00:00`.
 
 #### Evaluation
 
