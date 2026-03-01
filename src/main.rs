@@ -10,7 +10,7 @@ use gnomon_db::{Database, Diagnostic, SourceFile, check_syntax, parse};
 #[derive(Parser)]
 #[command(
     name = "gnomon",
-    about = "A calendar language toolkit",
+    about = "A plaintext calendaring language",
     arg_required_else_help = true
 )]
 struct Cli {
