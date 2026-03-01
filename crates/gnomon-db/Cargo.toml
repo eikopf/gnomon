@@ -1,0 +1,12 @@
+[package]
+name = "gnomon-db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gnomon-parser = { path = "../gnomon-parser" }
+salsa = "0.26"
+rowan = "0.16"
+
+[dev-dependencies]
+expect-test = "1"

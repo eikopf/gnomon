@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use gnomon_db::{parse, Database, Diagnostic, SourceFile};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
@@ -45,7 +46,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Parse { file } => {
             // r[impl cli.subcommand.parse.no-file]
-            let source = match std::fs::read_to_string(&file) {
+            let text = match std::fs::read_to_string(&file) {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("error: could not read {}: {e}", file.display());
@@ -54,13 +55,16 @@ fn main() -> ExitCode {
             };
 
             // r[impl cli.subcommand.parse.output]
-            let parse = gnomon_parser::parse(&source);
-            println!("{}", parse.debug_tree());
+            let db = Database::default();
+            let source = SourceFile::new(&db, file, text);
+            let result = parse(&db, source);
+            let syntax = result.syntax_node(&db);
+            println!("{syntax:#?}");
 
-            if !parse.ok() {
+            if result.has_errors(&db) {
                 eprintln!("errors:");
-                for err in parse.errors() {
-                    eprintln!("  {err:?}");
+                for diag in parse::accumulated::<Diagnostic>(&db, source) {
+                    eprintln!("  {}", diag.0);
                 }
                 return ExitCode::FAILURE;
             }

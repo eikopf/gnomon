@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/gnomon-parser"]
+members = ["crates/gnomon-parser", "crates/gnomon-db"]
 
 [package]
 name = "gnomon"
@@ -8,4 +8,5 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+gnomon-db = { path = "crates/gnomon-db" }
 gnomon-parser = { path = "crates/gnomon-parser" }

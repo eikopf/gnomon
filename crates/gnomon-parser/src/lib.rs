@@ -1,8 +1,10 @@
+pub mod ast;
 mod syntax_kind;
 mod preprocess;
 mod lexer;
 mod parser;
 
+pub use rowan::ast::AstNode;
 pub use syntax_kind::{GnomonLanguage, SyntaxKind, SyntaxNode, SyntaxToken};
 pub use parser::ParseError;
 
@@ -32,6 +34,16 @@ impl Parse {
     pub fn debug_tree(&self) -> String {
         let syntax = self.syntax();
         format!("{syntax:#?}")
+    }
+
+    /// Get the green (immutable, interned) tree.
+    pub fn green_node(&self) -> &rowan::GreenNode {
+        &self.green_node
+    }
+
+    /// Get the typed AST root.
+    pub fn tree(&self) -> ast::SourceFile {
+        ast::SourceFile::cast(self.syntax()).unwrap()
     }
 }
 
