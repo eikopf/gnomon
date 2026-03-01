@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{parse, Database, Diagnostic, SourceFile};
+use gnomon_db::{check_syntax, parse, Database, Diagnostic, SourceFile};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
@@ -21,6 +21,12 @@ enum Command {
     /// Parse a .gnomon file and print its syntax tree.
     Parse {
         /// Path to the file to parse.
+        file: PathBuf,
+    },
+    // r[impl cli.subcommand.check]
+    /// Check a .gnomon file for errors.
+    Check {
+        /// Path to the file to check.
         file: PathBuf,
     },
 }
@@ -71,5 +77,52 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
+        Command::Check { file } => {
+            let text = match std::fs::read_to_string(&file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: could not read {}: {e}", file.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+
+            let db = Database::default();
+            let source = SourceFile::new(&db, file.clone(), text.clone());
+            check_syntax(&db, source);
+            let mut diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source).to_vec();
+            diagnostics.sort_by_key(|d| d.range.start());
+
+            if diagnostics.is_empty() {
+                ExitCode::SUCCESS
+            } else {
+                for diag in &diagnostics {
+                    let offset = u32::from(diag.range.start()) as usize;
+                    let (line, col) = offset_to_line_col(&text, offset);
+                    let severity = match diag.severity {
+                        gnomon_db::Severity::Error => "error",
+                        gnomon_db::Severity::Warning => "warning",
+                    };
+                    eprintln!("{}:{}:{}: {}: {}", file.display(), line, col, severity, diag.message);
+                }
+                ExitCode::FAILURE
+            }
+        }
     }
+}
+
+fn offset_to_line_col(text: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (i, ch) in text.char_indices() {
+        if i >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
 }
