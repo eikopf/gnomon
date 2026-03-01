@@ -64,7 +64,7 @@ fn main() -> ExitCode {
             if result.has_errors(&db) {
                 eprintln!("errors:");
                 for diag in parse::accumulated::<Diagnostic>(&db, source) {
-                    eprintln!("  {}", diag.0);
+                    eprintln!("  {}..{}: {}", u32::from(diag.range.start()), u32::from(diag.range.end()), diag.message);
                 }
                 return ExitCode::FAILURE;
             }

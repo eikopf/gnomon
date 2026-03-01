@@ -3,8 +3,19 @@ use salsa::Accumulator;
 
 use crate::input::SourceFile;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
 #[salsa::accumulator]
-pub struct Diagnostic(pub String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Diagnostic {
+    pub range: rowan::TextRange,
+    pub severity: Severity,
+    pub message: String,
+}
 
 #[salsa::tracked]
 pub struct ParseResult<'db> {
@@ -17,10 +28,14 @@ pub struct ParseResult<'db> {
 pub fn parse(db: &dyn crate::Db, source: SourceFile) -> ParseResult<'_> {
     let result = gnomon_parser::parse(source.text(db));
     for error in result.errors() {
-        Diagnostic(format!(
-            "{}..{}: {}",
-            error.range.start, error.range.end, error.message
-        ))
+        Diagnostic {
+            range: rowan::TextRange::new(
+                rowan::TextSize::from(error.range.start as u32),
+                rowan::TextSize::from(error.range.end as u32),
+            ),
+            severity: Severity::Error,
+            message: error.message.clone(),
+        }
         .accumulate(db);
     }
     ParseResult::new(db, result.green_node().clone(), !result.ok())

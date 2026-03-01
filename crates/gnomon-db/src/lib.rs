@@ -2,7 +2,7 @@ pub mod input;
 pub mod queries;
 
 pub use input::SourceFile;
-pub use queries::{parse, Diagnostic, ParseResult};
+pub use queries::{parse, Diagnostic, ParseResult, Severity};
 
 #[salsa::db]
 pub trait Db: salsa::Database {}
