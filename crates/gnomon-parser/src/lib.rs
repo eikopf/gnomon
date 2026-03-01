@@ -93,6 +93,7 @@ task @cleanup "Clean up" {
 
     // ── Inclusion ────────────────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_inclusion() {
         check(
@@ -107,6 +108,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_inclusion_no_errors() {
         check_no_errors(r#"include "holidays.gnomon""#);
@@ -114,6 +116,7 @@ task @cleanup "Clean up" {
 
     // ── Binding ──────────────────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_binding() {
         check(
@@ -130,6 +133,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_binding_no_errors() {
         check_no_errors(r#"bind @cal.holidays "holidays.gnomon""#);
@@ -137,6 +141,7 @@ task @cleanup "Clean up" {
 
     // ── Calendar ─────────────────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_calendar() {
         check(
@@ -161,6 +166,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_calendar_no_errors() {
         check_no_errors(r#"calendar { uid: "my-cal" }"#);
@@ -168,6 +174,7 @@ task @cleanup "Clean up" {
 
     // ── Event (short form) ───────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_event_short_datetime() {
         check(
@@ -190,11 +197,13 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_event_short_no_errors() {
         check_no_errors(r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#);
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_event_short_date_time() {
         check(
@@ -219,6 +228,7 @@ task @cleanup "Clean up" {
 
     // ── Event (prefix form) ──────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_event_prefix() {
         check(
@@ -253,6 +263,7 @@ task @cleanup "Clean up" {
 
     // ── Task (short form) ────────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_task_short() {
         check(
@@ -269,6 +280,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_task_short_no_errors() {
         check_no_errors(r#"task @cleanup "Clean up""#);
@@ -276,6 +288,7 @@ task @cleanup "Clean up" {
 
     // ── Task (prefix form) ───────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_task_prefix() {
         check(
@@ -302,6 +315,7 @@ task @cleanup "Clean up" {
 
     // ── Record with nested record ────────────────────────────────
 
+    // r[verify expr.record.syntax]
     #[test]
     fn parse_nested_record() {
         check(
@@ -353,6 +367,7 @@ task @cleanup "Clean up" {
 
     // ── List expression ──────────────────────────────────────────
 
+    // r[verify expr.list.syntax]
     #[test]
     fn parse_list_in_field() {
         check(
@@ -390,6 +405,7 @@ task @cleanup "Clean up" {
 
     // ── Every expression ─────────────────────────────────────────
 
+    // r[verify record.rrule.every]
     #[test]
     fn parse_every_day() {
         check(
@@ -424,6 +440,8 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify record.rrule.every]
+    // r[verify record.rrule.weekday]
     #[test]
     fn parse_every_weekday() {
         check(
@@ -458,6 +476,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify record.rrule.every]
     #[test]
     fn parse_every_year_on() {
         check(
@@ -496,6 +515,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify record.rrule.every]
     #[test]
     fn parse_every_with_until() {
         check(
@@ -534,6 +554,7 @@ task @cleanup "Clean up" {
         );
     }
 
+    // r[verify record.rrule.every]
     #[test]
     fn parse_every_n_times() {
         check(
@@ -576,6 +597,7 @@ task @cleanup "Clean up" {
 
     // ── Comments preserved ───────────────────────────────────────
 
+    // r[verify lexer.comment]
     #[test]
     fn parse_with_comments() {
         check(
@@ -625,6 +647,7 @@ task @cleanup "Clean up" {
 
     // ── Multiple declarations ────────────────────────────────────
 
+    // r[verify syntax.start]
     #[test]
     fn parse_multiple_decls() {
         let source = r#"include "base.gnomon"
@@ -636,6 +659,7 @@ task @cleanup "Clean""#;
 
     // ── Trailing comma in record ─────────────────────────────────
 
+    // r[verify expr.record.syntax]
     #[test]
     fn parse_trailing_comma() {
         check_no_errors("calendar { uid: \"test\", }");
@@ -643,6 +667,7 @@ task @cleanup "Clean""#;
 
     // ── Empty record ─────────────────────────────────────────────
 
+    // r[verify expr.record.syntax]
     #[test]
     fn parse_empty_record() {
         check(
@@ -661,6 +686,7 @@ task @cleanup "Clean""#;
 
     // ── Event with short form + record ───────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_event_short_with_record() {
         check_no_errors(
@@ -670,6 +696,7 @@ task @cleanup "Clean""#;
 
     // ── Task with short_dt ───────────────────────────────────────
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_task_with_datetime() {
         check(
@@ -689,6 +716,7 @@ task @cleanup "Clean""#;
         );
     }
 
+    // r[verify decl.syntax]
     #[test]
     fn parse_task_with_datetime_no_errors() {
         check_no_errors(r#"task @deadline 2026-06-01T17:00 "Submit report""#);
@@ -696,6 +724,8 @@ task @cleanup "Clean""#;
 
     // ── Boolean and undefined literals ───────────────────────────
 
+    // r[verify expr.literal.syntax]
+    // r[verify lexer.keyword.strict]
     #[test]
     fn parse_boolean_fields() {
         check_no_errors("calendar { active: true, archived: false }");
@@ -703,6 +733,7 @@ task @cleanup "Clean""#;
 
     // ── Preprocessor integration ─────────────────────────────────
 
+    // r[verify lexer.input-format.bom-removal]
     #[test]
     fn parse_with_bom() {
         let source = "\u{FEFF}calendar {}";
@@ -710,6 +741,7 @@ task @cleanup "Clean""#;
         assert!(parse.ok());
     }
 
+    // r[verify lexer.input-format.shebang-removal]
     #[test]
     fn parse_with_shebang() {
         let source = "#!/usr/bin/env gnomon\ncalendar {}";

@@ -2,6 +2,7 @@ use crate::syntax_kind::SyntaxKind;
 
 use super::Parser;
 
+// r[impl record.rrule.weekday]
 const WEEKDAYS: &[(&str, SyntaxKind)] = &[
     ("monday", SyntaxKind::MONDAY_KW),
     ("tuesday", SyntaxKind::TUESDAY_KW),
@@ -13,6 +14,7 @@ const WEEKDAYS: &[(&str, SyntaxKind)] = &[
 ];
 
 impl Parser {
+    // r[impl record.rrule.every]
     /// Parse an `every` expression:
     /// ```ebnf
     /// every expr = "every", every_subject, [ "until", every_terminator ] ;
@@ -35,6 +37,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl record.rrule.every]
     /// ```ebnf
     /// every_subject = "day"
     ///               | "year", "on", month_day_literal
@@ -55,6 +58,7 @@ impl Parser {
         }
     }
 
+    // r[impl record.rrule.every]
     /// ```ebnf
     /// every_terminator = datetime_literal
     ///                  | integer_literal, "times"

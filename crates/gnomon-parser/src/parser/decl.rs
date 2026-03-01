@@ -14,6 +14,7 @@ impl Parser {
         }
     }
 
+    // r[impl decl.syntax]
     /// Parse a single declaration.
     pub(super) fn parse_decl(&mut self) {
         match self.current_text() {
@@ -29,6 +30,7 @@ impl Parser {
         }
     }
 
+    // r[impl decl.syntax]
     /// `include string-literal`
     fn parse_inclusion(&mut self) {
         self.start_node(SyntaxKind::INCLUSION_DECL);
@@ -37,6 +39,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl decl.syntax]
     /// `bind name string-literal`
     fn parse_binding(&mut self) {
         self.start_node(SyntaxKind::BINDING_DECL);
@@ -46,6 +49,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl decl.syntax]
     /// `calendar record`
     fn parse_calendar_decl(&mut self) {
         self.start_node(SyntaxKind::CALENDAR_DECL);
@@ -54,6 +58,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl decl.syntax]
     /// `event { ... }` (prefix form) or `event @name short_span [title] [record]` (short form)
     fn parse_event_decl(&mut self) {
         self.start_node(SyntaxKind::EVENT_DECL);
@@ -85,6 +90,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl decl.syntax]
     /// `task { ... }` (prefix form) or `task @name [short_dt] [title] [record]` (short form)
     fn parse_task_decl(&mut self) {
         self.start_node(SyntaxKind::TASK_DECL);
@@ -120,6 +126,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl decl.syntax]
     /// `short_span = short_dt [duration]`
     fn parse_short_span(&mut self) {
         self.start_node(SyntaxKind::SHORT_SPAN);
@@ -131,6 +138,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl decl.syntax]
     /// `short_dt = date time | datetime`
     pub(super) fn parse_short_dt(&mut self) {
         self.start_node(SyntaxKind::SHORT_DT);

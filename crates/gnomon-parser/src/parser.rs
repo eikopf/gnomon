@@ -221,6 +221,7 @@ impl Parser {
         (self.builder.finish(), self.errors)
     }
 
+    // r[impl syntax.start]
     fn parse_source_file(&mut self) {
         self.start_node_before_trivia(SyntaxKind::SOURCE_FILE);
         while !self.at_eof() {

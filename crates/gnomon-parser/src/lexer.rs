@@ -14,13 +14,15 @@ pub struct Token {
 #[derive(Logos, Debug, Clone, Copy, PartialEq, Eq)]
 enum LogosToken {
     // ── Trivia ───────────────────────────────────────────────────
-    // Pattern_White_Space: tab, LF, VT, FF, CR, space, NEL, LTR/RTL marks, LS, PS
+    // r[impl lexer.whitespace]
     #[regex(r"[\t\n\x0B\x0C\r \u{85}\u{200E}\u{200F}\u{2028}\u{2029}]+")]
     Whitespace,
 
+    // r[impl lexer.comment]
     #[regex(r";[^\n]*", allow_greedy = true)]
     Comment,
 
+    // r[impl lexer.punctuation]
     // ── Punctuation ──────────────────────────────────────────────
     #[token("{")]
     LBrace,
@@ -44,43 +46,44 @@ enum LogosToken {
     // ── Literals (ordered longest-match: datetime > date > month-day,
     //    time, duration > signed-int > integer) ───────────────────
 
-    // Datetime: YYYY-MM-DDTHH:MM or YYYY-MM-DDTHH:MM:SS
+    // r[impl lexer.datetime]
     #[regex(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?")]
     DatetimeLiteral,
 
-    // Date: YYYY-MM-DD
+    // r[impl lexer.date]
     #[regex(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")]
     DateLiteral,
 
-    // Time: HH:MM or HH:MM:SS
+    // r[impl lexer.time]
     #[regex(r"[0-9]{2}:[0-9]{2}(:[0-9]{2})?")]
     TimeLiteral,
 
-    // Month-day: MM-DD
+    // r[impl lexer.month-day]
     #[regex(r"[0-9]{2}-[0-9]{2}")]
     MonthDayLiteral,
 
-    // Duration: optional sign, then digit+unit pairs (e.g. 1h30m, +2d, -1w3d)
+    // r[impl lexer.duration]
     #[regex(r"[+-]?[0-9]+[wdhms]([0-9]+[wdhms])*")]
     DurationLiteral,
 
-    // Signed integer: +/- followed by digits (no unit letter after)
+    // r[impl lexer.signed-integer]
     #[regex(r"[+-][0-9]+")]
     SignedIntegerLiteral,
 
-    // String: "..." with escape sequences
+    // r[impl lexer.string]
+    // r[impl lexer.string.escape]
     #[regex(r#""([^"\\]|\\.)*""#, allow_greedy = true)]
     StringLiteral,
 
-    // Integer: plain digits
+    // r[impl lexer.integer]
     #[regex(r"[0-9]+")]
     IntegerLiteral,
 
-    // ── Name: @ident(.ident)* ────────────────────────────────────
+    // r[impl syntax.name]
     #[regex(r"@[a-zA-Z_][a-zA-Z0-9_-]*(\.[a-zA-Z_][a-zA-Z0-9_-]*)*")]
     Name,
 
-    // ── Strict keywords ──────────────────────────────────────────
+    // r[impl lexer.keyword.strict]
     #[token("true")]
     True,
     #[token("false")]
@@ -88,7 +91,8 @@ enum LogosToken {
     #[token("undefined")]
     Undefined,
 
-    // ── Identifier (also covers weak keywords, promoted by parser) ─
+    // r[impl lexer.ident]
+    // r[impl lexer.keyword.weak]
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_-]*")]
     Ident,
 }
@@ -161,12 +165,14 @@ mod tests {
 
     // ── Ambiguity resolution ─────────────────────────────────────
 
+    // r[verify lexer.datetime]
     #[test]
     fn datetime_wins_over_date() {
         let toks = kinds("2026-03-01T14:30");
         assert_eq!(toks, vec![(SyntaxKind::DATETIME_LITERAL, "2026-03-01T14:30")]);
     }
 
+    // r[verify lexer.datetime]
     #[test]
     fn datetime_with_seconds() {
         let toks = kinds("2026-03-01T14:30:00");
@@ -176,60 +182,70 @@ mod tests {
         );
     }
 
+    // r[verify lexer.date]
     #[test]
     fn date_wins_over_integer() {
         let toks = kinds("2026-03-01");
         assert_eq!(toks, vec![(SyntaxKind::DATE_LITERAL, "2026-03-01")]);
     }
 
+    // r[verify lexer.month-day]
     #[test]
     fn month_day_wins_over_integer() {
         let toks = kinds("03-15");
         assert_eq!(toks, vec![(SyntaxKind::MONTH_DAY_LITERAL, "03-15")]);
     }
 
+    // r[verify lexer.time]
     #[test]
     fn time_literal() {
         let toks = kinds("14:30");
         assert_eq!(toks, vec![(SyntaxKind::TIME_LITERAL, "14:30")]);
     }
 
+    // r[verify lexer.time]
     #[test]
     fn time_literal_with_seconds() {
         let toks = kinds("14:30:59");
         assert_eq!(toks, vec![(SyntaxKind::TIME_LITERAL, "14:30:59")]);
     }
 
+    // r[verify lexer.duration]
     #[test]
     fn duration_wins_over_signed_int() {
         let toks = kinds("+5h30m");
         assert_eq!(toks, vec![(SyntaxKind::DURATION_LITERAL, "+5h30m")]);
     }
 
+    // r[verify lexer.duration]
     #[test]
     fn unsigned_duration() {
         let toks = kinds("1h30m");
         assert_eq!(toks, vec![(SyntaxKind::DURATION_LITERAL, "1h30m")]);
     }
 
+    // r[verify lexer.signed-integer]
     #[test]
     fn signed_int_when_no_unit() {
         let toks = kinds("+5");
         assert_eq!(toks, vec![(SyntaxKind::SIGNED_INTEGER_LITERAL, "+5")]);
     }
 
+    // r[verify lexer.signed-integer]
     #[test]
     fn negative_signed_int() {
         let toks = kinds("-42");
         assert_eq!(toks, vec![(SyntaxKind::SIGNED_INTEGER_LITERAL, "-42")]);
     }
 
+    // r[verify syntax.name]
     #[test]
     fn name_token() {
         let toks = kinds("@foo.bar");
         assert_eq!(toks, vec![(SyntaxKind::NAME, "@foo.bar")]);
     }
 
+    // r[verify syntax.name]
     #[test]
     fn name_simple() {
         let toks = kinds("@meeting");
@@ -238,6 +254,7 @@ mod tests {
 
     // ── Strict keywords ──────────────────────────────────────────
 
+    // r[verify lexer.keyword.strict]
     #[test]
     fn strict_keywords() {
         let toks = kinds("true false undefined");
@@ -255,6 +272,7 @@ mod tests {
 
     // ── Weak keywords lex as IDENT ───────────────────────────────
 
+    // r[verify lexer.keyword.weak]
     #[test]
     fn weak_keywords_are_idents() {
         for kw in [
@@ -269,6 +287,7 @@ mod tests {
 
     // ── Punctuation ──────────────────────────────────────────────
 
+    // r[verify lexer.punctuation]
     #[test]
     fn punctuation() {
         let toks = kinds("{}[]:,=!.");
@@ -290,12 +309,14 @@ mod tests {
 
     // ── Strings ──────────────────────────────────────────────────
 
+    // r[verify lexer.string]
     #[test]
     fn string_literal() {
         let toks = kinds(r#""hello world""#);
         assert_eq!(toks, vec![(SyntaxKind::STRING_LITERAL, r#""hello world""#)]);
     }
 
+    // r[verify lexer.string.escape]
     #[test]
     fn string_with_escapes() {
         let toks = kinds(r#""say \"hi\"""#);
@@ -307,6 +328,7 @@ mod tests {
 
     // ── Integer ──────────────────────────────────────────────────
 
+    // r[verify lexer.integer]
     #[test]
     fn integer_literal() {
         let toks = kinds("42");
@@ -315,6 +337,7 @@ mod tests {
 
     // ── Comments ─────────────────────────────────────────────────
 
+    // r[verify lexer.comment]
     #[test]
     fn comment() {
         let toks = kinds("; this is a comment\nhello");
@@ -330,6 +353,7 @@ mod tests {
 
     // ── Whitespace ───────────────────────────────────────────────
 
+    // r[verify lexer.whitespace]
     #[test]
     fn whitespace_preserved() {
         let toks = kinds("  \t\n  ");
@@ -346,6 +370,7 @@ mod tests {
 
     // ── Identifier with hyphens ──────────────────────────────────
 
+    // r[verify lexer.ident]
     #[test]
     fn identifier_with_hyphens() {
         let toks = kinds("x-custom-field");
@@ -354,6 +379,7 @@ mod tests {
 
     // ── Negative duration ────────────────────────────────────────
 
+    // r[verify lexer.duration]
     #[test]
     fn negative_duration() {
         let toks = kinds("-1w3d");

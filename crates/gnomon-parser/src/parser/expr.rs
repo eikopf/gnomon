@@ -3,6 +3,7 @@ use crate::syntax_kind::SyntaxKind;
 use super::Parser;
 
 impl Parser {
+    // r[impl expr.syntax]
     /// Parse an expression: literal, record, list, or every expression.
     pub(super) fn parse_expr(&mut self) {
         match self.current() {
@@ -35,6 +36,7 @@ impl Parser {
         }
     }
 
+    // r[impl expr.literal.syntax]
     /// Parse a literal expression (wraps a single literal token in a LITERAL_EXPR node).
     fn parse_literal_expr(&mut self) {
         self.start_node(SyntaxKind::LITERAL_EXPR);
@@ -42,6 +44,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl expr.record.syntax]
     /// Parse a record expression: `{ field, field, ... }`
     pub(super) fn parse_record_expr(&mut self) {
         self.start_node(SyntaxKind::RECORD_EXPR);
@@ -78,6 +81,7 @@ impl Parser {
         self.finish_node();
     }
 
+    // r[impl expr.list.syntax]
     /// Parse a list expression: `[ expr, expr, ... ]`
     pub(super) fn parse_list_expr(&mut self) {
         self.start_node(SyntaxKind::LIST_EXPR);

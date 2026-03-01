@@ -10,7 +10,10 @@ specs (
     impls (
       {
         name main
-        include (src/**/*.rs)
+        include (
+          src/**/*.rs
+          crates/**/src/**/*.rs
+        )
       }
     )
   }
