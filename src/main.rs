@@ -2,13 +2,17 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{check_syntax, parse, Database, Diagnostic, SourceFile};
+use gnomon_db::{Database, Diagnostic, SourceFile, check_syntax, parse};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
 // r[impl cli.option.help.short]
 #[derive(Parser)]
-#[command(name = "gnomon", about = "A calendar language toolkit", arg_required_else_help = true)]
+#[command(
+    name = "gnomon",
+    about = "A calendar language toolkit",
+    arg_required_else_help = true
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -70,7 +74,12 @@ fn main() -> ExitCode {
             if result.has_errors(&db) {
                 eprintln!("errors:");
                 for diag in parse::accumulated::<Diagnostic>(&db, source) {
-                    eprintln!("  {}..{}: {}", u32::from(diag.range.start()), u32::from(diag.range.end()), diag.message);
+                    eprintln!(
+                        "  {}..{}: {}",
+                        u32::from(diag.range.start()),
+                        u32::from(diag.range.end()),
+                        diag.message
+                    );
                 }
                 return ExitCode::FAILURE;
             }
@@ -102,7 +111,14 @@ fn main() -> ExitCode {
                         gnomon_db::Severity::Error => "error",
                         gnomon_db::Severity::Warning => "warning",
                     };
-                    eprintln!("{}:{}:{}: {}: {}", file.display(), line, col, severity, diag.message);
+                    eprintln!(
+                        "{}:{}:{}: {}: {}",
+                        file.display(),
+                        line,
+                        col,
+                        severity,
+                        diag.message
+                    );
                 }
                 ExitCode::FAILURE
             }

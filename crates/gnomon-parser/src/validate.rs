@@ -384,7 +384,9 @@ mod tests {
 
     #[test]
     fn month_day_out_of_range() {
-        let errs = validate("event { name: @e, start: 2026-01-01T00:00, recurrence: every year on 13-01 }");
+        let errs = validate(
+            "event { name: @e, start: 2026-01-01T00:00, recurrence: every year on 13-01 }",
+        );
         assert_eq!(errs.len(), 1);
         assert!(errs[0].message.contains("month"));
     }
@@ -415,13 +417,19 @@ mod tests {
     #[test]
     fn event_missing_name() {
         let errs = validate("event { start: 2026-01-01T00:00 }");
-        assert!(errs.iter().any(|e| e.message.contains("missing required field `name`")));
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("missing required field `name`"))
+        );
     }
 
     #[test]
     fn event_missing_start() {
         let errs = validate("event { name: @e }");
-        assert!(errs.iter().any(|e| e.message.contains("missing required field `start`")));
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("missing required field `start`"))
+        );
     }
 
     #[test]
@@ -442,7 +450,10 @@ mod tests {
     #[test]
     fn task_missing_name() {
         let errs = validate("task { priority: 1 }");
-        assert!(errs.iter().any(|e| e.message.contains("missing required field `name`")));
+        assert!(
+            errs.iter()
+                .any(|e| e.message.contains("missing required field `name`"))
+        );
     }
 
     #[test]

@@ -84,7 +84,14 @@ ast_node!(Field, FIELD);
 
 // ── Enum types ──────────────────────────────────────────────────────
 
-ast_enum!(Decl, InclusionDecl, BindingDecl, CalendarDecl, EventDecl, TaskDecl);
+ast_enum!(
+    Decl,
+    InclusionDecl,
+    BindingDecl,
+    CalendarDecl,
+    EventDecl,
+    TaskDecl
+);
 ast_enum!(Expr, LiteralExpr, RecordExpr, ListExpr, EveryExpr);
 
 // ── Accessor methods ────────────────────────────────────────────────

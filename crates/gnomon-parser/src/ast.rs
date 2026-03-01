@@ -5,7 +5,7 @@ pub use generated::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::{ast::*, parse, SyntaxKind};
+    use crate::{SyntaxKind, ast::*, parse};
     use rowan::ast::AstNode;
 
     #[test]
@@ -226,10 +226,7 @@ mod tests {
         match rec_field.value().unwrap() {
             Expr::EveryExpr(every) => {
                 assert!(every.until_kw().is_some());
-                assert_eq!(
-                    every.until_datetime().unwrap().text(),
-                    "2026-12-31T23:59"
-                );
+                assert_eq!(every.until_datetime().unwrap().text(), "2026-12-31T23:59");
             }
             _ => panic!("expected EveryExpr"),
         }

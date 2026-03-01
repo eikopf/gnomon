@@ -169,7 +169,10 @@ mod tests {
     #[test]
     fn datetime_wins_over_date() {
         let toks = kinds("2026-03-01T14:30");
-        assert_eq!(toks, vec![(SyntaxKind::DATETIME_LITERAL, "2026-03-01T14:30")]);
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::DATETIME_LITERAL, "2026-03-01T14:30")]
+        );
     }
 
     // r[verify lexer.datetime]
@@ -276,9 +279,29 @@ mod tests {
     #[test]
     fn weak_keywords_are_idents() {
         for kw in [
-            "calendar", "include", "bind", "override", "event", "task", "every", "day", "year",
-            "on", "until", "times", "omit", "forward", "backward", "monday", "tuesday",
-            "wednesday", "thursday", "friday", "saturday", "sunday", "local",
+            "calendar",
+            "include",
+            "bind",
+            "override",
+            "event",
+            "task",
+            "every",
+            "day",
+            "year",
+            "on",
+            "until",
+            "times",
+            "omit",
+            "forward",
+            "backward",
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+            "local",
         ] {
             let toks = kinds(kw);
             assert_eq!(toks, vec![(SyntaxKind::IDENT, kw)], "keyword: {kw}");
@@ -320,10 +343,7 @@ mod tests {
     #[test]
     fn string_with_escapes() {
         let toks = kinds(r#""say \"hi\"""#);
-        assert_eq!(
-            toks,
-            vec![(SyntaxKind::STRING_LITERAL, r#""say \"hi\"""#)]
-        );
+        assert_eq!(toks, vec![(SyntaxKind::STRING_LITERAL, r#""say \"hi\"""#)]);
     }
 
     // ── Integer ──────────────────────────────────────────────────

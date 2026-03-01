@@ -108,8 +108,7 @@ impl Parser {
     fn skip_trivia(&mut self) {
         while self.pos < self.tokens.len() && self.tokens[self.pos].kind.is_trivia() {
             let tok = &self.tokens[self.pos];
-            self.builder
-                .token(tok.kind.into(), &tok.text);
+            self.builder.token(tok.kind.into(), &tok.text);
             self.offset += tok.text.len();
             self.pos += 1;
         }
@@ -120,8 +119,7 @@ impl Parser {
         self.skip_trivia();
         if self.pos < self.tokens.len() {
             let tok = &self.tokens[self.pos];
-            self.builder
-                .token(tok.kind.into(), &tok.text);
+            self.builder.token(tok.kind.into(), &tok.text);
             self.offset += tok.text.len();
             self.pos += 1;
         }
@@ -134,8 +132,7 @@ impl Parser {
         self.skip_trivia();
         if self.pos < self.tokens.len() {
             let tok = &self.tokens[self.pos];
-            self.builder
-                .token(kind.into(), &tok.text);
+            self.builder.token(kind.into(), &tok.text);
             self.offset += tok.text.len();
             self.pos += 1;
         }
@@ -193,8 +190,7 @@ impl Parser {
 
     /// Wrap a single token in an ERROR_NODE and advance.
     fn error_recover(&mut self) {
-        self.builder
-            .start_node(SyntaxKind::ERROR_NODE.into());
+        self.builder.start_node(SyntaxKind::ERROR_NODE.into());
         self.bump();
         self.builder.finish_node();
     }

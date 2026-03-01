@@ -1,14 +1,14 @@
 pub mod ast;
-pub mod validate;
-mod syntax_kind;
-mod preprocess;
 mod lexer;
 mod parser;
+mod preprocess;
+mod syntax_kind;
+pub mod validate;
 
+pub use parser::ParseError;
 pub use rowan::ast::AstNode;
 pub use syntax_kind::{GnomonLanguage, SyntaxKind, SyntaxNode, SyntaxToken};
-pub use parser::ParseError;
-pub use validate::{validate_syntax, SyntaxError};
+pub use validate::{SyntaxError, validate_syntax};
 
 /// Result of parsing a Gnomon source string.
 pub struct Parse {
@@ -64,7 +64,7 @@ pub fn parse(source: &str) -> Parse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expect_test::{expect, Expect};
+    use expect_test::{Expect, expect};
 
     fn check(input: &str, expected_tree: Expect) {
         let parse = parse(input);
@@ -74,11 +74,7 @@ mod tests {
 
     fn check_no_errors(input: &str) {
         let parse = parse(input);
-        assert!(
-            parse.ok(),
-            "expected no errors, got: {:?}",
-            parse.errors()
-        );
+        assert!(parse.ok(), "expected no errors, got: {:?}", parse.errors());
     }
 
     // ── Round-trip (lossless) ────────────────────────────────────

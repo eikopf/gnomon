@@ -2,7 +2,7 @@ pub mod input;
 pub mod queries;
 
 pub use input::SourceFile;
-pub use queries::{check_syntax, parse, Diagnostic, ParseResult, Severity, SyntaxCheckResult};
+pub use queries::{Diagnostic, ParseResult, Severity, SyntaxCheckResult, check_syntax, parse};
 
 #[salsa::db]
 pub trait Db: salsa::Database {}
@@ -27,14 +27,15 @@ mod tests {
     #[test]
     fn basic_parse_query() {
         let db = Database::default();
-        let source = SourceFile::new(&db, PathBuf::from("test.gnomon"), r#"calendar { uid: "test" }"#.into());
+        let source = SourceFile::new(
+            &db,
+            PathBuf::from("test.gnomon"),
+            r#"calendar { uid: "test" }"#.into(),
+        );
         let result = parse(&db, source);
         assert!(!result.has_errors(&db));
         let tree = result.tree(&db);
-        assert_eq!(
-            tree.decls().count(),
-            1,
-        );
+        assert_eq!(tree.decls().count(), 1,);
     }
 
     #[test]
@@ -75,7 +76,11 @@ mod tests {
         let result = check_syntax(&db, source);
         assert!(!result.parse_has_errors(&db));
         let diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source);
-        assert!(diagnostics.iter().any(|d| d.message.contains("duplicate field")));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("duplicate field"))
+        );
     }
 
     #[test]
@@ -104,7 +109,9 @@ mod tests {
         let green1 = result1.green_node(&db).clone();
 
         // Change source text
-        source.set_text(&mut db).to(r#"calendar { uid: "new" }"#.into());
+        source
+            .set_text(&mut db)
+            .to(r#"calendar { uid: "new" }"#.into());
         let result2 = parse(&db, source);
         assert!(!result2.has_errors(&db));
         let green2 = result2.green_node(&db).clone();

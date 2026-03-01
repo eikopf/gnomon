@@ -76,9 +76,7 @@ impl Parser {
                 self.expect_keyword("times", SyntaxKind::TIMES_KW);
             }
             _ => {
-                self.error_at_current(
-                    "expected datetime, date, or integer (followed by `times`)",
-                );
+                self.error_at_current("expected datetime, date, or integer (followed by `times`)");
             }
         }
     }
