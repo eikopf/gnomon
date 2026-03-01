@@ -59,14 +59,16 @@ impl Parser {
     }
 
     // r[impl record.rrule.every]
+    // r[impl record.rrule.every+2]
     /// ```ebnf
     /// every_terminator = datetime_literal
+    ///                  | date_literal
     ///                  | integer_literal, "times"
     ///                  ;
     /// ```
     fn parse_every_terminator(&mut self) {
         match self.current() {
-            SyntaxKind::DATETIME_LITERAL => {
+            SyntaxKind::DATETIME_LITERAL | SyntaxKind::DATE_LITERAL => {
                 self.bump();
             }
             SyntaxKind::INTEGER_LITERAL => {
@@ -74,7 +76,9 @@ impl Parser {
                 self.expect_keyword("times", SyntaxKind::TIMES_KW);
             }
             _ => {
-                self.error_at_current("expected datetime or integer (followed by `times`)");
+                self.error_at_current(
+                    "expected datetime, date, or integer (followed by `times`)",
+                );
             }
         }
     }

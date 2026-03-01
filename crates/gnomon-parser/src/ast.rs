@@ -236,6 +236,25 @@ mod tests {
     }
 
     #[test]
+    fn every_expr_until_date() {
+        let p = parse("event { name: @daily, recurrence: every day until 2026-12-31 }");
+        let file = p.tree();
+        let ev = match file.decls().next().unwrap() {
+            Decl::EventDecl(e) => e,
+            _ => panic!("expected EventDecl"),
+        };
+        let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
+        match rec_field.value().unwrap() {
+            Expr::EveryExpr(every) => {
+                assert!(every.until_kw().is_some());
+                assert_eq!(every.until_date().unwrap().text(), "2026-12-31");
+                assert!(every.until_datetime().is_none());
+            }
+            _ => panic!("expected EveryExpr"),
+        }
+    }
+
+    #[test]
     fn every_expr_until_count() {
         let p = parse("event { name: @limited, recurrence: every day until 10 times }");
         let file = p.tree();

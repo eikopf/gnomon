@@ -241,6 +241,10 @@ impl EveryExpr {
         support::token(&self.syntax, SyntaxKind::DATETIME_LITERAL)
     }
 
+    pub fn until_date(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::DATE_LITERAL)
+    }
+
     pub fn until_count(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::INTEGER_LITERAL)
     }

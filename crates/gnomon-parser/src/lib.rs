@@ -607,6 +607,53 @@ task @cleanup "Clean up" {
         );
     }
 
+    // ── Every with date literal terminator ─────────────────────
+
+    // r[verify record.rrule.every+2]
+    #[test]
+    fn parse_every_until_date() {
+        check(
+            "event { name: @daily, recurrence: every day until 2026-12-31 }",
+            expect![[r#"
+                SOURCE_FILE@0..62
+                  EVENT_DECL@0..62
+                    EVENT_KW@0..5 "event"
+                    WHITESPACE@5..6 " "
+                    RECORD_EXPR@6..62
+                      L_BRACE@6..7 "{"
+                      WHITESPACE@7..8 " "
+                      FIELD@8..20
+                        IDENT@8..12 "name"
+                        COLON@12..13 ":"
+                        WHITESPACE@13..14 " "
+                        LITERAL_EXPR@14..20
+                          NAME@14..20 "@daily"
+                      COMMA@20..21 ","
+                      WHITESPACE@21..22 " "
+                      FIELD@22..60
+                        IDENT@22..32 "recurrence"
+                        COLON@32..33 ":"
+                        WHITESPACE@33..34 " "
+                        EVERY_EXPR@34..60
+                          EVERY_KW@34..39 "every"
+                          WHITESPACE@39..40 " "
+                          DAY_KW@40..43 "day"
+                          WHITESPACE@43..44 " "
+                          UNTIL_KW@44..49 "until"
+                          WHITESPACE@49..50 " "
+                          DATE_LITERAL@50..60 "2026-12-31"
+                      WHITESPACE@60..61 " "
+                      R_BRACE@61..62 "}"
+            "#]],
+        );
+    }
+
+    // r[verify record.rrule.every+2]
+    #[test]
+    fn parse_every_until_date_no_errors() {
+        check_no_errors("event { name: @daily, recurrence: every day until 2026-12-31 }");
+    }
+
     // ── Comments preserved ───────────────────────────────────────
 
     // r[verify lexer.comment]
