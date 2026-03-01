@@ -600,3 +600,120 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 >          | datetime literal
 >          ;
 > ```
+
+## CLI
+
+A valid implementation of Gnomon must produce a program (hereafter called `gnomon`, although it may be installed with a different name) whose command-line interface has the behavior described in this section. A valid implementation may introduce additional subcommands so long as they do not conflict with existing or reserved subcommands, but must implement all the subcommands described here unless stated otherwise.
+
+> r[cli.syntax]
+> The command-line interface MUST have the following syntax:
+> 
+> ```ebnf
+> CLI START    = command name, [ options ], [ subcommand, [ options ] ];
+> command name = shell ident;
+> shell ident  = ? a POSIX-compatible shell identifier ? ;
+>
+> options = { option } ;
+> option  = ? a POSIX-compatible shell identifier starting with one or two hyphens ? ;
+>
+> subcommand = shell ident, [ options ], [ subcommand ] ;
+> ```
+
+While it is not an explicit requirement, implementations SHOULD try to comply with the guidelines outlined in the [Command Line Interface Guidelines](https://clig.dev).
+
+### The Root Command
+
+If no subcommand passed, the root command is run. This command does not perform any expensive or potentially dangerous action, and just returns information based on the options passed.
+
+r[cli.root]
+The result of running the root command without any options MUST be the same as running the root command with only the `--help` option.
+
+### Subcommands
+
+A subcommand is essentially a smaller program invoked by passing an identifier to the root command. Subcommands may have their own subcommands, and their meaning is independent of the order and positioning of any options that are passed along with them.
+
+r[cli.subcommand.order]
+The subcommand being selected MUST be independent of any options being passed, and MUST be uniquely described by the relative ordering of the subcommand identifiers.
+
+#### `help`
+
+The `help` subcommand is a subcommand of the root command and also a subcommand of all other subcommands except itself. All immediate subcommands of the parent command are also subcommands of the `help` subcommand. When `help` is run as the subcommand of the root command, its behavior is to print a help message about the entire program; if it is run as the second-last subcommand then its behavior is to print a help message about the final subcommand.
+
+r[cli.subcommand.help]
+The program MUST provide a `help` subcommand for the root command and for every other subcommand.
+
+r[cli.subcommand.help.penultimate]
+When `help` is the second-last (penultimate) subcommand, its behavior MUST be to print a help message about the last subcommand.
+
+r[cli.subcommand.help.root]
+When `help` is the only subcommand of the root command, its behavior MUST be to print a help message about the entire program.
+
+#### `parse`
+
+The `parse` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon parse <file>` will resolve the file path (failing if it cannot be found) and then produce an output which describes the result of parsing the file.
+
+r[cli.subcommand.parse]
+The program MUST provide a `parse` subcommand for the root command which takes a single parameter describing a file path.
+
+r[cli.subcommand.parse.no-file]
+If the file path argument to the `parse` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
+
+r[cli.subcommand.parse.output]
+If a file was successfully located, the program MUST write a textual representation of the result of applying a Gnomon parser to the file to STDOUT.
+
+#### Reserved Subcommands
+
+We reserve some identifiers for future use as subcommands.
+
+> r[cli.subcommand.reserved]
+> The following identifiers MUST NOT be used by any implementation:
+>
+> - `about`
+> - `check`
+> - `clean`
+> - `compile`
+> - `daemon`
+> - `fetch`
+> - `lsp`
+> - `query`
+> - `run`
+
+### Options
+
+r[cli.option.order]
+The behavior of the program MUST be independent of the relative ordering of the options passed to it.
+
+#### `--help`
+
+The `--help` option may occur on any command and is mutually exclusive with all other options. Passing the `--help` option must be equivalent to using the `help` subcommand immediately before the final subcommand (i.e. `gnomon foo bar baz --help` is equivalent to `gnomon foo bar help baz`).
+
+r[cli.option.help]
+The program MUST admit a `--help` option on the root command and all subcommands.
+
+r[cli.option.help.short]
+The program MUST provide the `-h` option as a short form of `--help`.
+
+r[cli.option.help.xor]
+If the `--help` option is passed with any other options, the program MUST produce an error.
+
+r[cli.option.help.behavior.root]
+When run with the root command, the `--help` option MUST be equivalent to running the `help` subcommand without any additional subcommands or options.
+
+r[cli.option.help.behavior.subcommand]
+When run with a subcommand, the `--help` option MUST be equivalent to running the same shell command with the `--help` option removed and the `help` subcommand inserted directly before the final subcommand.
+
+#### `--version`
+
+The `--version` option is only permitted on the root command and is mutually exclusive with all other options. Running `gnomon --version` will cause the version string to be printed to STDOUT, after which the program will immediately exit.
+
+r[cli.option.version]
+The program MUST admit a `--version` option on the root command. If this option is passed to any subcommand, the program MUST produce an error.
+
+r[cli.option.version.short]
+The program MUST provide the `-v` option as a short form of `--version`.
+
+r[cli.option.version.xor]
+If the `--version` option is passed with any other options, the program MUST produce an error.
+
+r[cli.option.version.behavior]
+When run with the root command, the `--version` option MUST cause the program to print the version string to STDOUT and then immediately exit.
