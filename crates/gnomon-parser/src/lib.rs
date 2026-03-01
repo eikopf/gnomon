@@ -1,4 +1,5 @@
 pub mod ast;
+pub mod validate;
 mod syntax_kind;
 mod preprocess;
 mod lexer;
@@ -7,6 +8,7 @@ mod parser;
 pub use rowan::ast::AstNode;
 pub use syntax_kind::{GnomonLanguage, SyntaxKind, SyntaxNode, SyntaxToken};
 pub use parser::ParseError;
+pub use validate::{validate_syntax, SyntaxError};
 
 /// Result of parsing a Gnomon source string.
 pub struct Parse {
