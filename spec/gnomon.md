@@ -588,7 +588,6 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 > decl prefix = "calendar"
 >             | "event"
 >             | "task"
->             | "override"
 >             ;
 >
 > short event = "event", name,  short span,  [ string literal ], [ record expr ] ;
@@ -596,137 +595,7 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 >
 > short span = short dt, [ duration literal ] ;
 >
-> short dt   = date literal, time literal
->            | datetime literal
->            ;
+> short dt = date literal, time literal
+>          | datetime literal
+>          ;
 > ```
-
-### Component Short Syntax
-
-r[syntax.short.event]
-The event short syntax MUST follow the form: `event` Name? (RecurPat | DateLit) TimeLit? DurationLit? String Alarm* Record?
-
-r[syntax.short.task]
-The task short syntax MUST follow the form: `task` Name? DateLit? String Record?
-
-r[syntax.short.name-position]
-A name, if present, MUST appear immediately after the keyword.
-
-r[syntax.short.duplicate-field]
-A field provided both positionally and in the braced block MUST be an error.
-
-```
-event @standup every Monday 09:00 1h "Standup" !15m { tag: work }
-event @deep-work 2025-07-14 14:00-16:00 "Deep work block"
-task @invoice 2025-07-15 "Submit invoice" { priority: high }
-task "Read RFC 7986" { tag: reading }
-```
-
-### Component Full Syntax
-
-r[syntax.full]
-The full syntax MUST express every field by name inside a record. No positional semantics apply.
-
-```
-event {
-  name: @standup,
-  title: "Standup",
-  start: { hour: 9, minute: 0 },
-  duration: { hours: 1 },
-  recurs: {
-    freq: weekly,
-    day: Monday,
-    from: { year: 2025, month: 7, day: 1 },
-  },
-  alarms: [{ before: { minutes: 15 }, type: display }],
-  tag: work,
-}
-```
-
-### Overrides
-
-r[syntax.override.short]
-The override short syntax MUST follow the form: `override` Name DateLit Record.
-
-r[syntax.override.nesting]
-Overrides MUST be nested under their parent component after resolution.
-
-r[syntax.override.cross-file]
-Cross-file override references MUST be valid — an override in one file MAY reference a name defined in another file within the same calendar.
-
-```
-override @standup 2025-12-15 { start: { hour: 10 } }
-override @standup 2025-12-22 { cancelled: true }
-```
-
-### Alarms
-
-r[syntax.alarm.short]
-Alarm short syntax MUST use the `!` sigil after the title. Each `!` token followed by a duration MUST produce an alarm.
-
-r[syntax.alarm.short-type]
-Short-form alarms MUST support only `before` + `display` type.
-
-r[syntax.alarm.full]
-For other alarm types, the braced block `alarms` list MUST be used.
-
-```
-event @meeting 2025-07-14 14:00 2h "Review" !1h !5m
-event @meeting 2025-07-14 14:00 2h "Review" {
-  alarms: [
-    { before: 1h, type: display },
-    { before: 5m, type: email },
-  ],
-}
-```
-
-## Override Semantics
-
-r[override.merge]
-By default, overrides MUST deep-merge into the base component record recursively.
-
-r[override.replace]
-Prefixing a value with `=` MUST replace the entire field rather than merging.
-
-r[override.unset]
-Setting a field to `undefined` MUST explicitly remove that field from the instance.
-
-r[override.omit]
-Omitting a field in an override MUST mean "keep the original value."
-
-r[override.list]
-List fields MUST be replaced by default — no merge semantics apply.
-
-| Syntax | Semantics |
-|--------|-----------|
-| `field: value` | Deep merge (records), replace (scalars/lists) |
-| `field: = value` | Replace entire field |
-| `field: undefined` | Unset field |
-
-## Unknown Fields
-
-r[unknown.preserve]
-Unknown fields MUST be preserved in the data model. The identifier grammar accommodates iCal extension names (`x-custom-field`) without quoting.
-
-r[unknown.render]
-If the rendering backend can map an unknown field to an iCal/JSCalendar property, it MUST do so. Otherwise, it MUST emit the field as an `X-` property (iCal) or custom field (JSCalendar).
-
-## Compilation Pipeline
-
-r[compile.parse]
-Each file in the calendar directory MUST be parsed independently.
-
-r[compile.merge]
-After parsing, calendar config and all item lists MUST be merged into a single structure.
-
-r[compile.defaults]
-Defaults MUST be applied in order: calendar-level first, then file-level overrides.
-
-r[compile.resolve]
-Name references MUST be resolved and overrides MUST be nested under their parent components.
-
-r[compile.output]
-The result of compilation MUST be a single Calendar record with no concrete UUIDs.
-
-r[compile.render]
-At render time, the root UUID MUST be supplied and all component IDs MUST be resolved before emitting iCalendar or JSCalendar output.
