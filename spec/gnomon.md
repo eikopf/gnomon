@@ -122,6 +122,7 @@ All other keywords are weak.
 > - `override`
 > - `event`
 > - `task`
+> - `group`
 > - `every`
 > - `day`
 > - `year`
@@ -440,6 +441,135 @@ A list is a contiguous sequence of zero or more values.
 
 Gnomon distinguishes specific record types for use in certain contexts. These types are identified by their fields (which may be mandatory or optional), and by the types of the values associated with those fields.
 
+### Locations
+
+A location represents a physical place associated with a calendar object. It is based on the Location object defined in JSCalendar.
+
+> r[record.location.syntax]
+> A location is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `name` | string | The human-readable name or address of the location. |
+> | `location_types` | A list of strings | The types of this location, such as `hotel` or `airport`. |
+> | `coordinates` | string | A `geo:` URI (RFC 5870) identifying the geographic coordinates of the location. |
+> | `links` | A list of Link records | Links to external resources describing the location. |
+>
+> All fields are optional.
+
+### Virtual Locations
+
+A virtual location represents a virtual meeting space or online platform. It is based on the VirtualLocation object defined in JSCalendar.
+
+> r[record.virtual-location.syntax]
+> A virtual location is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `name` | string | The human-readable name of the virtual location. |
+> | `uri` | string | The URI used to connect to the virtual location. |
+> | `features` | A list of strings | The features available at this virtual location. |
+>
+> All fields except `uri` are optional.
+
+r[record.virtual-location.uri]
+A virtual location record MUST have a field named `uri` whose value is a string.
+
+r[record.virtual-location.features]
+If present, the `features` field on a virtual location MUST be a list of strings. Each string SHOULD be one of `audio`, `chat`, `feed`, `moderator`, `phone`, `screen`, or `video`.
+
+### Links
+
+A link represents an external resource associated with a calendar object. It is based on the Link object defined in JSCalendar.
+
+> r[record.link.syntax]
+> A link is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `href` | string | The URI of the linked resource. |
+> | `content_type` | string | The media type (RFC 6838) of the linked resource. |
+> | `size` | Unsigned integer | The size of the linked resource in octets. |
+> | `rel` | string | The relation type of the link, as per RFC 8288. |
+> | `display` | A list of strings | How the linked resource is intended to be displayed. |
+> | `title` | string | A human-readable title for the link. |
+>
+> All fields except `href` are optional.
+
+r[record.link.href]
+A link record MUST have a field named `href` whose value is a string.
+
+r[record.link.display]
+If present, the `display` field on a link MUST be a list of strings. Each string SHOULD be one of `badge`, `graphic`, `fullsize`, or `thumbnail`.
+
+### Relations
+
+A relation describes a relationship between a calendar object and another calendar object identified by its UID. It is based on the Relation object defined in JSCalendar.
+
+> r[record.relation.syntax]
+> A relation is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `uid` | string | The UID of the related calendar object. |
+> | `relation` | A list of strings | The types of relationship between the objects. |
+>
+> All fields except `uid` are optional.
+
+r[record.relation.uid]
+A relation record MUST have a field named `uid` whose value is a string.
+
+r[record.relation.relation]
+If present, the `relation` field on a relation MUST be a list of strings. Each string SHOULD be one of `first`, `next`, `child`, or `parent`.
+
+### Participants
+
+A participant represents an individual, group, or resource involved in a calendar object. It is based on the Participant object defined in JSCalendar.
+
+> r[record.participant.syntax]
+> A participant is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `name` | string | The human-readable name of the participant. |
+> | `email` | string | The email address of the participant. |
+> | `description` | string | Additional information about the participant's role or how to contact them. |
+> | `calendar_address` | string | A URI representing the participant's calendar address. |
+> | `kind` | `individual` \| `group` \| `location` \| `resource` | The kind of entity the participant represents. |
+> | `roles` | A list of strings | The roles the participant has in the calendar object. |
+> | `participation_status` | `needs-action` \| `accepted` \| `declined` \| `tentative` \| `delegated` (default: `needs-action`) | The participation status of the participant. |
+> | `expect_reply` | boolean (default: `false`) | Whether the participant is expected to reply. |
+>
+> All fields are optional.
+
+r[record.participant.roles]
+If present, the `roles` field on a participant MUST be a list of strings. Each string SHOULD be one of `owner`, `required`, `optional`, `informational`, or `chair`.
+
+### Alerts
+
+An alert represents a notification trigger for a calendar object. It is based on the Alert object defined in JSCalendar.
+
+> r[record.alert.syntax]
+> An alert is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `trigger` | record | When the alert should be triggered. |
+> | `action` | `display` \| `email` (default: `display`) | The action to take when the alert is triggered. |
+>
+> All fields except `trigger` are optional.
+
+The trigger field describes when the alert fires. It can specify either a relative offset from the start of the calendar object, or an absolute point in time.
+
+r[record.alert.trigger]
+The `trigger` field on an alert MUST be a record. It MUST contain either an `offset` field or an `at` field, but not both.
+
+r[record.alert.trigger.offset]
+If the `trigger` record has an `offset` field, its value MUST be a duration. A negative duration indicates the alert fires before the start of the calendar object; a positive duration indicates the alert fires after the start.
+
+r[record.alert.trigger.at]
+If the `trigger` record has an `at` field, its value MUST be a local datetime representing the absolute time at which the alert fires.
+
 ### Events
 
 Events represent scheduled amounts of time on a calendar; they are required to start at a certain point in time and usually have a non-zero duration. They have two mandatory fields, `name` and `start`; these have as values a name and a local datetime respectively.
@@ -455,6 +585,17 @@ The optional `uid` field on events is always assigned a value, which will defaul
 r[record.event.uid]
 Records representing events MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
 
+Events may also have the following optional fields:
+
+r[record.event.duration]
+If present, the `duration` field on an event MUST have a duration value. It represents the length of the event.
+
+r[record.event.status]
+If present, the `status` field on an event MUST have a string value of `tentative`, `confirmed`, or `cancelled`.
+
+r[record.event.end-time-zone]
+If present, the `end_time_zone` field on an event MUST have a string value that is a valid IANA time zone identifier. It specifies the time zone for the end of the event when it differs from the start.
+
 ### Tasks
 
 Tasks represent action items, assignments, TODO items, or other similar objects. They can be given a specific relationship to time, but by default nothing is required except a `name` field whose value is a name.
@@ -466,6 +607,43 @@ The optional `uid` field on tasks is always assigned a value, which will default
 
 r[record.task.uid]
 Records representing tasks MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
+
+Tasks may also have the following optional fields:
+
+r[record.task.due]
+If present, the `due` field on a task MUST have a local datetime value. It represents the deadline by which the task should be completed.
+
+r[record.task.start]
+If present, the `start` field on a task MUST have a local datetime value. It represents the date and time at which the task should be started.
+
+r[record.task.estimated-duration]
+If present, the `estimated_duration` field on a task MUST have a duration value. It represents the estimated time required to complete the task.
+
+r[record.task.percent-complete]
+If present, the `percent_complete` field on a task MUST have an unsigned integer value in the range `0..=100`. It represents the percentage of the task that has been completed.
+
+r[record.task.progress]
+If present, the `progress` field on a task MUST have a string value of `needs-action`, `in-process`, `completed`, `failed`, or `cancelled`.
+
+### Groups
+
+Groups represent collections of related calendar objects, such as a conference schedule or a project plan. They have a mandatory `name` field whose value is a name.
+
+r[record.group.name]
+Records representing groups MUST have a field named `name` whose value is a name.
+
+The optional `uid` field on groups is always assigned a value, which will default to the name of the group if it is omitted.
+
+r[record.group.uid]
+Records representing groups MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
+
+Groups may also have the following optional fields:
+
+r[record.group.entries]
+If present, the `entries` field on a group MUST be a list of records, where each record is a valid event or task record.
+
+r[record.group.source]
+If present, the `source` field on a group MUST be a Link record. It represents the source from which the group's entries were obtained.
 
 ### Recurrence Rules
 
@@ -595,9 +773,155 @@ If the value of the `description` field is a string, it MUST be equivalent to sp
 r[field.description.type.record]
 If the value of the `description` field is a record, it MUST have fields named `type` and `content` whose values MUST be strings. The value of the `type` field MUST be an RFC 6838 media type, MUST be a subtype of the `text` type, and SHOULD be `text/plain` or `text/html`. The given media type MAY include parameters, and the `charset` parameter value MUST be `utf-8` if specified.
 
-## More Fields
+### `time_zone`
+Name: `time_zone`
 
-TODO: define the most commonly used fields in both event and task (see JSCalendar spec for details)
+Value: string (no default)
+
+Meaning: The IANA time zone identifier (e.g. `"America/New_York"`) providing the default time zone context for date/time values in this object.
+
+r[field.time_zone.type]
+If present, the `time_zone` field MUST have a string value that is a valid IANA time zone identifier.
+
+### `priority`
+Name: `priority`
+
+Value: unsigned integer (default: `0`)
+
+Meaning: The priority of the object. A value of `0` means the priority is undefined. A value of `1` is the highest priority and `9` is the lowest.
+
+r[field.priority.type]
+If present, the `priority` field MUST have an unsigned integer value in the range `0..=9`.
+
+### `privacy`
+Name: `privacy`
+
+Value: string (default: `"public"`)
+
+Meaning: The sharing restriction level of the object. A value of `public` means the object is fully visible, `private` means only free/busy information is visible to others, and `secret` means the object is not visible at all to others.
+
+r[field.privacy.type]
+If present, the `privacy` field MUST have a string value of `public`, `private`, or `secret`.
+
+### `free_busy_status`
+Name: `free_busy_status`
+
+Value: string (default: `"busy"`)
+
+Meaning: How this object affects free/busy time calculations.
+
+r[field.free_busy_status.type]
+If present, the `free_busy_status` field MUST have a string value of `free` or `busy`.
+
+### `show_without_time`
+Name: `show_without_time`
+
+Value: boolean (default: `false`)
+
+Meaning: Whether the time component of the object is unimportant for display purposes. When `true`, the object SHOULD be displayed as an all-day item.
+
+r[field.show_without_time.type]
+If present, the `show_without_time` field MUST have a boolean value.
+
+### `color`
+Name: `color`
+
+Value: string (no default)
+
+Meaning: A CSS3 color value (e.g. `"#ff0000"`, `"rebeccapurple"`) to use when displaying the object.
+
+r[field.color.type]
+If present, the `color` field MUST have a string value.
+
+### `keywords`
+Name: `keywords`
+
+Value: list of strings (no default)
+
+Meaning: A set of tags or keywords associated with the object.
+
+r[field.keywords.type]
+If present, the `keywords` field MUST be a list of string values.
+
+### `categories`
+Name: `categories`
+
+Value: list of strings (no default)
+
+Meaning: The categories to which the object belongs.
+
+r[field.categories.type]
+If present, the `categories` field MUST be a list of string values.
+
+### `locale`
+Name: `locale`
+
+Value: string (no default)
+
+Meaning: A BCP 47 language tag (e.g. `"en-US"`, `"ja"`) identifying the language of the text fields in the object.
+
+r[field.locale.type]
+If present, the `locale` field MUST have a string value that is a valid BCP 47 language tag.
+
+### `locations`
+Name: `locations`
+
+Value: list of Location records (no default)
+
+Meaning: The physical locations associated with the object.
+
+r[field.locations.type]
+If present, the `locations` field MUST be a list of Location records.
+
+### `virtual_locations`
+Name: `virtual_locations`
+
+Value: list of VirtualLocation records (no default)
+
+Meaning: The virtual meeting spaces or online platforms associated with the object.
+
+r[field.virtual_locations.type]
+If present, the `virtual_locations` field MUST be a list of VirtualLocation records.
+
+### `links`
+Name: `links`
+
+Value: list of Link records (no default)
+
+Meaning: External resources associated with the object.
+
+r[field.links.type]
+If present, the `links` field MUST be a list of Link records.
+
+### `related_to`
+Name: `related_to`
+
+Value: list of Relation records (no default)
+
+Meaning: Relationships between this object and other calendar objects.
+
+r[field.related_to.type]
+If present, the `related_to` field MUST be a list of Relation records.
+
+### `participants`
+Name: `participants`
+
+Value: list of Participant records (no default)
+
+Meaning: The people, groups, or resources involved in the object.
+
+r[field.participants.type]
+If present, the `participants` field MUST be a list of Participant records.
+
+### `alerts`
+Name: `alerts`
+
+Value: list of Alert records (no default)
+
+Meaning: Notifications that should be triggered in relation to the object.
+
+r[field.alerts.type]
+If present, the `alerts` field MUST be a list of Alert records.
 
 ## Declarations
 
@@ -628,6 +952,7 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 > decl prefix = "calendar"
 >             | "event"
 >             | "task"
+>             | "group"
 >             ;
 >
 > short event = "event", name,  short span,  [ string literal ], [ record expr ] ;
