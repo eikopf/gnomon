@@ -415,7 +415,7 @@ task @cleanup "Clean up" {
 
     // ── Every expression ─────────────────────────────────────────
 
-    // r[verify record.rrule.every]
+    // r[verify record.rrule.every+2]
     #[test]
     fn parse_every_day() {
         check(
@@ -450,7 +450,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify record.rrule.every]
+    // r[verify record.rrule.every+2]
     // r[verify record.rrule.weekday]
     #[test]
     fn parse_every_weekday() {
@@ -486,7 +486,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify record.rrule.every]
+    // r[verify record.rrule.every+2]
     #[test]
     fn parse_every_year_on() {
         check(
@@ -525,7 +525,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify record.rrule.every]
+    // r[verify record.rrule.every+2]
     #[test]
     fn parse_every_with_until() {
         check(
@@ -564,7 +564,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify record.rrule.every]
+    // r[verify record.rrule.every+2]
     #[test]
     fn parse_every_n_times() {
         check(
@@ -781,7 +781,7 @@ task @cleanup "Clean""#;
 
     // ── Boolean and undefined literals ───────────────────────────
 
-    // r[verify expr.literal.syntax]
+    // r[verify expr.literal.syntax+2]
     // r[verify lexer.keyword.strict]
     #[test]
     fn parse_boolean_fields() {

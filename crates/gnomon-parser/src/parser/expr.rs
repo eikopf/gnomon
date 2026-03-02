@@ -38,7 +38,7 @@ impl Parser {
         }
     }
 
-    // r[impl expr.literal.syntax]
+    // r[impl expr.literal.syntax+2]
     /// Parse a literal expression (wraps a single literal token in a LITERAL_EXPR node).
     fn parse_literal_expr(&mut self) {
         self.start_node(SyntaxKind::LITERAL_EXPR);
