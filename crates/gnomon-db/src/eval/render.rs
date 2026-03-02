@@ -31,6 +31,110 @@ impl<'db, T: RenderWithDb<'db> + ?Sized> fmt::Display for Rendered<'_, 'db, T> {
     }
 }
 
+// ── Indented-output helpers ────────────────────────────────────────
+
+fn write_indent(w: &mut dyn fmt::Write, n: usize) -> fmt::Result {
+    for _ in 0..n {
+        w.write_char(' ')?;
+    }
+    Ok(())
+}
+
+fn write_value<'db>(
+    w: &mut dyn fmt::Write,
+    value: &Value<'db>,
+    db: &'db dyn Db,
+    indent: usize,
+) -> fmt::Result {
+    match value {
+        Value::String(s) => write!(w, "{s:?}"),
+        Value::Integer(n) => write!(w, "{n}"),
+        Value::SignedInteger(n) => write!(w, "{n}"),
+        Value::Bool(b) => write!(w, "{b}"),
+        Value::Undefined => write!(w, "undefined"),
+        Value::Name(n) => write!(w, "@{n}"),
+        Value::Record(r) => write_record(w, r, db, indent),
+        Value::List(items) => {
+            write!(w, "[")?;
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    write!(w, ", ")?;
+                }
+                write_value(w, &item.value, db, indent)?;
+            }
+            write!(w, "]")
+        }
+    }
+}
+
+fn write_record<'db>(
+    w: &mut dyn fmt::Write,
+    record: &Record<'db>,
+    db: &'db dyn Db,
+    indent: usize,
+) -> fmt::Result {
+    let mut entries: Vec<_> = record.0.iter().collect();
+    entries.sort_by(|(a, _), (b, _)| a.text(db).cmp(b.text(db)));
+
+    if entries.is_empty() {
+        return write!(w, "{{}}");
+    }
+
+    writeln!(w, "{{")?;
+    for (name, blamed) in &entries {
+        write_indent(w, indent + 4)?;
+        write!(w, "{}: ", name.text(db))?;
+        write_value(w, &blamed.value, db, indent + 4)?;
+        writeln!(w, ",")?;
+    }
+    write_indent(w, indent)?;
+    write!(w, "}}")
+}
+
+fn write_reified_decl<'db>(
+    w: &mut dyn fmt::Write,
+    decl: &ReifiedDecl<'db>,
+    db: &'db dyn Db,
+    indent: usize,
+) -> fmt::Result {
+    match decl {
+        ReifiedDecl::Include { target, content } => {
+            writeln!(w, "Include {{")?;
+            write_indent(w, indent + 4)?;
+            writeln!(w, "target: {},", target.render(db))?;
+            if !content.is_empty() {
+                write_indent(w, indent + 4)?;
+                writeln!(w, "content: [")?;
+                for item in content {
+                    write_indent(w, indent + 8)?;
+                    write_record(w, &item.value, db, indent + 8)?;
+                    writeln!(w, ",")?;
+                }
+                write_indent(w, indent + 4)?;
+                writeln!(w, "],")?;
+            }
+            write_indent(w, indent)?;
+            write!(w, "}}")
+        }
+        ReifiedDecl::Calendar(r) => {
+            write!(w, "Calendar ")?;
+            write_record(w, r, db, indent)
+        }
+        ReifiedDecl::Event(r) => {
+            write!(w, "Event ")?;
+            write_record(w, r, db, indent)
+        }
+        ReifiedDecl::Task(r) => {
+            write!(w, "Task ")?;
+            write_record(w, r, db, indent)
+        }
+        ReifiedDecl::Group(r) => {
+            write!(w, "Group ")?;
+            write_record(w, r, db, indent)
+        }
+    }
+}
+
 // ── Interned types ──────────────────────────────────────────────────
 
 impl<'db> RenderWithDb<'db> for FieldName<'db> {
@@ -78,44 +182,13 @@ impl<'db> RenderWithDb<'db> for FieldPath<'db> {
 
 impl<'db> RenderWithDb<'db> for Value<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        match self {
-            Value::String(s) => write!(f, "{s:?}"),
-            Value::Integer(n) => write!(f, "{n}"),
-            Value::SignedInteger(n) => write!(f, "{n}"),
-            Value::Bool(b) => write!(f, "{b}"),
-            Value::Undefined => write!(f, "undefined"),
-            Value::Name(n) => write!(f, "@{n}"),
-            Value::Record(r) => r.render_fmt(f, db),
-            Value::List(items) => {
-                write!(f, "[")?;
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    item.value.render_fmt(f, db)?;
-                }
-                write!(f, "]")
-            }
-        }
+        write_value(f, self, db, 0)
     }
 }
 
 impl<'db> RenderWithDb<'db> for Record<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        let mut entries: Vec<_> = self.0.iter().collect();
-        entries.sort_by(|(a, _), (b, _)| a.text(db).cmp(b.text(db)));
-
-        if entries.is_empty() {
-            return write!(f, "{{}}");
-        }
-        write!(f, "{{ ")?;
-        for (i, (name, blamed)) in entries.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}: {}", name.text(db), blamed.value.render(db))?;
-        }
-        write!(f, " }}")
+        write_record(f, self, db, 0)
     }
 }
 
@@ -143,26 +216,7 @@ impl<'db> RenderWithDb<'db> for IncludeRef {
 
 impl<'db> RenderWithDb<'db> for ReifiedDecl<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        match self {
-            ReifiedDecl::Include { target, content } => {
-                write!(f, "Include {{ target: {}", target.render(db))?;
-                if !content.is_empty() {
-                    write!(f, ", content: [")?;
-                    for (i, item) in content.iter().enumerate() {
-                        if i > 0 {
-                            write!(f, ", ")?;
-                        }
-                        item.value.render_fmt(f, db)?;
-                    }
-                    write!(f, "]")?;
-                }
-                write!(f, " }}")
-            }
-            ReifiedDecl::Calendar(r) => write!(f, "Calendar {}", r.render(db)),
-            ReifiedDecl::Event(r) => write!(f, "Event {}", r.render(db)),
-            ReifiedDecl::Task(r) => write!(f, "Task {}", r.render(db)),
-            ReifiedDecl::Group(r) => write!(f, "Group {}", r.render(db)),
-        }
+        write_reified_decl(f, self, db, 0)
     }
 }
 
@@ -183,7 +237,7 @@ impl<'db> RenderWithDb<'db> for Document<'db> {
         } else {
             writeln!(f, "{{")?;
             for (name, blamed_uid) in &self.bindings {
-                writeln!(f, "        {name}: {},", blamed_uid.value.render(db))?;
+                writeln!(f, "        {name}: {:?},", blamed_uid.value)?;
             }
             writeln!(f, "    }},")?;
         }
@@ -195,7 +249,9 @@ impl<'db> RenderWithDb<'db> for Document<'db> {
         } else {
             writeln!(f, "[")?;
             for blamed_decl in &self.decls {
-                writeln!(f, "        {},", blamed_decl.value.render(db))?;
+                write!(f, "        ")?;
+                write_reified_decl(f, &blamed_decl.value, db, 8)?;
+                writeln!(f, ",")?;
             }
             writeln!(f, "    ],")?;
         }
@@ -241,7 +297,10 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Calendar { name: "My Cal", uid: "test-cal" },
+                        Calendar {
+                            name: "My Cal",
+                            uid: "test-cal",
+                        },
                     ],
                 }"#]],
         );
@@ -255,7 +314,29 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Event { duration: { days: 0, hours: 1, minutes: 30, seconds: 0, weeks: 0 }, name: @meeting, start: { date: { day: 1, month: 3, year: 2026 }, time: { hour: 14, minute: 30, second: 0 } }, title: "Standup" },
+                        Event {
+                            duration: {
+                                days: 0,
+                                hours: 1,
+                                minutes: 30,
+                                seconds: 0,
+                                weeks: 0,
+                            },
+                            name: @meeting,
+                            start: {
+                                date: {
+                                    day: 1,
+                                    month: 3,
+                                    year: 2026,
+                                },
+                                time: {
+                                    hour: 14,
+                                    minute: 30,
+                                    second: 0,
+                                },
+                            },
+                            title: "Standup",
+                        },
                     ],
                 }"#]],
         );
@@ -283,7 +364,9 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Calendar { keywords: ["work", "meeting"] },
+                        Calendar {
+                            keywords: ["work", "meeting"],
+                        },
                     ],
                 }"#]],
         );
@@ -297,7 +380,9 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Include { target: "holidays.ics" },
+                        Include {
+                            target: "holidays.ics",
+                        },
                     ],
                 }"#]],
         );
@@ -311,7 +396,22 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Task { due: { date: { day: 15, month: 3, year: 2026 }, time: { hour: 17, minute: 0, second: 0 } }, name: @review, title: "Code review" },
+                        Task {
+                            due: {
+                                date: {
+                                    day: 15,
+                                    month: 3,
+                                    year: 2026,
+                                },
+                                time: {
+                                    hour: 17,
+                                    minute: 0,
+                                    second: 0,
+                                },
+                            },
+                            name: @review,
+                            title: "Code review",
+                        },
                     ],
                 }"#]],
         );
@@ -329,9 +429,36 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Event { duration: { days: 0, hours: 1, minutes: 0, seconds: 0, weeks: 0 }, name: @a, start: { date: { day: 1, month: 1, year: 2026 }, time: { hour: 9, minute: 0, second: 0 } }, title: "A" },
-                        Calendar { uid: "cal" },
-                        Task { name: @b, title: "B" },
+                        Event {
+                            duration: {
+                                days: 0,
+                                hours: 1,
+                                minutes: 0,
+                                seconds: 0,
+                                weeks: 0,
+                            },
+                            name: @a,
+                            start: {
+                                date: {
+                                    day: 1,
+                                    month: 1,
+                                    year: 2026,
+                                },
+                                time: {
+                                    hour: 9,
+                                    minute: 0,
+                                    second: 0,
+                                },
+                            },
+                            title: "A",
+                        },
+                        Calendar {
+                            uid: "cal",
+                        },
+                        Task {
+                            name: @b,
+                            title: "B",
+                        },
                     ],
                 }"#]],
         );
@@ -345,7 +472,10 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Calendar { priority: 5, show_without_time: true },
+                        Calendar {
+                            priority: 5,
+                            show_without_time: true,
+                        },
                     ],
                 }"#]],
         );
