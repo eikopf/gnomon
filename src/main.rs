@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{Database, Diagnostic, SourceFile, check_syntax, evaluate, parse};
+use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, parse};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
@@ -134,7 +134,7 @@ fn main() -> ExitCode {
                 );
             }
 
-            println!("{:#?}", result.document);
+            println!("{}", result.document.render(&db));
 
             if has_errors {
                 ExitCode::FAILURE

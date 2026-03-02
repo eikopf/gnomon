@@ -2,6 +2,7 @@ pub mod desugar;
 pub mod interned;
 pub mod literals;
 pub mod lower;
+pub mod render;
 pub mod types;
 
 use crate::input::SourceFile;
