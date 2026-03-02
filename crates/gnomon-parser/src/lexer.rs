@@ -79,6 +79,14 @@ enum LogosToken {
     #[regex(r"[0-9]+")]
     IntegerLiteral,
 
+    // r[impl lexer.uri]
+    #[regex(r"<[a-zA-Z][a-zA-Z0-9+.\-]*:[^>\n]*>")]
+    UriLiteral,
+
+    // r[impl lexer.atom]
+    #[regex(r"#[a-zA-Z_][a-zA-Z0-9_\-]*")]
+    AtomLiteral,
+
     // r[impl syntax.name]
     #[regex(r"@[a-zA-Z_][a-zA-Z0-9_-]*(\.[a-zA-Z_][a-zA-Z0-9_-]*)*")]
     Name,
@@ -119,6 +127,8 @@ impl LogosToken {
             LogosToken::SignedIntegerLiteral => SyntaxKind::SIGNED_INTEGER_LITERAL,
             LogosToken::StringLiteral => SyntaxKind::STRING_LITERAL,
             LogosToken::IntegerLiteral => SyntaxKind::INTEGER_LITERAL,
+            LogosToken::UriLiteral => SyntaxKind::URI_LITERAL,
+            LogosToken::AtomLiteral => SyntaxKind::ATOM_LITERAL,
             LogosToken::Name => SyntaxKind::NAME,
             LogosToken::True => SyntaxKind::TRUE_KW,
             LogosToken::False => SyntaxKind::FALSE_KW,
@@ -404,6 +414,99 @@ mod tests {
     fn negative_duration() {
         let toks = kinds("-1w3d");
         assert_eq!(toks, vec![(SyntaxKind::DURATION_LITERAL, "-1w3d")]);
+    }
+
+    // ── URI literals ──────────────────────────────────────────────
+
+    // r[verify lexer.uri]
+    #[test]
+    fn uri_https() {
+        let toks = kinds("<https://example.com/path?q=1#frag>");
+        assert_eq!(
+            toks,
+            vec![(
+                SyntaxKind::URI_LITERAL,
+                "<https://example.com/path?q=1#frag>"
+            )]
+        );
+    }
+
+    // r[verify lexer.uri]
+    #[test]
+    fn uri_mailto() {
+        let toks = kinds("<mailto:user@example.com>");
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::URI_LITERAL, "<mailto:user@example.com>")]
+        );
+    }
+
+    // r[verify lexer.uri]
+    #[test]
+    fn uri_urn() {
+        let toks = kinds("<urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6>");
+        assert_eq!(
+            toks,
+            vec![(
+                SyntaxKind::URI_LITERAL,
+                "<urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6>"
+            )]
+        );
+    }
+
+    // r[verify lexer.uri]
+    #[test]
+    fn uri_does_not_swallow_past_close() {
+        let toks = kinds("<https://a.com> <https://b.com>");
+        assert_eq!(
+            toks,
+            vec![
+                (SyntaxKind::URI_LITERAL, "<https://a.com>"),
+                (SyntaxKind::WHITESPACE, " "),
+                (SyntaxKind::URI_LITERAL, "<https://b.com>"),
+            ]
+        );
+    }
+
+    // ── Atom literals ─────────────────────────────────────────────
+
+    // r[verify lexer.atom]
+    #[test]
+    fn atom_simple() {
+        let toks = kinds("#confirmed");
+        assert_eq!(toks, vec![(SyntaxKind::ATOM_LITERAL, "#confirmed")]);
+    }
+
+    // r[verify lexer.atom]
+    #[test]
+    fn atom_with_hyphens() {
+        let toks = kinds("#x-custom");
+        assert_eq!(toks, vec![(SyntaxKind::ATOM_LITERAL, "#x-custom")]);
+    }
+
+    // r[verify lexer.atom]
+    #[test]
+    fn atom_no_conflict_with_record() {
+        let toks = kinds("status: #confirmed");
+        assert_eq!(
+            toks,
+            vec![
+                (SyntaxKind::IDENT, "status"),
+                (SyntaxKind::COLON, ":"),
+                (SyntaxKind::WHITESPACE, " "),
+                (SyntaxKind::ATOM_LITERAL, "#confirmed"),
+            ]
+        );
+    }
+
+    // r[verify lexer.atom]
+    #[test]
+    fn bare_hash_is_error() {
+        let toks = kinds("# ");
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::ERROR, "#"), (SyntaxKind::WHITESPACE, " "),]
+        );
     }
 
     // ── Complete token sequence ──────────────────────────────────

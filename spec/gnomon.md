@@ -330,6 +330,43 @@ Duration literals desugar into records with five integer fields named `weeks`, `
 > }
 > ```
 
+### URI Literals
+
+A URI literal represents a URI as defined by RFC 3986. URI literals are delimited by angle brackets (`<` and `>`), which avoids any ambiguity with existing syntax.
+
+> r[lexer.uri]
+> The syntax of a URI literal is the following:
+>
+> ```ebnf
+> uri literal = "<", scheme, ":", uri body, ">" ;
+> scheme      = letter, { letter | digit | "+" | "-" | "." } ;
+> uri body    = { any char - ">" - newline } ;
+> ```
+
+r[lexer.uri.no-multiline]
+URI literals MUST NOT span multiple lines. An unescaped newline within a URI literal is an error.
+
+URI literals desugar into strings containing the URI without the angle bracket delimiters.
+
+r[lexer.uri.desugar]
+The URI literal `<U>` MUST desugar into the string `"U"`.
+
+### Atom Literals
+
+An atom literal is a shorthand for writing a string literal that contains no whitespace or special characters. It consists of a `#` character followed by an identifier.
+
+> r[lexer.atom]
+> The syntax of an atom literal is the following:
+>
+> ```ebnf
+> atom literal = "#", identifier ;
+> ```
+
+Atom literals desugar into strings containing the identifier without the `#` prefix.
+
+r[lexer.atom.desugar]
+The atom literal `#X` MUST desugar into the string `"X"`.
+
 ## Expressions
 
 Gnomon's expression syntax consists of only three grammar rules: literal expressions, record expressions, and list expressions.
@@ -346,9 +383,9 @@ Gnomon's expression syntax consists of only three grammar rules: literal express
 
 ### Literal Expressions
 
-A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, `true`, or `false`.
+A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, `true`, or `false`.
 
-> r[expr.literal.syntax]
+> r[expr.literal.syntax+2]
 > The grammar for literal expressions is as follows:
 >
 > ```ebnf
@@ -360,6 +397,8 @@ A literal expression is a string literal, integer literal, signed integer litera
 >              | time literal
 >              | datetime literal
 >              | duration literal
+>              | uri literal
+>              | atom literal
 >              | "true"
 >              | "false"
 >              ;

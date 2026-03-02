@@ -35,6 +35,8 @@ pub enum SyntaxKind {
     TIME_LITERAL,
     DATETIME_LITERAL,
     DURATION_LITERAL,
+    URI_LITERAL,
+    ATOM_LITERAL,
 
     // ── Identifiers / names ──────────────────────────────────────────
     IDENT,

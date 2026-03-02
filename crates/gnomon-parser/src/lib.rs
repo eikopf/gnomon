@@ -788,6 +788,130 @@ task @cleanup "Clean""#;
         check_no_errors("calendar { active: true, archived: false }");
     }
 
+    // ── URI literal ──────────────────────────────────────────────
+
+    // r[verify lexer.uri]
+    #[test]
+    fn parse_uri_in_field() {
+        check(
+            "event { name: @meeting, url: <https://meet.example.com/abc> }",
+            expect![[r#"
+                SOURCE_FILE@0..61
+                  EVENT_DECL@0..61
+                    EVENT_KW@0..5 "event"
+                    WHITESPACE@5..6 " "
+                    RECORD_EXPR@6..61
+                      L_BRACE@6..7 "{"
+                      WHITESPACE@7..8 " "
+                      FIELD@8..22
+                        IDENT@8..12 "name"
+                        COLON@12..13 ":"
+                        WHITESPACE@13..14 " "
+                        LITERAL_EXPR@14..22
+                          NAME@14..22 "@meeting"
+                      COMMA@22..23 ","
+                      WHITESPACE@23..24 " "
+                      FIELD@24..59
+                        IDENT@24..27 "url"
+                        COLON@27..28 ":"
+                        WHITESPACE@28..29 " "
+                        LITERAL_EXPR@29..59
+                          URI_LITERAL@29..59 "<https://meet.example ..."
+                      WHITESPACE@59..60 " "
+                      R_BRACE@60..61 "}"
+            "#]],
+        );
+    }
+
+    // r[verify lexer.uri]
+    #[test]
+    fn parse_uri_in_field_no_errors() {
+        check_no_errors("event { name: @meeting, url: <https://meet.example.com/abc> }");
+    }
+
+    // r[verify lexer.uri]
+    #[test]
+    fn parse_uri_in_list() {
+        check_no_errors("calendar { links: [<https://a.com>, <https://b.com>] }");
+    }
+
+    // ── Atom literal ─────────────────────────────────────────────
+
+    // r[verify lexer.atom]
+    #[test]
+    fn parse_atom_in_field() {
+        check(
+            "event { name: @meeting, status: #confirmed }",
+            expect![[r##"
+                SOURCE_FILE@0..44
+                  EVENT_DECL@0..44
+                    EVENT_KW@0..5 "event"
+                    WHITESPACE@5..6 " "
+                    RECORD_EXPR@6..44
+                      L_BRACE@6..7 "{"
+                      WHITESPACE@7..8 " "
+                      FIELD@8..22
+                        IDENT@8..12 "name"
+                        COLON@12..13 ":"
+                        WHITESPACE@13..14 " "
+                        LITERAL_EXPR@14..22
+                          NAME@14..22 "@meeting"
+                      COMMA@22..23 ","
+                      WHITESPACE@23..24 " "
+                      FIELD@24..42
+                        IDENT@24..30 "status"
+                        COLON@30..31 ":"
+                        WHITESPACE@31..32 " "
+                        LITERAL_EXPR@32..42
+                          ATOM_LITERAL@32..42 "#confirmed"
+                      WHITESPACE@42..43 " "
+                      R_BRACE@43..44 "}"
+            "##]],
+        );
+    }
+
+    // r[verify lexer.atom]
+    #[test]
+    fn parse_atom_in_field_no_errors() {
+        check_no_errors("event { name: @meeting, status: #confirmed }");
+    }
+
+    // r[verify lexer.atom]
+    #[test]
+    fn parse_atom_in_list() {
+        check(
+            "calendar { days: [#monday, #wednesday, #friday] }",
+            expect![[r##"
+                SOURCE_FILE@0..49
+                  CALENDAR_DECL@0..49
+                    CALENDAR_KW@0..8 "calendar"
+                    WHITESPACE@8..9 " "
+                    RECORD_EXPR@9..49
+                      L_BRACE@9..10 "{"
+                      WHITESPACE@10..11 " "
+                      FIELD@11..47
+                        IDENT@11..15 "days"
+                        COLON@15..16 ":"
+                        WHITESPACE@16..17 " "
+                        LIST_EXPR@17..47
+                          L_BRACKET@17..18 "["
+                          LITERAL_EXPR@18..25
+                            ATOM_LITERAL@18..25 "#monday"
+                          COMMA@25..26 ","
+                          WHITESPACE@26..27 " "
+                          LITERAL_EXPR@27..37
+                            ATOM_LITERAL@27..37 "#wednesday"
+                          COMMA@37..38 ","
+                          WHITESPACE@38..39 " "
+                          LITERAL_EXPR@39..46
+                            ATOM_LITERAL@39..46 "#friday"
+                          R_BRACKET@46..47 "]"
+                      WHITESPACE@47..48 " "
+                      R_BRACE@48..49 "}"
+            "##]],
+        );
+    }
+
     // ── Preprocessor integration ─────────────────────────────────
 
     // r[verify lexer.input-format.bom-removal]

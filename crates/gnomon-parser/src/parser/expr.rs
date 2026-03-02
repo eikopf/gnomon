@@ -19,6 +19,8 @@ impl Parser {
             | SyntaxKind::TIME_LITERAL
             | SyntaxKind::DATETIME_LITERAL
             | SyntaxKind::DURATION_LITERAL
+            | SyntaxKind::URI_LITERAL
+            | SyntaxKind::ATOM_LITERAL
             | SyntaxKind::TRUE_KW
             | SyntaxKind::FALSE_KW
             | SyntaxKind::NAME => {
