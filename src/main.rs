@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{Database, Diagnostic, SourceFile, check_syntax, parse};
+use gnomon_db::{Database, Diagnostic, SourceFile, check_syntax, evaluate, parse};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
@@ -31,6 +31,11 @@ enum Command {
     /// Check a .gnomon file for errors.
     Check {
         /// Path to the file to check.
+        file: PathBuf,
+    },
+    /// Evaluate a .gnomon file and print its lowered document.
+    Eval {
+        /// Path to the file to evaluate.
         file: PathBuf,
     },
 }
@@ -85,6 +90,57 @@ fn main() -> ExitCode {
             }
 
             ExitCode::SUCCESS
+        }
+        Command::Eval { file } => {
+            let text = match std::fs::read_to_string(&file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: could not read {}: {e}", file.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+
+            let db = Database::default();
+            let source = SourceFile::new(&db, file.clone(), text.clone());
+            let result = evaluate(&db, source);
+
+            // Collect parse + validation diagnostics.
+            let mut diagnostics: Vec<Diagnostic> = check_syntax::accumulated::<Diagnostic>(&db, source)
+                .into_iter()
+                .cloned()
+                .collect();
+            // Add lowering diagnostics.
+            diagnostics.extend(result.diagnostics);
+            diagnostics.sort_by_key(|d| d.range.start());
+
+            let mut has_errors = false;
+            for diag in &diagnostics {
+                let offset = u32::from(diag.range.start()) as usize;
+                let (line, col) = offset_to_line_col(&text, offset);
+                let severity = match diag.severity {
+                    gnomon_db::Severity::Error => {
+                        has_errors = true;
+                        "error"
+                    }
+                    gnomon_db::Severity::Warning => "warning",
+                };
+                eprintln!(
+                    "{}:{}:{}: {}: {}",
+                    file.display(),
+                    line,
+                    col,
+                    severity,
+                    diag.message
+                );
+            }
+
+            println!("{:#?}", result.document);
+
+            if has_errors {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
         }
         Command::Check { file } => {
             let text = match std::fs::read_to_string(&file) {
