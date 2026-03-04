@@ -1,1 +1,0 @@
-event { name: @weekly, recurrence: every monday }

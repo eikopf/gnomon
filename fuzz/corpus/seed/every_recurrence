@@ -1,1 +1,0 @@
-event { name: @daily, recurrence: every day until 2026-12-31 }

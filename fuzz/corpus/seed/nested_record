@@ -1,1 +1,0 @@
-calendar { uid: "test", description: { type: "text/html", content: "hello" } }

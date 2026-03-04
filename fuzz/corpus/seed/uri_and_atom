@@ -1,1 +1,0 @@
-event { name: @meeting, url: <https://meet.example.com/abc>, status: #confirmed }
