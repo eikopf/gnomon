@@ -12,6 +12,7 @@ pub enum Severity {
 #[salsa::accumulator]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Diagnostic {
+    pub source: SourceFile,
     pub range: rowan::TextRange,
     pub severity: Severity,
     pub message: String,
@@ -29,6 +30,7 @@ pub fn parse(db: &dyn crate::Db, source: SourceFile) -> ParseResult<'_> {
     let result = gnomon_parser::parse(source.text(db));
     for error in result.errors() {
         Diagnostic {
+            source,
             range: rowan::TextRange::new(
                 rowan::TextSize::from(error.range.start as u32),
                 rowan::TextSize::from(error.range.end as u32),
@@ -65,6 +67,7 @@ pub fn check_syntax(db: &dyn crate::Db, source: SourceFile) -> SyntaxCheckResult
     let errors = gnomon_parser::validate_syntax(&root);
     for err in errors {
         Diagnostic {
+            source,
             range: err.range,
             severity: Severity::Error,
             message: err.message,

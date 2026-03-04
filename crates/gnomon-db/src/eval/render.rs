@@ -3,7 +3,7 @@ use std::fmt;
 use crate::Db;
 
 use super::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
-use super::types::{Blame, Blamed, Document, IncludeRef, Record, ReifiedDecl, Value};
+use super::types::{Blame, Blamed, Calendar, Document, IncludeRef, Record, ReifiedDecl, Value};
 
 /// Format a value using the salsa database for name resolution.
 ///
@@ -254,6 +254,79 @@ impl<'db> RenderWithDb<'db> for Document<'db> {
                 writeln!(f, ",")?;
             }
             writeln!(f, "    ],")?;
+        }
+
+        write!(f, "}}")
+    }
+}
+
+fn write_record_list<'db>(
+    w: &mut dyn fmt::Write,
+    items: &[Blamed<'db, Record<'db>>],
+    db: &'db dyn Db,
+    indent: usize,
+) -> fmt::Result {
+    if items.is_empty() {
+        return write!(w, "[]");
+    }
+    writeln!(w, "[")?;
+    for item in items {
+        write_indent(w, indent + 4)?;
+        write_record(w, &item.value, db, indent + 4)?;
+        writeln!(w, ",")?;
+    }
+    write_indent(w, indent)?;
+    write!(w, "]")
+}
+
+impl<'db> RenderWithDb<'db> for Calendar<'db> {
+    fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
+        writeln!(f, "Calendar {{")?;
+
+        // Properties
+        write!(f, "    properties: ")?;
+        write_record(f, &self.properties, db, 4)?;
+        writeln!(f, ",")?;
+
+        // Events
+        write!(f, "    events: ")?;
+        write_record_list(f, &self.events, db, 4)?;
+        writeln!(f, ",")?;
+
+        // Tasks
+        write!(f, "    tasks: ")?;
+        write_record_list(f, &self.tasks, db, 4)?;
+        writeln!(f, ",")?;
+
+        // Groups
+        write!(f, "    groups: ")?;
+        write_record_list(f, &self.groups, db, 4)?;
+        writeln!(f, ",")?;
+
+        // Includes
+        write!(f, "    includes: ")?;
+        if self.includes.is_empty() {
+            writeln!(f, "[],")?;
+        } else {
+            writeln!(f, "[")?;
+            for inc in &self.includes {
+                write_indent(f, 8)?;
+                inc.value.render_fmt(f, db)?;
+                writeln!(f, ",")?;
+            }
+            writeln!(f, "    ],")?;
+        }
+
+        // Bindings
+        write!(f, "    bindings: ")?;
+        if self.bindings.is_empty() {
+            writeln!(f, "{{}},")?;
+        } else {
+            writeln!(f, "{{")?;
+            for (name, blamed_uid) in &self.bindings {
+                writeln!(f, "        {name}: {:?},", blamed_uid.value)?;
+            }
+            writeln!(f, "    }},")?;
         }
 
         write!(f, "}}")

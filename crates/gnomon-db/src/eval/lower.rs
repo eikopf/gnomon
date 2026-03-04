@@ -413,6 +413,7 @@ impl<'db> LowerCtx<'db> {
 
     fn emit_diagnostic(&mut self, range: rowan::TextRange, message: String) {
         self.diagnostics.push(Diagnostic {
+            source: self.source,
             range,
             severity: crate::queries::Severity::Error,
             message,

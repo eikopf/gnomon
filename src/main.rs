@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, parse};
+use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, merge, parse};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
@@ -37,6 +37,12 @@ enum Command {
     Eval {
         /// Path to the file to evaluate.
         file: PathBuf,
+    },
+    /// Merge .gnomon files into a single calendar.
+    Merge {
+        /// Paths to .gnomon files or directories. If empty, merges all
+        /// .gnomon files in the current directory.
+        paths: Vec<PathBuf>,
     },
 }
 
@@ -101,38 +107,20 @@ fn main() -> ExitCode {
             };
 
             let db = Database::default();
-            let source = SourceFile::new(&db, file.clone(), text.clone());
+            let source = SourceFile::new(&db, file.clone(), text);
             let result = evaluate(&db, source);
 
             // Collect parse + validation diagnostics.
-            let mut diagnostics: Vec<Diagnostic> = check_syntax::accumulated::<Diagnostic>(&db, source)
-                .into_iter()
-                .cloned()
-                .collect();
+            let mut diagnostics: Vec<Diagnostic> =
+                check_syntax::accumulated::<Diagnostic>(&db, source)
+                    .into_iter()
+                    .cloned()
+                    .collect();
             // Add lowering diagnostics.
             diagnostics.extend(result.diagnostics);
             diagnostics.sort_by_key(|d| d.range.start());
 
-            let mut has_errors = false;
-            for diag in &diagnostics {
-                let offset = u32::from(diag.range.start()) as usize;
-                let (line, col) = offset_to_line_col(&text, offset);
-                let severity = match diag.severity {
-                    gnomon_db::Severity::Error => {
-                        has_errors = true;
-                        "error"
-                    }
-                    gnomon_db::Severity::Warning => "warning",
-                };
-                eprintln!(
-                    "{}:{}:{}: {}: {}",
-                    file.display(),
-                    line,
-                    col,
-                    severity,
-                    diag.message
-                );
-            }
+            let has_errors = print_diagnostics(&db, &diagnostics);
 
             println!("{}", result.document.render(&db));
 
@@ -152,34 +140,108 @@ fn main() -> ExitCode {
             };
 
             let db = Database::default();
-            let source = SourceFile::new(&db, file.clone(), text.clone());
+            let source = SourceFile::new(&db, file.clone(), text);
             check_syntax(&db, source);
-            let mut diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source).to_vec();
+            let mut diagnostics: Vec<Diagnostic> = check_syntax::accumulated::<Diagnostic>(&db, source)
+                .into_iter()
+                .cloned()
+                .collect();
             diagnostics.sort_by_key(|d| d.range.start());
 
             if diagnostics.is_empty() {
                 ExitCode::SUCCESS
             } else {
-                for diag in &diagnostics {
-                    let offset = u32::from(diag.range.start()) as usize;
-                    let (line, col) = offset_to_line_col(&text, offset);
-                    let severity = match diag.severity {
-                        gnomon_db::Severity::Error => "error",
-                        gnomon_db::Severity::Warning => "warning",
-                    };
-                    eprintln!(
-                        "{}:{}:{}: {}: {}",
-                        file.display(),
-                        line,
-                        col,
-                        severity,
-                        diag.message
-                    );
-                }
+                print_diagnostics(&db, &diagnostics);
                 ExitCode::FAILURE
             }
         }
+        Command::Merge { paths } => {
+            let db = Database::default();
+
+            // File discovery: expand directories to *.gnomon files.
+            let paths = if paths.is_empty() {
+                vec![std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))]
+            } else {
+                paths
+            };
+
+            let mut files = Vec::new();
+            for path in &paths {
+                if path.is_dir() {
+                    let mut entries: Vec<_> = std::fs::read_dir(path)
+                        .unwrap_or_else(|e| {
+                            eprintln!("error: could not read directory {}: {e}", path.display());
+                            std::process::exit(1);
+                        })
+                        .filter_map(|e| e.ok())
+                        .map(|e| e.path())
+                        .filter(|p| p.extension().is_some_and(|ext| ext == "gnomon"))
+                        .collect();
+                    entries.sort();
+                    files.extend(entries);
+                } else {
+                    files.push(path.clone());
+                }
+            }
+
+            if files.is_empty() {
+                eprintln!("error: no .gnomon files found");
+                return ExitCode::FAILURE;
+            }
+
+            let mut source_files = Vec::new();
+            for file in &files {
+                let text = match std::fs::read_to_string(file) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("error: could not read {}: {e}", file.display());
+                        return ExitCode::FAILURE;
+                    }
+                };
+                source_files.push(SourceFile::new(&db, file.clone(), text));
+            }
+
+            let result = merge(&db, &source_files);
+            let mut diagnostics = result.diagnostics;
+            diagnostics.sort_by_key(|d| d.range.start());
+
+            let has_errors = print_diagnostics(&db, &diagnostics);
+
+            println!("{}", result.calendar.render(&db));
+
+            if has_errors {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
+        }
     }
+}
+
+/// Print diagnostics to stderr. Returns true if any errors were found.
+fn print_diagnostics(db: &Database, diagnostics: &[Diagnostic]) -> bool {
+    let mut has_errors = false;
+    for diag in diagnostics {
+        let text = diag.source.text(db);
+        let offset = u32::from(diag.range.start()) as usize;
+        let (line, col) = offset_to_line_col(text, offset);
+        let severity = match diag.severity {
+            gnomon_db::Severity::Error => {
+                has_errors = true;
+                "error"
+            }
+            gnomon_db::Severity::Warning => "warning",
+        };
+        eprintln!(
+            "{}:{}:{}: {}: {}",
+            diag.source.path(db).display(),
+            line,
+            col,
+            severity,
+            diag.message
+        );
+    }
+    has_errors
 }
 
 fn offset_to_line_col(text: &str, offset: usize) -> (usize, usize) {

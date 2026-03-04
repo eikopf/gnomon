@@ -4,8 +4,9 @@ pub mod queries;
 
 pub use eval::{EvalResult, evaluate};
 pub use eval::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
+pub use eval::merge::{MergeResult, merge};
 pub use eval::render::{Rendered, RenderWithDb};
-pub use eval::types::{Blamed, Blame, Document, IncludeRef, Record, ReifiedDecl, Value};
+pub use eval::types::{Blamed, Blame, Calendar, Document, IncludeRef, Record, ReifiedDecl, Value};
 pub use input::SourceFile;
 pub use queries::{Diagnostic, ParseResult, Severity, SyntaxCheckResult, check_syntax, parse};
 

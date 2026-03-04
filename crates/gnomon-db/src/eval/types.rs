@@ -70,3 +70,13 @@ pub struct Document<'db> {
     pub bindings: BTreeMap<Name, Blamed<'db, Uid>>,
     pub decls: Vec<Blamed<'db, ReifiedDecl<'db>>>,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Calendar<'db> {
+    pub properties: Record<'db>,
+    pub events: Vec<Blamed<'db, Record<'db>>>,
+    pub tasks: Vec<Blamed<'db, Record<'db>>>,
+    pub groups: Vec<Blamed<'db, Record<'db>>>,
+    pub includes: Vec<Blamed<'db, IncludeRef>>,
+    pub bindings: BTreeMap<Name, Blamed<'db, Uid>>,
+}
