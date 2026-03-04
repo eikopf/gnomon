@@ -2,4 +2,7 @@
 .claude/worktrees
 fuzz/target
 fuzz/artifacts
-fuzz/corpus/fuzz_*
+fuzz/corpus/*
+!fuzz/corpus/seed/
+fuzz/corpus/seed/*
+!fuzz/corpus/seed/*[_]*
