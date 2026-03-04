@@ -1,0 +1,2 @@
+; A simple calendar
+calendar { uid: "test" }

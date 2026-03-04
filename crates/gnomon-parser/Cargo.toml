@@ -3,6 +3,9 @@ name = "gnomon-parser"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+fuzz = []
+
 [dependencies]
 logos = "0.16"
 rowan = "0.16"

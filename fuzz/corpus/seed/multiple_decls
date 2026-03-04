@@ -1,0 +1,4 @@
+include "base.gnomon"
+calendar { uid: "cal" }
+event @meeting 2026-03-01T14:30 1h "Standup"
+task @cleanup "Clean"

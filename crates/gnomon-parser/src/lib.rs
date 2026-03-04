@@ -10,6 +10,9 @@ pub use rowan::ast::AstNode;
 pub use syntax_kind::{GnomonLanguage, SyntaxKind, SyntaxNode, SyntaxToken};
 pub use validate::{SyntaxError, validate_syntax};
 
+#[cfg(feature = "fuzz")]
+pub use preprocess::preprocess;
+
 /// Result of parsing a Gnomon source string.
 pub struct Parse {
     green_node: rowan::GreenNode,
