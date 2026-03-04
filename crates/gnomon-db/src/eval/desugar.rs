@@ -128,7 +128,7 @@ pub fn desugar_every<'db>(
             let mut parts = md_text.splitn(2, '-');
             let month: u64 = parts.next()?.parse().ok()?;
             let day: u64 = parts.next()?.parse().ok()?;
-            let year_day = month_day_to_year_day(month, day);
+            let year_day = month_day_to_year_day(month, day)?;
             fields.push((
                 "by_year_day",
                 Value::List(vec![Blamed {
@@ -196,9 +196,11 @@ fn make_record<'db>(
 }
 
 /// Convert a month-day to a day-of-year in a non-leap year.
-fn month_day_to_year_day(month: u64, day: u64) -> u64 {
+/// Returns `None` for out-of-range month (must be 1..=12).
+fn month_day_to_year_day(month: u64, day: u64) -> Option<u64> {
     const DAYS_BEFORE: [u64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
-    DAYS_BEFORE[(month - 1) as usize] + day
+    let index = month.checked_sub(1)?;
+    Some(*DAYS_BEFORE.get(index as usize)? + day)
 }
 
 /// Map a weekday keyword SyntaxKind to its index (monday=1 .. sunday=7).
@@ -352,18 +354,28 @@ mod tests {
 
     #[test]
     fn month_day_to_year_day_jan_1() {
-        assert_eq!(month_day_to_year_day(1, 1), 1);
+        assert_eq!(month_day_to_year_day(1, 1), Some(1));
     }
 
     #[test]
     fn month_day_to_year_day_mar_15() {
         // Jan=31, Feb=28, so March 15 = 31+28+15 = 74
-        assert_eq!(month_day_to_year_day(3, 15), 74);
+        assert_eq!(month_day_to_year_day(3, 15), Some(74));
     }
 
     #[test]
     fn month_day_to_year_day_dec_31() {
-        assert_eq!(month_day_to_year_day(12, 31), 365);
+        assert_eq!(month_day_to_year_day(12, 31), Some(365));
+    }
+
+    #[test]
+    fn month_day_to_year_day_month_zero() {
+        assert_eq!(month_day_to_year_day(0, 15), None);
+    }
+
+    #[test]
+    fn month_day_to_year_day_month_13() {
+        assert_eq!(month_day_to_year_day(13, 1), None);
     }
 
     #[test]
