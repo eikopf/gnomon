@@ -999,6 +999,34 @@ Resolved includes contribute their contents to the enclosing evaluation context.
 > r[model.include.dissolve]
 > After resolution, the contents of an included source MUST be incorporated into the enclosing calendar's entries. The include declaration itself MUST NOT appear in the evaluated output.
 
+### Shape-checking
+
+Shape-checking is the process of validating that a Gnomon value conforms to a recognized shape (calendar, event, task, recurrence rule, or any other record type defined in this specification). It enforces mandatory field presence, field value types, and value restrictions.
+
+> r[model.shape.diagnostic]
+> Shape-checking MUST report all constraint violations as diagnostics rather than aborting on the first error. A value that fails shape-checking MUST still be preserved to the greatest extent possible.
+
+Shape-checking applies the constraints defined in the Record Types and Common Record Fields sections of this specification. The following invariants are enforced:
+
+> r[model.shape.required]
+> If a record type specifies a mandatory field, shape-checking MUST produce a diagnostic if that field is absent.
+
+> r[model.shape.type]
+> If a field constraint specifies the type of a field's value, shape-checking MUST produce a diagnostic if the field is present and its value does not conform to the specified type.
+
+> r[model.shape.enum]
+> If a field constraint restricts a field's value to a set of permitted values, shape-checking MUST produce a diagnostic if the field is present and its value is not in the permitted set.
+
+Records are open: shape-checking does not reject fields that are not mentioned in the specification. Unknown fields are preserved without type constraints.
+
+> r[model.shape.open]
+> Shape-checking MUST NOT reject a record for containing fields not listed in its record type definition. Unknown fields MUST be preserved in the shape-checked output.
+
+Shape-checking is applied recursively: if a field's expected type is itself a record type (e.g., a location, alert, or recurrence rule), the nested record is shape-checked against its own definition.
+
+> r[model.shape.recursive]
+> When a field's value is expected to be a record of a specific type, that record MUST itself be shape-checked against the corresponding record type definition.
+
 ## Declarations
 
 Declarations are the top-level grammar element in Gnomon, and source data is ultimately parsed as a sequence of declarations.

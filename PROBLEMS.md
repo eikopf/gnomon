@@ -6,9 +6,9 @@
 
 Gnomon compiles to its own calendar object first; iCalendar and JSCalendar are downstream export targets, not the primary data model. The data model section has been added to the spec (`r[model.*]`), defining the calendar shape (mandatory `uid`, `entries` list with `type` discriminator), name uniqueness, UUIDv5 derivation, and include resolution semantics. The implementation (`Calendar<'db>` in `types.rs`) still needs to be updated to match the spec — notably, the current separate `events`/`tasks` vectors should become a single `entries` list, and the `type` field needs to be inserted during lowering.
 
-### 2. Recurrence Rule Evaluation (critical)
+### 2. Recurrence Rule Evaluation (partially addressed)
 
-The spec explicitly marks this as `TODO: describe the evaluation semantics of recurrence rules`. The evaluation semantics themselves are well-defined by RFC 5545 (and JSCalendar inherits them directly), so the question is not *what* the semantics should be but *when and how* untyped nested records become typed domain objects. Currently, recurrence rules are ordinary records with no structural validation — a reification/type-checking pass is needed to validate field presence, produce typed rrule objects, and then apply RFC 5545 evaluation. Additionally, fields like `by_day` are currently desugared as lists but should be treated as sets (duplicates are meaningless, order is irrelevant). This affects the data model and any future equality/comparison semantics.
+The spec explicitly marks this as `TODO: describe the evaluation semantics of recurrence rules`. The evaluation semantics themselves are well-defined by RFC 5545 (and JSCalendar inherits them directly), so the question is not *what* the semantics should be but *when and how* untyped nested records become typed domain objects. Shape-checking has now been specified (`r[model.shape.*]`) as the mechanism for validating records against their type definitions, including recurrence rules. The shape-checking pass is error-resilient, recursive, and preserves open records. What remains is the actual recurrence rule *evaluation* (expanding a rule into occurrences) and the treatment of `by_day` and similar fields as sets rather than lists.
 
 ### 3. Multi-file Merge Semantics (important, evolving)
 
@@ -48,7 +48,7 @@ Both are listed as weak keywords with no grammar production or semantic rule. `l
 
 **Near-term (requires design work):**
 1. Align implementation with data model spec — unified `entries` list, `type` field insertion, `uid` enforcement, UUIDv5 derivation (#1, #7)
-2. Design the reification pass (untyped records → typed domain objects) (#2)
+2. Implement shape-checking pass using `structible`-backed typed structs (#2)
 
 **Longer-term (depends on evaluation semantics):**
 4. Design evaluation semantics for composition/merge (#3)
@@ -77,3 +77,4 @@ The following issues from the original analysis have been fully or partially add
 - **Gnomon data model** — specified via `r[model.*]` requirements (calendar shape, entries, names, includes); implementation alignment pending
 - **Calendar declaration fields and UUIDv5** — specified via `r[model.calendar.uid]` and `r[model.calendar.uid.derivation]`; implementation pending
 - **Include resolution semantics** — basic resolution shape and dissolve behavior specified via `r[model.include.*]`; include-scoped bindings specified via `r[model.include.bindings]`
+- **Reification pass** — specified as shape-checking via `r[model.shape.*]`; error-resilient, recursive, preserves open records; implementation pending
