@@ -936,6 +936,69 @@ Meaning: The recurrence rule for the event or task. Only a single recurrence rul
 r[field.recur.type]
 If present, the `recur` field on an event or task MUST be a recurrence rule record.
 
+## Data Model
+
+Gnomon evaluation is general-purpose: evaluating a Gnomon expression produces a Gnomon value. The value types are strings, integers, signed integers, booleans, records, lists, names, and `undefined`. These types are defined by the expression grammar and carry no intrinsic semantic meaning.
+
+Specific contexts impose shape expectations on the values they receive. The `merge` subcommand, for example, expects a calendar or a list of calendars; it is an error if evaluation produces a value that does not conform to one of these shapes. This section defines the shapes that the Gnomon tooling recognizes.
+
+### Calendars
+
+A calendar is the primary output of Gnomon evaluation. It is a record representing a collection of calendar entries (events and tasks) together with associated metadata.
+
+> r[model.calendar.uid]
+> A calendar record MUST have a field named `uid` whose value is a string.
+
+The `uid` field is the sole mandatory field on a calendar. It serves as the namespace for deterministic UID derivation: any event or task that omits an explicit `uid` receives a UUIDv5 computed from the calendar's `uid` as the namespace and the object's `name` as the key.
+
+> r[model.calendar.uid.derivation]
+> When an event or task omits a `uid` field, a UID MUST be derived as `UUIDv5(calendar_uid, name)`, where `calendar_uid` is the value of the `uid` field on the enclosing calendar and `name` is the string representation of the object's `name` field.
+
+A calendar may have additional optional metadata fields such as `title`, `description`, `time_zone`, `color`, or other properties. These are not enumerated exhaustively; as with all Gnomon records, calendars are open.
+
+### Calendar Entries
+
+A calendar record MUST have a field named `entries` whose value is a list of records. Each entry in the list represents an event or a task.
+
+> r[model.calendar.entries]
+> A calendar record MUST have a field named `entries` whose value is a list of records.
+
+> r[model.entry.type]
+> Each record in the `entries` list MUST have a field named `type` whose value is `"event"` or `"task"`.
+
+The `type` field distinguishes events from tasks within the entries list. When an event or task is declared using the `event` or `task` keyword, the corresponding `type` field is inferred from the declaration keyword. A user may also write the `type` field explicitly.
+
+> r[model.entry.type.infer]
+> An event declaration MUST produce a record with `type` set to `"event"`. A task declaration MUST produce a record with `type` set to `"task"`.
+
+Once the `type` field is known, the entry is validated against the corresponding record type definition (see Events and Tasks under Record Types). The remaining field constraints — mandatory fields, optional field types, and common record fields — apply as specified in those sections.
+
+### Names
+
+Names serve as human-readable identifiers for calendar entries.
+
+> r[model.name.unique]
+> Within a single calendar, no two entries MAY share the same `name` value. Events and tasks share a single namespace.
+
+A name resolves uniquely without requiring additional type information. This constraint is enforced during merge when combining entries from multiple source files.
+
+### Include Resolution
+
+An `include` declaration references a foreign data source (an iCalendar or JSCalendar file). Resolution of an include parses the foreign data and produces one or more Gnomon values: a calendar record, a single event record, a single task record, or a list of such values, depending on the source format.
+
+> r[model.include.resolution]
+> Resolving an `include` declaration MUST produce a value that conforms to one of the recognized shapes (calendar, event, or task) or a list of such values.
+
+Include declarations may carry an optional record of bindings that assign names to objects from the included source.
+
+> r[model.include.bindings]
+> An `include` declaration MAY be followed by a record expression whose fields map names to UIDs of objects in the included source.
+
+Resolved includes contribute their contents to the enclosing evaluation context. The include declaration itself does not appear in the final calendar value.
+
+> r[model.include.dissolve]
+> After resolution, the contents of an included source MUST be incorporated into the enclosing calendar's entries. The include declaration itself MUST NOT appear in the evaluated output.
+
 ## Declarations
 
 Declarations are the top-level grammar element in Gnomon, and source data is ultimately parsed as a sequence of declarations.

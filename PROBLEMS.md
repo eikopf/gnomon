@@ -2,9 +2,9 @@
 
 ## I. Entirely Missing from the Spec
 
-### 1. The Gnomon Data Model (critical)
+### 1. The Gnomon Data Model (partially addressed)
 
-Gnomon compiles to its own calendar object first; iCalendar and JSCalendar are downstream export targets, not the primary data model. The spec defines record types (Event, Task, etc.) with field constraints, but there is no unified description of what a fully-evaluated `Calendar` object looks like, what invariants it holds, or how its parts relate. The implementation has `Calendar<'db>` in `types.rs`, but that structure is implementation-driven, not spec-driven. iCal compatibility matters for import (users should be able to use `*.ics` files as input without migrating everything at once), but the spec should define the Gnomon ontology on its own terms first.
+Gnomon compiles to its own calendar object first; iCalendar and JSCalendar are downstream export targets, not the primary data model. The data model section has been added to the spec (`r[model.*]`), defining the calendar shape (mandatory `uid`, `entries` list with `type` discriminator), name uniqueness, UUIDv5 derivation, and include resolution semantics. The implementation (`Calendar<'db>` in `types.rs`) still needs to be updated to match the spec — notably, the current separate `events`/`tasks` vectors should become a single `entries` list, and the `type` field needs to be inserted during lowering.
 
 ### 2. Recurrence Rule Evaluation (critical)
 
@@ -30,9 +30,9 @@ The reserved subcommand `query` hints at this. A calendar language without the a
 
 The syntax parses `include "path/or/url"`, and lowering distinguishes paths from URIs, but the spec defines no resolution behavior. The original design intended `include` exclusively for foreign files (`.ics`, `.json`/JSCalendar). With an evaluation semantics (#3), Gnomon also needs a way to reference other Gnomon files — but this is a semantically different operation: foreign inclusion is data import (parse an opaque blob into the data model), while Gnomon-to-Gnomon reference is module composition (evaluate and bring definitions into scope). These have different error modes and composition rules. Open question: retain `include` for foreign data and use a different keyword (`import`, `use`, `from`, etc.) for Gnomon sources, or use a single keyword for both? The answer depends on what evaluation semantics look like — if Gnomon files become module-like, the distinction is natural; if they're more like fragments, it's weaker. The boundary also blurs for hybrid cases (Gnomon blocks in Markdown).
 
-### 7. Calendar Declaration (spec gap)
+### 7. Calendar Declaration (partially addressed)
 
-`calendar { ... }` parses and the implementation enforces exactly one, but the spec defines no fields or semantics. The primary purpose of the calendar declaration is to define the root UID, which serves as the namespace for UUIDv5 derivation: any event or task that omits an explicit `uid` gets a deterministic one computed from `UUIDv5(calendar_uid, object_name)`. Everything else on the calendar declaration (name, title, color, etc.) is metadata. The spec needs to formalize the accepted fields and the UUIDv5 algorithm. All events and tasks belong to a single calendar object (analogous to JSCalendar's Group members).
+The calendar declaration's primary purpose — defining the root UID for UUIDv5 derivation — is now specified in the data model section (`r[model.calendar.uid]`, `r[model.calendar.uid.derivation]`). The `uid` field is the sole mandatory field; all other metadata fields (title, description, time_zone, color, etc.) are optional and the calendar record is open. The implementation still needs to enforce the `uid` requirement during reification and implement UUIDv5 derivation.
 
 ---
 
@@ -47,9 +47,8 @@ Both are listed as weak keywords with no grammar production or semantic rule. `l
 ## Prioritized Recommendations
 
 **Near-term (requires design work):**
-1. Specify the Gnomon data model / calendar object (#1)
-2. Specify calendar declaration fields and UUIDv5 derivation (#7)
-3. Design the reification pass (untyped records → typed domain objects) (#2)
+1. Align implementation with data model spec — unified `entries` list, `type` field insertion, `uid` enforcement, UUIDv5 derivation (#1, #7)
+2. Design the reification pass (untyped records → typed domain objects) (#2)
 
 **Longer-term (depends on evaluation semantics):**
 4. Design evaluation semantics for composition/merge (#3)
@@ -63,7 +62,7 @@ Both are listed as weak keywords with no grammar production or semantic rule. `l
 
 ## Resolved
 
-The following issues from the original analysis have been addressed:
+The following issues from the original analysis have been fully or partially addressed:
 
 - **Short-form declaration desugaring** — specified via `r[decl.short-event.desugar]` and `r[decl.short-task.desugar]`
 - **`undefined` not a valid expression** — added to expression grammar (`r[expr.literal.syntax+3]`) and lowering
@@ -75,3 +74,6 @@ The following issues from the original analysis have been addressed:
 - **Common record field scope** — stated explicitly in spec
 - **`check`/`eval`/`merge` CLI subcommands** — specified and `check` unreserved
 - **"Local datetime" undefined** — defined via `r[lexer.datetime.local]`
+- **Gnomon data model** — specified via `r[model.*]` requirements (calendar shape, entries, names, includes); implementation alignment pending
+- **Calendar declaration fields and UUIDv5** — specified via `r[model.calendar.uid]` and `r[model.calendar.uid.derivation]`; implementation pending
+- **Include resolution semantics** — basic resolution shape and dissolve behavior specified via `r[model.include.*]`; include-scoped bindings specified via `r[model.include.bindings]`
