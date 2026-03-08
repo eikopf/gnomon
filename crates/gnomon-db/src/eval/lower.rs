@@ -306,6 +306,7 @@ impl<'db> LowerCtx<'db> {
             }
             SyntaxKind::TRUE_KW => Some(Value::Bool(true)),
             SyntaxKind::FALSE_KW => Some(Value::Bool(false)),
+            SyntaxKind::UNDEFINED_KW => Some(Value::Undefined),
             SyntaxKind::NAME => {
                 Some(Value::Name(literals::eval_name(text)))
             }

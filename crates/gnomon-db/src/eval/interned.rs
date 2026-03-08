@@ -69,7 +69,6 @@ pub enum DeclKind {
     Calendar,
     Event,
     Task,
-    Group,
 }
 
 #[salsa::interned]

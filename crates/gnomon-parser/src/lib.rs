@@ -106,7 +106,7 @@ task @cleanup "Clean up" {
 
     // ── Inclusion ────────────────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_inclusion() {
         check(
@@ -121,7 +121,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_inclusion_no_errors() {
         check_no_errors(r#"include "holidays.gnomon""#);
@@ -129,7 +129,7 @@ task @cleanup "Clean up" {
 
     // ── Binding ──────────────────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_binding() {
         check(
@@ -146,7 +146,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_binding_no_errors() {
         check_no_errors(r#"bind @cal.holidays "holidays.gnomon""#);
@@ -154,7 +154,7 @@ task @cleanup "Clean up" {
 
     // ── Calendar ─────────────────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_calendar() {
         check(
@@ -179,7 +179,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_calendar_no_errors() {
         check_no_errors(r#"calendar { uid: "my-cal" }"#);
@@ -187,7 +187,7 @@ task @cleanup "Clean up" {
 
     // ── Event (short form) ───────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_event_short_datetime() {
         check(
@@ -210,13 +210,13 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_event_short_no_errors() {
         check_no_errors(r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#);
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_event_short_date_time() {
         check(
@@ -241,7 +241,7 @@ task @cleanup "Clean up" {
 
     // ── Event (prefix form) ──────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_event_prefix() {
         check(
@@ -276,7 +276,7 @@ task @cleanup "Clean up" {
 
     // ── Task (short form) ────────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_task_short() {
         check(
@@ -293,7 +293,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_task_short_no_errors() {
         check_no_errors(r#"task @cleanup "Clean up""#);
@@ -301,7 +301,7 @@ task @cleanup "Clean up" {
 
     // ── Task (prefix form) ───────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_task_prefix() {
         check(
@@ -746,7 +746,7 @@ task @cleanup "Clean""#;
 
     // ── Event with short form + record ───────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_event_short_with_record() {
         check_no_errors(
@@ -756,7 +756,7 @@ task @cleanup "Clean""#;
 
     // ── Task with short_dt ───────────────────────────────────────
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_task_with_datetime() {
         check(
@@ -776,7 +776,7 @@ task @cleanup "Clean""#;
         );
     }
 
-    // r[verify decl.syntax]
+    // r[verify decl.syntax+2]
     #[test]
     fn parse_task_with_datetime_no_errors() {
         check_no_errors(r#"task @deadline 2026-06-01T17:00 "Submit report""#);
@@ -784,11 +784,36 @@ task @cleanup "Clean""#;
 
     // ── Boolean and undefined literals ───────────────────────────
 
-    // r[verify expr.literal.syntax+2]
+    // r[verify expr.literal.syntax+3]
     // r[verify lexer.keyword.strict]
     #[test]
     fn parse_boolean_fields() {
         check_no_errors("calendar { active: true, archived: false }");
+    }
+
+    // r[verify expr.literal.syntax+3]
+    #[test]
+    fn parse_undefined_literal() {
+        check(
+            "calendar { x: undefined }",
+            expect![[r#"
+                SOURCE_FILE@0..25
+                  CALENDAR_DECL@0..25
+                    CALENDAR_KW@0..8 "calendar"
+                    WHITESPACE@8..9 " "
+                    RECORD_EXPR@9..25
+                      L_BRACE@9..10 "{"
+                      WHITESPACE@10..11 " "
+                      FIELD@11..23
+                        IDENT@11..12 "x"
+                        COLON@12..13 ":"
+                        WHITESPACE@13..14 " "
+                        LITERAL_EXPR@14..23
+                          UNDEFINED_KW@14..23 "undefined"
+                      WHITESPACE@23..24 " "
+                      R_BRACE@24..25 "}"
+            "#]],
+        );
     }
 
     // ── URI literal ──────────────────────────────────────────────

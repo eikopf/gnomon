@@ -59,7 +59,6 @@ pub enum ReifiedDecl<'db> {
     Calendar(Record<'db>),
     Event(Record<'db>),
     Task(Record<'db>),
-    Group(Record<'db>),
 }
 
 pub type Name = String;
@@ -76,7 +75,6 @@ pub struct Calendar<'db> {
     pub properties: Record<'db>,
     pub events: Vec<Blamed<'db, Record<'db>>>,
     pub tasks: Vec<Blamed<'db, Record<'db>>>,
-    pub groups: Vec<Blamed<'db, Record<'db>>>,
     pub includes: Vec<Blamed<'db, IncludeRef>>,
     pub bindings: BTreeMap<Name, Blamed<'db, Uid>>,
 }

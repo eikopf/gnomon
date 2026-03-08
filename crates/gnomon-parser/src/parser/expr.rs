@@ -23,6 +23,7 @@ impl Parser {
             | SyntaxKind::ATOM_LITERAL
             | SyntaxKind::TRUE_KW
             | SyntaxKind::FALSE_KW
+            | SyntaxKind::UNDEFINED_KW
             | SyntaxKind::NAME => {
                 self.parse_literal_expr();
             }
@@ -38,7 +39,7 @@ impl Parser {
         }
     }
 
-    // r[impl expr.literal.syntax+2]
+    // r[impl expr.literal.syntax+3]
     /// Parse a literal expression (wraps a single literal token in a LITERAL_EXPR node).
     fn parse_literal_expr(&mut self) {
         self.start_node(SyntaxKind::LITERAL_EXPR);

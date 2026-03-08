@@ -128,10 +128,6 @@ fn write_reified_decl<'db>(
             write!(w, "Task ")?;
             write_record(w, r, db, indent)
         }
-        ReifiedDecl::Group(r) => {
-            write!(w, "Group ")?;
-            write_record(w, r, db, indent)
-        }
     }
 }
 
@@ -296,11 +292,6 @@ impl<'db> RenderWithDb<'db> for Calendar<'db> {
         // Tasks
         write!(f, "    tasks: ")?;
         write_record_list(f, &self.tasks, db, 4)?;
-        writeln!(f, ",")?;
-
-        // Groups
-        write!(f, "    groups: ")?;
-        write_record_list(f, &self.groups, db, 4)?;
         writeln!(f, ",")?;
 
         // Includes

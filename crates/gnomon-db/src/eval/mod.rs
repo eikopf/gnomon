@@ -338,6 +338,18 @@ mod tests {
     }
 
     #[test]
+    fn undefined_literal() {
+        let db = Database::default();
+        let result = eval(&db, "calendar { x: undefined }");
+        match &result.document.decls[0].value {
+            ReifiedDecl::Calendar(r) => {
+                assert_eq!(get_field(&r, &db, "x"), Value::Undefined);
+            }
+            _ => panic!("expected Calendar"),
+        }
+    }
+
+    #[test]
     fn integer_and_signed_integer() {
         let db = Database::default();
         let result = eval(

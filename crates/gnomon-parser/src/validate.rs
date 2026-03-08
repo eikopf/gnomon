@@ -127,21 +127,69 @@ fn check_duration_units(text: &str, range: rowan::TextRange, errors: &mut Vec<Sy
     }
 }
 
+// r[verify lexer.date.valid]
 fn check_date(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
     // Format: YYYY-MM-DD
     let parts: Vec<&str> = text.split('-').collect();
     if parts.len() == 3 {
         check_month_value(parts[1], range, errors);
         check_day_value(parts[2], range, errors);
+        // Calendrical validation: check day is valid for the given month and year
+        if let (Ok(year), Ok(month), Ok(day)) = (
+            parts[0].parse::<u32>(),
+            parts[1].parse::<u32>(),
+            parts[2].parse::<u32>(),
+        ) {
+            if (1..=12).contains(&month) && (1..=31).contains(&day) {
+                let max = max_day_in_month(month, is_leap_year(year));
+                if day > max {
+                    errors.push(SyntaxError {
+                        range,
+                        message: format!(
+                            "day {day} is invalid for month {month:02} (max {max})"
+                        ),
+                    });
+                }
+            }
+        }
     }
 }
 
+// r[verify lexer.month-day.valid]
 fn check_month_day(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
     // Format: MM-DD
     let parts: Vec<&str> = text.split('-').collect();
     if parts.len() == 2 {
         check_month_value(parts[0], range, errors);
         check_day_value(parts[1], range, errors);
+        // Calendrical validation: reject days that are impossible for the month.
+        // 02-29 is allowed because the year is unknown.
+        if let (Ok(month), Ok(day)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+            if (1..=12).contains(&month) && (1..=31).contains(&day) {
+                let max = max_day_in_month(month, true); // assume leap year (most permissive)
+                if day > max {
+                    errors.push(SyntaxError {
+                        range,
+                        message: format!(
+                            "day {day} is invalid for month {month:02} (max {max})"
+                        ),
+                    });
+                }
+            }
+        }
+    }
+}
+
+fn is_leap_year(year: u32) -> bool {
+    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+}
+
+fn max_day_in_month(month: u32, is_leap: bool) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 => if is_leap { 29 } else { 28 },
+        _ => 31,
     }
 }
 
@@ -394,6 +442,53 @@ mod tests {
     #[test]
     fn date_valid() {
         let errs = validate("event @e 2026-12-31T23:59 1h \"x\"");
+        assert!(errs.is_empty());
+    }
+
+    // ── Calendrical date validation ──────────────────────────────
+
+    #[test]
+    fn date_feb_29_leap_year_valid() {
+        let errs = validate("event @e 2024-02-29T00:00 1h \"x\"");
+        assert!(errs.is_empty());
+    }
+
+    #[test]
+    fn date_feb_29_non_leap_year_invalid() {
+        let errs = validate("event @e 2023-02-29T00:00 1h \"x\"");
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].message.contains("day 29 is invalid for month 02"));
+    }
+
+    #[test]
+    fn date_apr_31_invalid() {
+        let errs = validate("event @e 2024-04-31T00:00 1h \"x\"");
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].message.contains("day 31 is invalid for month 04"));
+    }
+
+    #[test]
+    fn date_feb_30_invalid() {
+        let errs = validate("event @e 2024-02-30T00:00 1h \"x\"");
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].message.contains("day 30 is invalid for month 02"));
+    }
+
+    #[test]
+    fn month_day_feb_30_invalid() {
+        let errs = validate(
+            "event { name: @e, start: 2026-01-01T00:00, recurrence: every year on 02-30 }",
+        );
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].message.contains("day 30 is invalid for month 02"));
+    }
+
+    #[test]
+    fn month_day_feb_29_valid() {
+        // No year context, so 02-29 must be allowed
+        let errs = validate(
+            "event { name: @e, start: 2026-01-01T00:00, recurrence: every year on 02-29 }",
+        );
         assert!(errs.is_empty());
     }
 

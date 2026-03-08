@@ -86,21 +86,7 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
                         blame: blamed_decl.blame.clone(),
                     });
                 }
-                ReifiedDecl::Group(record) => {
-                    check_name_collision(
-                        db,
-                        record,
-                        &name_key,
-                        source,
-                        &mut seen_names,
-                        &mut diagnostics,
-                        &mut has_errors,
-                    );
-                    calendar.groups.push(super::types::Blamed {
-                        value: record.clone(),
-                        blame: blamed_decl.blame.clone(),
-                    });
-                }
+
                 ReifiedDecl::Include { target, .. } => {
                     calendar.includes.push(super::types::Blamed {
                         value: target.clone(),
@@ -270,7 +256,6 @@ mod tests {
                         },
                     ],
                     tasks: [],
-                    groups: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -351,7 +336,6 @@ mod tests {
                         },
                     ],
                     tasks: [],
-                    groups: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -489,7 +473,6 @@ mod tests {
                     properties: {},
                     events: [],
                     tasks: [],
-                    groups: [],
                     includes: [
                         "holidays.ics",
                     ],
@@ -554,7 +537,6 @@ mod tests {
                             title: "Ship it",
                         },
                     ],
-                    groups: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -581,7 +563,6 @@ mod tests {
                     properties: {},
                     events: [],
                     tasks: [],
-                    groups: [],
                     includes: [],
                     bindings: {
                         cal.personal: "personal-uid",
@@ -611,7 +592,6 @@ mod tests {
                     properties: {},
                     events: [],
                     tasks: [],
-                    groups: [],
                     includes: [
                         "holidays.ics",
                         "https://example.com/feed.ics",
@@ -679,7 +659,6 @@ mod tests {
                             title: "Code review",
                         },
                     ],
-                    groups: [],
                     includes: [
                         "holidays.ics",
                     ],
@@ -916,7 +895,6 @@ mod tests {
                     },
                     events: [],
                     tasks: [],
-                    groups: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -1014,7 +992,6 @@ mod tests {
                         },
                     ],
                     tasks: [],
-                    groups: [],
                     includes: [],
                     bindings: {},
                 }"#]],

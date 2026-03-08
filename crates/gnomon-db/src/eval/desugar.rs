@@ -139,9 +139,10 @@ pub fn desugar_every<'db>(
         }
     } else if let Some(weekday_token) = every.weekday() {
         fields.push(("frequency", Value::String("weekly".into())));
-        let day_index = weekday_to_index(weekday_token.kind());
-        // by_day is a list of N-day records: [{ day: N }]
-        let nday_fields = [("day", Value::Integer(day_index))];
+        let day_name = weekday_to_name(weekday_token.kind());
+        // r[impl record.rrule.every.desugar.subject.weekday+2]
+        // by_day is a list of N-day records: [{ day: <weekday> }]
+        let nday_fields = [("day", Value::String(day_name.into()))];
         let nday_record = make_record(db, &nday_fields, blame);
         fields.push((
             "by_day",
@@ -203,17 +204,17 @@ fn month_day_to_year_day(month: u64, day: u64) -> Option<u64> {
     Some(*DAYS_BEFORE.get(index as usize)? + day)
 }
 
-/// Map a weekday keyword SyntaxKind to its index (monday=1 .. sunday=7).
-fn weekday_to_index(kind: SyntaxKind) -> u64 {
+/// Map a weekday keyword SyntaxKind to its canonical name string.
+fn weekday_to_name(kind: SyntaxKind) -> &'static str {
     match kind {
-        SyntaxKind::MONDAY_KW => 1,
-        SyntaxKind::TUESDAY_KW => 2,
-        SyntaxKind::WEDNESDAY_KW => 3,
-        SyntaxKind::THURSDAY_KW => 4,
-        SyntaxKind::FRIDAY_KW => 5,
-        SyntaxKind::SATURDAY_KW => 6,
-        SyntaxKind::SUNDAY_KW => 7,
-        _ => 0,
+        SyntaxKind::MONDAY_KW => "monday",
+        SyntaxKind::TUESDAY_KW => "tuesday",
+        SyntaxKind::WEDNESDAY_KW => "wednesday",
+        SyntaxKind::THURSDAY_KW => "thursday",
+        SyntaxKind::FRIDAY_KW => "friday",
+        SyntaxKind::SATURDAY_KW => "saturday",
+        SyntaxKind::SUNDAY_KW => "sunday",
+        _ => "unknown",
     }
 }
 
@@ -445,7 +446,10 @@ mod tests {
                         assert_eq!(items.len(), 1);
                         match &items[0].value {
                             Value::Record(nday) => {
-                                assert_eq!(get_field(nday, &db, "day"), Value::Integer(1));
+                                assert_eq!(
+                                    get_field(nday, &db, "day"),
+                                    Value::String("monday".into())
+                                );
                             }
                             _ => panic!("expected N-day record"),
                         }

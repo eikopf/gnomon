@@ -209,6 +209,11 @@ A date literal represents an ISO 8601/RFC 3339 date.
 > day   = digit, digit ;   (* 01..=31 *)
 > ```
 
+r[lexer.date.valid]
+A date literal MUST represent a valid Gregorian calendar date. February 29 is valid only in leap years.
+
+Implementations MUST NOT reject a second value of 60 (leap second) based on whether a leap second actually occurred at the given time, as this is expensive to verify.
+
 Date literals desugar into records with three integer fields named `year`, `month`, and `day`.
 
 r[lexer.date.desugar]
@@ -226,6 +231,11 @@ A month-day literal represents an ISO 8601/RFC 3339 date with the year omitted.
 > month = digit, digit ;   (* 01..=12 *)
 > day   = digit, digit ;   (* 01..=31 *)
 > ```
+
+r[lexer.month-day.valid]
+A month-day literal MUST represent a day that is possible for the given month. Since no year is available, the maximum day count for February MUST be 29.
+
+For example, `02-29` is valid (it is possible in leap years), but `02-30` is not.
 
 Month-day literals desugar into records with two integer fields named `month` and `day`.
 
@@ -286,6 +296,13 @@ Datetime literals desugar into records with two fields named `date` and `time`; 
 >    },
 > } 
 > ```
+
+#### Local Datetimes
+
+iCalendar and JSCalendar distinguish UTC datetimes (with a `Z` suffix) from local or floating datetimes (without one). Explicit UTC offset suffixes are not permitted.
+
+r[lexer.datetime.local]
+All Gnomon datetime literals are local datetimes. The timezone of a local datetime is determined by the `time_zone` field on the enclosing event or task, or by the calendar-level default if none is specified.
 
 ### Duration Literals
 
@@ -384,9 +401,9 @@ Gnomon's expression syntax consists of only three grammar rules: literal express
 
 ### Literal Expressions
 
-A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, `true`, or `false`.
+A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, name, `true`, `false`, or `undefined`.
 
-> r[expr.literal.syntax+2]
+> r[expr.literal.syntax+3]
 > The grammar for literal expressions is as follows:
 >
 > ```ebnf
@@ -400,8 +417,10 @@ A literal expression is a string literal, integer literal, signed integer litera
 >              | duration literal
 >              | uri literal
 >              | atom literal
+>              | name
 >              | "true"
 >              | "false"
+>              | "undefined"
 >              ;
 > ```
 
@@ -625,26 +644,6 @@ If present, the `percent_complete` field on a task MUST have an unsigned integer
 r[record.task.progress]
 If present, the `progress` field on a task MUST have a string value of `needs-action`, `in-process`, `completed`, `failed`, or `cancelled`.
 
-### Groups
-
-Groups represent collections of related calendar objects, such as a conference schedule or a project plan. They have a mandatory `name` field whose value is a name.
-
-r[record.group.name]
-Records representing groups MUST have a field named `name` whose value is a name.
-
-The optional `uid` field on groups is always assigned a value, which will default to the name of the group if it is omitted.
-
-r[record.group.uid]
-Records representing groups MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
-
-Groups may also have the following optional fields:
-
-r[record.group.entries]
-If present, the `entries` field on a group MUST be a list of records, where each record is a valid event or task record.
-
-r[record.group.source]
-If present, the `source` field on a group MUST be a Link record. It represents the source from which the group's entries were obtained.
-
 ### Recurrence Rules
 
 A recurrence rule is a record describing how a calendar item recurs, and has the semantics of an RFC 5545 recurrence rule.
@@ -722,8 +721,10 @@ If the subject of an `every` expression is the `day` keyword, the `frequency` fi
 r[record.rrule.every.desugar.subject.year-on-month-day]
 If the subject of an `every` expression is of the form `year on MM-DD`, the `frequency` field in the desugared record MUST be set to the value `yearly` and the `by_year_day` field in the desugared record MUST be set to the singleton list value `[D]` where `D` is the number of days from the start of a non-leap year to `MM-DD`.
 
-r[record.rrule.every.desugar.subject.weekday]
-If the subject of an `every` expression is a weekday, the `frequency` field in the desugared record MUST be set to the value `weekly` and the `by_day` field in the desugared record MUST be set to the singleton list value `[{ day: D }]` where `D` is the index of the given weekday (starting from `1` for `monday`).
+r[record.rrule.every.desugar.subject.weekday+2]
+If the subject of an `every` expression is a weekday, the `frequency` field in the desugared record MUST be set to the value `weekly` and the `by_day` field in the desugared record MUST be set to the singleton list value `[{ day: D }]` where `D` is the weekday keyword itself.
+
+For example, `every monday` desugars to a record with `frequency: "weekly"` and `by_day: [{ day: "monday" }]`.
 
 r[record.rrule.every.desugar.terminator+2]
 If the terminator of an `every` expression is given, its value (the datetime or integer literal) MUST be assigned to the `termination` field in the desugared record. If the terminator is omitted, the `termination` field in the desugared record MUST be omitted or set to `undefined`. If the terminator is a date literal, it MUST be treated as the corresponding datetime literal where the time component is `00:00:00`.
@@ -736,6 +737,8 @@ r[record.rrule.eval.empty]
 An error SHOULD be produced if a recurrence rule is empty.
 
 ## Common Record Fields
+
+The type constraints in this section apply to events and tasks unless otherwise specified. Gnomon records are open — any field may appear on any record. This section defines type restrictions for known fields on known record types, not an exhaustive list of permitted fields.
 
 ### `uid`
 Name: `uid`
@@ -923,6 +926,16 @@ Meaning: Notifications that should be triggered in relation to the object.
 r[field.alerts.type]
 If present, the `alerts` field MUST be a list of Alert records.
 
+### `recur`
+Name: `recur`
+
+Value: recurrence rule record (no default)
+
+Meaning: The recurrence rule for the event or task. Only a single recurrence rule is permitted per object, following JSCalendar's simplification over iCalendar's multi-rule model (a union of multiple recurrence rules can always be expressed as a single rule).
+
+r[field.recur.type]
+If present, the `recur` field on an event or task MUST be a recurrence rule record.
+
 ## Declarations
 
 Declarations are the top-level grammar element in Gnomon, and source data is ultimately parsed as a sequence of declarations.
@@ -934,7 +947,7 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 > START = { decl } ;
 > ```
 
-> r[decl.syntax]
+> r[decl.syntax+2]
 > The grammar for declarations is as follows:
 >
 > ```ebnf
@@ -952,7 +965,6 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 > decl prefix = "calendar"
 >             | "event"
 >             | "task"
->             | "group"
 >             ;
 >
 > short event = "event", name,  short span,  [ string literal ], [ record expr ] ;
@@ -964,6 +976,16 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 >          | datetime literal
 >          ;
 > ```
+
+### Short-form Desugaring
+
+The short forms for events and tasks desugar into their corresponding prefix form with a record expression.
+
+r[decl.short-event.desugar]
+The short event declaration `event @name dt [dur] [str] [record]` MUST desugar into the prefix form `event { name: @name, start: dt, duration: dur, title: str, ...record }`, where `dt` is a datetime expression, `dur` is an optional duration literal, `str` is an optional string literal mapped to the `title` field, and `record` is an optional record expression whose fields are merged into the result. Fields from the short form take precedence when they overlap with fields in the trailing record.
+
+r[decl.short-task.desugar]
+The short task declaration `task @name [dt] [str] [record]` MUST desugar into the prefix form `task { name: @name, due: dt, title: str, ...record }`, where `dt` is an optional datetime expression mapped to the `due` field, `str` is an optional string literal mapped to the `title` field, and `record` is an optional record expression whose fields are merged into the result.
 
 ## CLI
 
@@ -1025,15 +1047,53 @@ If the file path argument to the `parse` subcommand cannot be resolved to a file
 r[cli.subcommand.parse.output]
 If a file was successfully located, the program MUST write a textual representation of the result of applying a Gnomon parser to the file to STDOUT.
 
+#### `check`
+
+The `check` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon check <file>` will parse and validate the file, reporting any diagnostics.
+
+r[cli.subcommand.check]
+The program MUST provide a `check` subcommand for the root command which takes a single parameter describing a file path.
+
+r[cli.subcommand.check.no-file]
+If the file path argument to the `check` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
+
+r[cli.subcommand.check.output]
+If a file was successfully located, the program MUST run parse and validation passes on the file. Any diagnostics MUST be written to STDERR. The program MUST exit with a non-zero exit code if any errors were found.
+
+#### `eval`
+
+The `eval` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon eval <file>` will parse, validate, and evaluate the file, producing a lowered document representation.
+
+r[cli.subcommand.eval]
+The program MUST provide an `eval` subcommand for the root command which takes a single parameter describing a file path.
+
+r[cli.subcommand.eval.no-file]
+If the file path argument to the `eval` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
+
+r[cli.subcommand.eval.output]
+If a file was successfully located, the program MUST write a textual representation of the evaluated document to STDOUT. Any diagnostics MUST be written to STDERR.
+
+#### `merge`
+
+The `merge` subcommand is a subcommand of the root command; it takes one or more file paths and/or directory paths as parameters. When a directory is given, it is expanded to all files matching `*.gnomon` within that directory (non-recursive, sorted lexicographically). The resulting files are parsed, evaluated, and merged into a single calendar object.
+
+r[cli.subcommand.merge]
+The program MUST provide a `merge` subcommand for the root command which takes one or more parameters describing file or directory paths.
+
+r[cli.subcommand.merge.directory]
+If a parameter to the `merge` subcommand is a directory, the program MUST expand it to all files matching `*.gnomon` within that directory, sorted lexicographically. The expansion MUST NOT be recursive.
+
+r[cli.subcommand.merge.output]
+The program MUST write a textual representation of the merged calendar to STDOUT. Any diagnostics MUST be written to STDERR.
+
 #### Reserved Subcommands
 
 We reserve some identifiers for future use as subcommands.
 
-> r[cli.subcommand.reserved]
+> r[cli.subcommand.reserved+2]
 > The following identifiers MUST NOT be used by any implementation:
 >
 > - `about`
-> - `check`
 > - `clean`
 > - `compile`
 > - `daemon`
