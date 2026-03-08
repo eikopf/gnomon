@@ -2,13 +2,13 @@
 
 ## I. Entirely Missing from the Spec
 
-### 1. The Gnomon Data Model (partially addressed)
+### 1. The Gnomon Data Model (mostly addressed)
 
-Gnomon compiles to its own calendar object first; iCalendar and JSCalendar are downstream export targets, not the primary data model. The data model section has been added to the spec (`r[model.*]`), defining the calendar shape (mandatory `uid`, `entries` list with `type` discriminator), name uniqueness, UUIDv5 derivation, and include resolution semantics. The implementation (`Calendar<'db>` in `types.rs`) still needs to be updated to match the spec — notably, the current separate `events`/`tasks` vectors should become a single `entries` list, and the `type` field needs to be inserted during lowering.
+Gnomon compiles to its own calendar object first; iCalendar and JSCalendar are downstream export targets, not the primary data model. The data model section has been added to the spec (`r[model.*]`), defining the calendar shape (mandatory `uid`, `entries` list with `type` discriminator), name uniqueness, UUIDv5 derivation, and include resolution semantics. The implementation has been updated to match: events and tasks are now stored in a single `entries` list with a `type` field inserted during lowering. Shape-checking validates the calendar and entry records against the spec's type definitions. What remains is implementing UUIDv5 derivation for entries that omit an explicit `uid`.
 
 ### 2. Recurrence Rule Evaluation (partially addressed)
 
-The spec explicitly marks this as `TODO: describe the evaluation semantics of recurrence rules`. The evaluation semantics themselves are well-defined by RFC 5545 (and JSCalendar inherits them directly), so the question is not *what* the semantics should be but *when and how* untyped nested records become typed domain objects. Shape-checking has now been specified (`r[model.shape.*]`) as the mechanism for validating records against their type definitions, including recurrence rules. The shape-checking pass is error-resilient, recursive, and preserves open records. What remains is the actual recurrence rule *evaluation* (expanding a rule into occurrences) and the treatment of `by_day` and similar fields as sets rather than lists.
+The spec explicitly marks this as `TODO: describe the evaluation semantics of recurrence rules`. The evaluation semantics themselves are well-defined by RFC 5545 (and JSCalendar inherits them directly), so the question is not *what* the semantics should be but *when and how* untyped nested records become typed domain objects. Shape-checking has now been specified (`r[model.shape.*]`) and implemented as the mechanism for validating records against their type definitions, including recurrence rules. The shape-checking pass is error-resilient, recursive, and preserves open records. What remains is the actual recurrence rule *evaluation* (expanding a rule into occurrences) and the treatment of `by_day` and similar fields as sets rather than lists.
 
 ### 3. Multi-file Merge Semantics (important, evolving)
 
@@ -30,9 +30,9 @@ The reserved subcommand `query` hints at this. A calendar language without the a
 
 The syntax parses `include "path/or/url"`, and lowering distinguishes paths from URIs, but the spec defines no resolution behavior. The original design intended `include` exclusively for foreign files (`.ics`, `.json`/JSCalendar). With an evaluation semantics (#3), Gnomon also needs a way to reference other Gnomon files — but this is a semantically different operation: foreign inclusion is data import (parse an opaque blob into the data model), while Gnomon-to-Gnomon reference is module composition (evaluate and bring definitions into scope). These have different error modes and composition rules. Open question: retain `include` for foreign data and use a different keyword (`import`, `use`, `from`, etc.) for Gnomon sources, or use a single keyword for both? The answer depends on what evaluation semantics look like — if Gnomon files become module-like, the distinction is natural; if they're more like fragments, it's weaker. The boundary also blurs for hybrid cases (Gnomon blocks in Markdown).
 
-### 7. Calendar Declaration (partially addressed)
+### 7. Calendar Declaration (mostly addressed)
 
-The calendar declaration's primary purpose — defining the root UID for UUIDv5 derivation — is now specified in the data model section (`r[model.calendar.uid]`, `r[model.calendar.uid.derivation]`). The `uid` field is the sole mandatory field; all other metadata fields (title, description, time_zone, color, etc.) are optional and the calendar record is open. The implementation still needs to enforce the `uid` requirement during reification and implement UUIDv5 derivation.
+The calendar declaration's primary purpose — defining the root UID for UUIDv5 derivation — is now specified in the data model section (`r[model.calendar.uid]`, `r[model.calendar.uid.derivation]`). The `uid` field is the sole mandatory field; all other metadata fields (title, description, time_zone, color, etc.) are optional and the calendar record is open. The implementation enforces the `uid` requirement via shape-checking. What remains is implementing UUIDv5 derivation for entries.
 
 ---
 
@@ -46,17 +46,16 @@ Both are listed as weak keywords with no grammar production or semantic rule. `l
 
 ## Prioritized Recommendations
 
-**Near-term (requires design work):**
-1. Align implementation with data model spec — unified `entries` list, `type` field insertion, `uid` enforcement, UUIDv5 derivation (#1, #7)
-2. Implement shape-checking pass using `structible`-backed typed structs (#2)
+**Near-term (concrete next steps):**
+1. Implement UUIDv5 derivation for entries missing explicit `uid` (#1, #7)
+2. Implement recurrence rule evaluation — expanding a rule into occurrences (#2)
 
 **Longer-term (depends on evaluation semantics):**
-4. Design evaluation semantics for composition/merge (#3)
-5. Design binding semantics and data model placement (#5)
-6. Design include/import resolution and keyword split (#6)
-7. Specify recurrence rule evaluation (follows from #3, per RFC 5545) (#2)
-8. Design query system (#4)
-9. Clarify or remove `override` and `local` keywords (#8)
+3. Design evaluation semantics for composition/merge (#3)
+4. Design binding semantics and data model placement (#5)
+5. Design include/import resolution and keyword split (#6)
+6. Design query system (#4)
+7. Clarify or remove `override` and `local` keywords (#8)
 
 ---
 
@@ -74,7 +73,7 @@ The following issues from the original analysis have been fully or partially add
 - **Common record field scope** — stated explicitly in spec
 - **`check`/`eval`/`merge` CLI subcommands** — specified and `check` unreserved
 - **"Local datetime" undefined** — defined via `r[lexer.datetime.local]`
-- **Gnomon data model** — specified via `r[model.*]` requirements (calendar shape, entries, names, includes); implementation alignment pending
-- **Calendar declaration fields and UUIDv5** — specified via `r[model.calendar.uid]` and `r[model.calendar.uid.derivation]`; implementation pending
+- **Gnomon data model** — specified via `r[model.*]` requirements; implementation aligned (unified `entries` list, `type` field insertion during lowering)
+- **Calendar declaration fields and UUIDv5** — specified via `r[model.calendar.uid]` and `r[model.calendar.uid.derivation]`; `uid` enforced via shape-checking; UUIDv5 derivation pending
 - **Include resolution semantics** — basic resolution shape and dissolve behavior specified via `r[model.include.*]`; include-scoped bindings specified via `r[model.include.bindings]`
-- **Reification pass** — specified as shape-checking via `r[model.shape.*]`; error-resilient, recursive, preserves open records; implementation pending
+- **Reification pass / shape-checking** — specified via `r[model.shape.*]` and implemented in `eval/shape.rs`; validates calendar, event, task, and all nested record types; error-resilient, recursive, preserves open records; wired into merge pipeline
