@@ -23,33 +23,6 @@ mod tests {
     }
 
     #[test]
-    fn inclusion_decl_accessors() {
-        let p = parse(r#"include "holidays.gnomon""#);
-        let file = p.tree();
-        let decl = file.decls().next().unwrap();
-        match decl {
-            Decl::InclusionDecl(inc) => {
-                assert_eq!(inc.path().unwrap().text(), "\"holidays.gnomon\"");
-            }
-            _ => panic!("expected InclusionDecl"),
-        }
-    }
-
-    #[test]
-    fn binding_decl_accessors() {
-        let p = parse(r#"bind @cal.holidays "holidays.gnomon""#);
-        let file = p.tree();
-        let decl = file.decls().next().unwrap();
-        match decl {
-            Decl::BindingDecl(bind) => {
-                assert_eq!(bind.name().unwrap().text(), "@cal.holidays");
-                assert_eq!(bind.path().unwrap().text(), "\"holidays.gnomon\"");
-            }
-            _ => panic!("expected BindingDecl"),
-        }
-    }
-
-    #[test]
     fn calendar_decl_accessors() {
         let p = parse(r#"calendar { uid: "test" }"#);
         let file = p.tree();
@@ -301,17 +274,15 @@ mod tests {
     #[test]
     fn multiple_decls_enum_dispatch() {
         let p = parse(
-            r#"include "base.gnomon"
-calendar { uid: "cal" }
+            r#"calendar { uid: "cal" }
 event @meeting 2026-03-01T14:30 1h "Standup"
 task @cleanup "Clean""#,
         );
         let file = p.tree();
         let decls: Vec<_> = file.decls().collect();
-        assert_eq!(decls.len(), 4);
-        assert!(matches!(decls[0], Decl::InclusionDecl(_)));
-        assert!(matches!(decls[1], Decl::CalendarDecl(_)));
-        assert!(matches!(decls[2], Decl::EventDecl(_)));
-        assert!(matches!(decls[3], Decl::TaskDecl(_)));
+        assert_eq!(decls.len(), 3);
+        assert!(matches!(decls[0], Decl::CalendarDecl(_)));
+        assert!(matches!(decls[1], Decl::EventDecl(_)));
+        assert!(matches!(decls[2], Decl::TaskDecl(_)));
     }
 }

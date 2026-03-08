@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use gnomon_parser::ast;
 use gnomon_parser::SyntaxKind;
@@ -6,9 +6,7 @@ use gnomon_parser::SyntaxKind;
 use super::desugar;
 use super::interned::{DeclId, DeclKind, FieldName, FieldPath};
 use super::literals;
-use super::types::{
-    Blame, Blamed, Document, IncludeRef, Name, Record, ReifiedDecl, Uid, Value,
-};
+use super::types::{Blame, Blamed, Record, Value};
 use crate::input::SourceFile;
 use crate::queries::Diagnostic;
 
@@ -16,123 +14,127 @@ pub struct LowerCtx<'db> {
     db: &'db dyn crate::Db,
     source: SourceFile,
     pub diagnostics: Vec<Diagnostic>,
+    /// Environment for let bindings (name, value). Scanned back-to-front for shadowing.
+    env: Vec<(String, Value<'db>)>,
+    /// Stack of file paths currently being evaluated, for cycle detection.
+    import_stack: Vec<PathBuf>,
 }
 
 impl<'db> LowerCtx<'db> {
     pub fn new(db: &'db dyn crate::Db, source: SourceFile) -> Self {
+        let path = source.path(db).clone();
         Self {
             db,
             source,
             diagnostics: Vec::new(),
+            env: Vec::new(),
+            import_stack: vec![path],
         }
     }
 
-    pub fn lower_document(&mut self, file: &ast::SourceFile) -> Document<'db> {
-        let mut bindings: BTreeMap<Name, Blamed<'db, Uid>> = BTreeMap::new();
-        let mut decls: Vec<Blamed<'db, ReifiedDecl<'db>>> = Vec::new();
+    pub(super) fn with_import_stack(
+        db: &'db dyn crate::Db,
+        source: SourceFile,
+        import_stack: Vec<PathBuf>,
+    ) -> Self {
+        Self {
+            db,
+            source,
+            diagnostics: Vec::new(),
+            env: Vec::new(),
+            import_stack,
+        }
+    }
 
-        for (index, decl) in file.decls().enumerate() {
-            match decl {
-                ast::Decl::InclusionDecl(inc) => {
-                    let decl_id = self.make_decl_id(index, DeclKind::Include);
-                    if let Some(reified) = self.lower_inclusion(&inc, decl_id) {
-                        let blame = self.root_blame(decl_id);
-                        decls.push(Blamed {
-                            value: reified,
-                            blame,
-                        });
-                    }
-                }
-                ast::Decl::BindingDecl(bind) => {
-                    let decl_id = self.make_decl_id(index, DeclKind::Bind);
-                    if let Some((name, blamed_uid)) = self.lower_binding(&bind, decl_id) {
-                        bindings.insert(name, blamed_uid);
-                    }
-                }
-                ast::Decl::CalendarDecl(cal) => {
-                    let decl_id = self.make_decl_id(index, DeclKind::Calendar);
-                    let blame = self.root_blame(decl_id);
-                    let record = match cal.body() {
-                        Some(body) => self.lower_record(&body, decl_id, &FieldPath::root()),
-                        None => Record::new(),
-                    };
-                    decls.push(Blamed {
-                        value: ReifiedDecl::Calendar(record),
-                        blame,
-                    });
-                }
-                // r[impl model.entry.type.infer]
-                ast::Decl::EventDecl(ev) => {
-                    let decl_id = self.make_decl_id(index, DeclKind::Event);
-                    let blame = self.root_blame(decl_id);
-                    let mut record = self.lower_event(&ev, decl_id);
-                    self.insert_field(
-                        &mut record,
-                        "type",
-                        Value::String("event".into()),
-                        decl_id,
-                        &FieldPath::root(),
-                    );
-                    decls.push(Blamed {
-                        value: ReifiedDecl::Entry(record),
-                        blame,
-                    });
-                }
-                // r[impl model.entry.type.infer]
-                ast::Decl::TaskDecl(task) => {
-                    let decl_id = self.make_decl_id(index, DeclKind::Task);
-                    let blame = self.root_blame(decl_id);
-                    let mut record = self.lower_task(&task, decl_id);
-                    self.insert_field(
-                        &mut record,
-                        "type",
-                        Value::String("task".into()),
-                        decl_id,
-                        &FieldPath::root(),
-                    );
-                    decls.push(Blamed {
-                        value: ReifiedDecl::Entry(record),
-                        blame,
-                    });
-                }
+    /// Lower a source file into a Value.
+    ///
+    /// File structure: optional `let` bindings, then either declarations or an expression body.
+    pub fn lower_source_file(&mut self, file: &ast::SourceFile) -> Value<'db> {
+        // 1. Process file-level let bindings (pushed into env).
+        for binding in file.let_bindings() {
+            if let Some(name_tok) = binding.name() {
+                let name = name_tok.text().to_string();
+                let decl_id = self.make_decl_id(0, DeclKind::Expr);
+                let value = match binding.value_expr() {
+                    Some(expr) => self.lower_top_expr(&expr, decl_id, &FieldPath::root()),
+                    None => Value::Undefined,
+                };
+                self.env.push((name, value));
             }
         }
 
-        Document { bindings, decls }
-    }
-
-    fn lower_inclusion(
-        &mut self,
-        inc: &ast::InclusionDecl,
-        _decl_id: DeclId<'db>,
-    ) -> Option<ReifiedDecl<'db>> {
-        let path_token = inc.path()?;
-        let path_str = literals::eval_string(path_token.text());
-
-        // Detect URI vs local path: if it contains "://" treat as URI.
-        let target = if path_str.contains("://") {
-            IncludeRef::Uri(path_str)
+        // 2. Evaluate body
+        let decls: Vec<_> = file.decls().collect();
+        if !decls.is_empty() {
+            // Declaration mode
+            if decls.len() == 1 {
+                self.lower_decl_to_value(&decls[0], 0)
+            } else {
+                let items: Vec<_> = decls
+                    .iter()
+                    .enumerate()
+                    .map(|(i, decl)| {
+                        let value = self.lower_decl_to_value(decl, i);
+                        let did = self.make_decl_id(i, match decl {
+                            ast::Decl::CalendarDecl(_) => DeclKind::Calendar,
+                            ast::Decl::EventDecl(_) => DeclKind::Event,
+                            ast::Decl::TaskDecl(_) => DeclKind::Task,
+                        });
+                        Blamed {
+                            value,
+                            blame: self.root_blame(did),
+                        }
+                    })
+                    .collect();
+                Value::List(items)
+            }
+        } else if let Some(body) = file.body_expr() {
+            let decl_id = self.make_decl_id(0, DeclKind::Expr);
+            self.lower_top_expr(&body, decl_id, &FieldPath::root())
         } else {
-            IncludeRef::Path(path_str.into())
-        };
-
-        Some(ReifiedDecl::Include {
-            target,
-            content: Vec::new(),
-        })
+            Value::Undefined
+        }
     }
 
-    fn lower_binding(
-        &mut self,
-        bind: &ast::BindingDecl,
-        decl_id: DeclId<'db>,
-    ) -> Option<(Name, Blamed<'db, Uid>)> {
-        let name_token = bind.name()?;
-        let path_token = bind.path()?;
-        let name = literals::eval_name(name_token.text());
-        let uid = literals::eval_string(path_token.text());
-        let blame = self.root_blame(decl_id);
-        Some((name, Blamed { value: uid, blame }))
+    /// Lower a declaration to a Value.
+    fn lower_decl_to_value(&mut self, decl: &ast::Decl, index: usize) -> Value<'db> {
+        match decl {
+            ast::Decl::CalendarDecl(cal) => {
+                let decl_id = self.make_decl_id(index, DeclKind::Calendar);
+                match cal.body() {
+                    Some(body) => {
+                        Value::Record(self.lower_record(&body, decl_id, &FieldPath::root()))
+                    }
+                    None => Value::Record(Record::new()),
+                }
+            }
+            // r[impl model.entry.type.infer]
+            ast::Decl::EventDecl(ev) => {
+                let decl_id = self.make_decl_id(index, DeclKind::Event);
+                let mut record = self.lower_event(ev, decl_id);
+                self.insert_field(
+                    &mut record,
+                    "type",
+                    Value::String("event".into()),
+                    decl_id,
+                    &FieldPath::root(),
+                );
+                Value::Record(record)
+            }
+            // r[impl model.entry.type.infer]
+            ast::Decl::TaskDecl(task) => {
+                let decl_id = self.make_decl_id(index, DeclKind::Task);
+                let mut record = self.lower_task(task, decl_id);
+                self.insert_field(
+                    &mut record,
+                    "type",
+                    Value::String("task".into()),
+                    decl_id,
+                    &FieldPath::root(),
+                );
+                Value::Record(record)
+            }
+        }
     }
 
     fn lower_event(&mut self, ev: &ast::EventDecl, decl_id: DeclId<'db>) -> Record<'db> {
@@ -179,7 +181,6 @@ impl<'db> LowerCtx<'db> {
                 );
             }
 
-            // Merge body fields if present.
             if let Some(body) = ev.body() {
                 let body_record = self.lower_record(&body, decl_id, &base_path);
                 for (name, value) in body_record.0 {
@@ -189,7 +190,6 @@ impl<'db> LowerCtx<'db> {
 
             record
         } else {
-            // Prefix form: event { ... }
             match ev.body() {
                 Some(body) => self.lower_record(&body, decl_id, &base_path),
                 None => Record::new(),
@@ -201,7 +201,6 @@ impl<'db> LowerCtx<'db> {
         let base_path = FieldPath::root();
 
         if task.name().is_some() {
-            // Short form: task @name [datetime] ["title"] [{ body }]
             let mut record = Record::new();
 
             if let Some(name_token) = task.name() {
@@ -232,7 +231,6 @@ impl<'db> LowerCtx<'db> {
                 );
             }
 
-            // Merge body fields if present.
             if let Some(body) = task.body() {
                 let body_record = self.lower_record(&body, decl_id, &base_path);
                 for (name, value) in body_record.0 {
@@ -242,7 +240,6 @@ impl<'db> LowerCtx<'db> {
 
             record
         } else {
-            // Prefix form: task { ... }
             match task.body() {
                 Some(body) => self.lower_record(&body, decl_id, &base_path),
                 None => Record::new(),
@@ -269,31 +266,180 @@ impl<'db> LowerCtx<'db> {
             let field_path = base_path.field(field_name);
             let blame = self.make_blame(decl_id, &field_path);
 
-            if let Some(value) = self.lower_expr(&value_expr, decl_id, &field_path) {
-                result.insert(
-                    field_name,
-                    Blamed { value, blame },
-                );
-            }
+            let value = self.lower_top_expr(&value_expr, decl_id, &field_path);
+            result.insert(field_name, Blamed { value, blame });
         }
         result
     }
 
-    fn lower_expr(
+    /// Lower a top-level expression (unified dispatch for all expression forms).
+    fn lower_top_expr(
         &mut self,
         expr: &ast::Expr,
         decl_id: DeclId<'db>,
         path: &FieldPath<'db>,
-    ) -> Option<Value<'db>> {
+    ) -> Value<'db> {
         match expr {
-            ast::Expr::LiteralExpr(lit) => self.lower_literal(lit, decl_id, path),
-            ast::Expr::RecordExpr(rec) => {
-                Some(Value::Record(self.lower_record(rec, decl_id, path)))
+            ast::Expr::LiteralExpr(lit) => {
+                self.lower_literal(lit, decl_id, path)
+                    .unwrap_or(Value::Undefined)
             }
-            ast::Expr::ListExpr(list) => Some(self.lower_list(list, decl_id, path)),
+            ast::Expr::RecordExpr(rec) => {
+                Value::Record(self.lower_record(rec, decl_id, path))
+            }
+            ast::Expr::ListExpr(list) => self.lower_list(list, decl_id, path),
             ast::Expr::EveryExpr(every) => {
                 let blame = self.make_blame(decl_id, path);
                 desugar::desugar_every(self.db, every, &blame)
+                    .unwrap_or(Value::Undefined)
+            }
+            ast::Expr::ParenExpr(paren) => {
+                match paren.inner() {
+                    Some(inner) => self.lower_top_expr(&inner, decl_id, path),
+                    None => Value::Undefined,
+                }
+            }
+            ast::Expr::IdentExpr(ident) => {
+                if let Some(name_tok) = ident.name() {
+                    let name = name_tok.text();
+                    // Scan env back-to-front for shadowing
+                    for (k, v) in self.env.iter().rev() {
+                        if k == name {
+                            return v.clone();
+                        }
+                    }
+                    self.emit_diagnostic(
+                        name_tok.text_range(),
+                        format!("undefined variable `{name}`"),
+                    );
+                    Value::Undefined
+                } else {
+                    Value::Undefined
+                }
+            }
+            ast::Expr::LetExpr(let_expr) => {
+                let name = let_expr.name().map(|t| t.text().to_string()).unwrap_or_default();
+                let bound_value = match let_expr.bound_expr() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => Value::Undefined,
+                };
+                self.env.push((name, bound_value));
+                let body_value = match let_expr.body_expr() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => Value::Undefined,
+                };
+                self.env.pop();
+                body_value
+            }
+            ast::Expr::BinaryExpr(bin) => {
+                let lhs = match bin.lhs() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => Value::Undefined,
+                };
+                let rhs = match bin.rhs() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => Value::Undefined,
+                };
+                let op = bin.op().map(|t| t.kind());
+                match op {
+                    Some(SyntaxKind::PLUS_PLUS) => {
+                        // List concatenation
+                        match (lhs, rhs) {
+                            (Value::List(mut a), Value::List(b)) => {
+                                a.extend(b);
+                                Value::List(a)
+                            }
+                            (l, r) => {
+                                if let Some(op_tok) = bin.op() {
+                                    self.emit_diagnostic(
+                                        op_tok.text_range(),
+                                        format!(
+                                            "++ requires two lists, got {} and {}",
+                                            value_type_name(&l),
+                                            value_type_name(&r)
+                                        ),
+                                    );
+                                }
+                                Value::Undefined
+                            }
+                        }
+                    }
+                    Some(SyntaxKind::SLASH_SLASH) => {
+                        // Record merge (right wins)
+                        match (lhs, rhs) {
+                            (Value::Record(mut a), Value::Record(b)) => {
+                                for (k, v) in b.0 {
+                                    a.0.insert(k, v);
+                                }
+                                Value::Record(a)
+                            }
+                            (l, r) => {
+                                if let Some(op_tok) = bin.op() {
+                                    self.emit_diagnostic(
+                                        op_tok.text_range(),
+                                        format!(
+                                            "// requires two records, got {} and {}",
+                                            value_type_name(&l),
+                                            value_type_name(&r)
+                                        ),
+                                    );
+                                }
+                                Value::Undefined
+                            }
+                        }
+                    }
+                    Some(SyntaxKind::EQ_EQ) => {
+                        Value::Bool(values_equal(&lhs, &rhs))
+                    }
+                    Some(SyntaxKind::BANG_EQ) => {
+                        Value::Bool(!values_equal(&lhs, &rhs))
+                    }
+                    _ => Value::Undefined,
+                }
+            }
+            ast::Expr::FieldAccessExpr(fa) => {
+                let target = match fa.target() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => return Value::Undefined,
+                };
+                let field_name_str = match fa.field_name() {
+                    Some(t) => t.text().to_string(),
+                    None => return Value::Undefined,
+                };
+                match target {
+                    Value::Record(r) => {
+                        let key = self.intern(&field_name_str);
+                        r.get(&key).map(|b| b.value.clone()).unwrap_or(Value::Undefined)
+                    }
+                    _ => {
+                        if let Some(name_tok) = fa.field_name() {
+                            self.emit_diagnostic(
+                                name_tok.text_range(),
+                                format!("cannot access field `{field_name_str}` on non-record"),
+                            );
+                        }
+                        Value::Undefined
+                    }
+                }
+            }
+            ast::Expr::IndexExpr(idx) => {
+                let target = match idx.target() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => return Value::Undefined,
+                };
+                let index_val = match idx.index_expr() {
+                    Some(e) => self.lower_top_expr(&e, decl_id, path),
+                    None => return Value::Undefined,
+                };
+                match (target, index_val) {
+                    (Value::List(items), Value::Integer(i)) => {
+                        items.get(i as usize).map(|b| b.value.clone()).unwrap_or(Value::Undefined)
+                    }
+                    _ => Value::Undefined,
+                }
+            }
+            ast::Expr::ImportExpr(import) => {
+                self.lower_import(import)
             }
         }
     }
@@ -347,6 +493,9 @@ impl<'db> LowerCtx<'db> {
             SyntaxKind::ATOM_LITERAL => {
                 Some(Value::String(literals::eval_atom(text)))
             }
+            SyntaxKind::PATH_LITERAL => {
+                Some(Value::Path(text.to_string()))
+            }
             _ => {
                 self.emit_diagnostic(
                     token.text_range(),
@@ -367,9 +516,8 @@ impl<'db> LowerCtx<'db> {
         for (i, elem) in list.elements().enumerate() {
             let elem_path = base_path.index(i);
             let blame = self.make_blame(decl_id, &elem_path);
-            if let Some(value) = self.lower_expr(&elem, decl_id, &elem_path) {
-                items.push(Blamed { value, blame });
-            }
+            let value = self.lower_top_expr(&elem, decl_id, &elem_path);
+            items.push(Blamed { value, blame });
         }
         Value::List(items)
     }
@@ -389,6 +537,87 @@ impl<'db> LowerCtx<'db> {
             let time_token = dt.time()?;
             desugar::desugar_date_and_time(self.db, date_token.text(), time_token.text(), &blame)
         }
+    }
+
+    // ── Import ───────────────────────────────────────────────────
+
+    // r[impl expr.import.eval]
+    fn lower_import(&mut self, import: &ast::ImportExpr) -> Value<'db> {
+        let source_token = match import.source() {
+            Some(t) => t,
+            None => return Value::Undefined,
+        };
+
+        // Check format specifier — only gnomon supported for now.
+        if let Some(fmt_tok) = import.format() {
+            if fmt_tok.kind() != SyntaxKind::GNOMON_KW {
+                self.emit_diagnostic(
+                    fmt_tok.text_range(),
+                    format!("import format `{}` is not yet supported", fmt_tok.text()),
+                );
+                return Value::Undefined;
+            }
+        }
+
+        let path_str = match source_token.kind() {
+            SyntaxKind::STRING_LITERAL => literals::eval_string(source_token.text()),
+            SyntaxKind::PATH_LITERAL => source_token.text().to_string(),
+            SyntaxKind::URI_LITERAL => {
+                self.emit_diagnostic(
+                    source_token.text_range(),
+                    "URI imports are not yet supported".into(),
+                );
+                return Value::Undefined;
+            }
+            _ => return Value::Undefined,
+        };
+
+        // r[impl lexer.path.relative]
+        // Resolve relative to the directory containing the importing file.
+        let base_dir = self
+            .source
+            .path(self.db)
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .to_path_buf();
+        let target_path = base_dir.join(&path_str);
+
+        // Normalize the path for cycle detection (canonicalize if possible,
+        // otherwise use the joined path as-is).
+        let target_path = target_path.canonicalize().unwrap_or(target_path);
+
+        // r[impl expr.import.cycle]
+        if self.import_stack.contains(&target_path) {
+            self.emit_diagnostic(
+                source_token.text_range(),
+                format!("circular import detected: {}", target_path.display()),
+            );
+            return Value::Undefined;
+        }
+
+        // Read the target file.
+        let content = match std::fs::read_to_string(&target_path) {
+            Ok(c) => c,
+            Err(e) => {
+                self.emit_diagnostic(
+                    source_token.text_range(),
+                    format!("cannot read import `{}`: {e}", target_path.display()),
+                );
+                return Value::Undefined;
+            }
+        };
+
+        // Create SourceFile input and evaluate.
+        let target_source = SourceFile::new(self.db, target_path.clone(), content);
+        let mut new_stack = self.import_stack.clone();
+        new_stack.push(target_path);
+
+        let result = super::evaluate_with_import_stack(self.db, target_source, new_stack);
+
+        // Collect diagnostics from the imported file.
+        self.diagnostics.extend(result.diagnostics);
+
+        result.value
     }
 
     // ── Helpers ──────────────────────────────────────────────────
@@ -435,5 +664,24 @@ impl<'db> LowerCtx<'db> {
             severity: crate::queries::Severity::Error,
             message,
         });
+    }
+}
+
+/// Structural equality for values (used by == and !=).
+fn values_equal(a: &Value, b: &Value) -> bool {
+    a == b
+}
+
+fn value_type_name(v: &Value) -> &'static str {
+    match v {
+        Value::String(_) => "string",
+        Value::Integer(_) => "integer",
+        Value::SignedInteger(_) => "signed integer",
+        Value::Bool(_) => "bool",
+        Value::Undefined => "undefined",
+        Value::Name(_) => "name",
+        Value::Record(_) => "record",
+        Value::List(_) => "list",
+        Value::Path(_) => "path",
     }
 }

@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use rowan::ast::AstNode;
 
-use crate::ast::{self, Decl, EventDecl, RecordExpr, TaskDecl};
+use crate::ast::{self, EventDecl, RecordExpr, TaskDecl};
 use crate::syntax_kind::{SyntaxKind, SyntaxNode};
 
 /// A syntactic validation error with a byte range and message.
@@ -65,14 +65,13 @@ pub fn validate_syntax(root: &SyntaxNode) -> Vec<SyntaxError> {
 
     for decl in file.decls() {
         match decl {
-            Decl::EventDecl(ev) => check_event_decl(&ev, &mut errors),
-            Decl::TaskDecl(task) => check_task_decl(&task, &mut errors),
-            Decl::CalendarDecl(cal) => {
+            ast::Decl::EventDecl(ev) => check_event_decl(&ev, &mut errors),
+            ast::Decl::TaskDecl(task) => check_task_decl(&task, &mut errors),
+            ast::Decl::CalendarDecl(cal) => {
                 if let Some(body) = cal.body() {
                     check_duplicate_keys(&body, &mut errors);
                 }
             }
-            _ => {}
         }
     }
 

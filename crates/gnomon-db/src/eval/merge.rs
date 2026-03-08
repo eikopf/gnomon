@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::interned::FieldName;
-use super::types::{Calendar, ReifiedDecl, Value};
+use super::types::{Blamed, Calendar, Record, Value};
 use crate::input::SourceFile;
 use crate::queries::{Diagnostic, Severity};
 
@@ -31,6 +31,8 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
 
     let name_key = FieldName::new(db, "name".to_string());
 
+    let type_key = FieldName::new(db, "type".to_string());
+
     for &source in sources {
         let result = crate::evaluate(db, source);
 
@@ -47,58 +49,35 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
             diagnostics.push(diag);
         }
 
-        // Process declarations.
-        for blamed_decl in &result.document.decls {
-            match &blamed_decl.value {
-                ReifiedDecl::Calendar(record) => {
-                    calendar_sources.push(source);
-                    if calendar_sources.len() == 1 {
-                        calendar.properties = record.clone();
-                    }
-                }
-                // r[impl model.calendar.entries]
-                ReifiedDecl::Entry(record) => {
-                    check_name_collision(
-                        db,
-                        record,
-                        &name_key,
-                        source,
-                        &mut seen_names,
-                        &mut diagnostics,
-                        &mut has_errors,
-                    );
-                    calendar.entries.push(super::types::Blamed {
-                        value: record.clone(),
-                        blame: blamed_decl.blame.clone(),
-                    });
-                }
+        // Flatten value into records.
+        let records = flatten_to_records(db, source, result.value);
 
-                ReifiedDecl::Include { target, .. } => {
-                    calendar.includes.push(super::types::Blamed {
-                        value: target.clone(),
-                        blame: blamed_decl.blame.clone(),
-                    });
-                }
-            }
-        }
+        for (record, blame) in records {
+            // Determine if this is an entry (has type: "event"|"task") or calendar.
+            let is_entry = record.get(&type_key).is_some_and(|v| {
+                matches!(&v.value, Value::String(s) if s == "event" || s == "task")
+            });
 
-        // Merge bindings, checking for collisions.
-        for (name, blamed_uid) in &result.document.bindings {
-            if let Some(existing) = calendar.bindings.get(name) {
-                let first_source = existing.blame.decl.source(db);
-                has_errors = true;
-                diagnostics.push(Diagnostic {
+            if is_entry {
+                check_name_collision(
+                    db,
+                    &record,
+                    &name_key,
                     source,
-                    range: rowan::TextRange::default(),
-                    severity: Severity::Error,
-                    message: format!(
-                        "binding @{} already defined in {}",
-                        name,
-                        first_source.path(db).display()
-                    ),
+                    &mut seen_names,
+                    &mut diagnostics,
+                    &mut has_errors,
+                );
+                calendar.entries.push(Blamed {
+                    value: record,
+                    blame,
                 });
             } else {
-                calendar.bindings.insert(name.clone(), blamed_uid.clone());
+                // Calendar
+                calendar_sources.push(source);
+                if calendar_sources.len() == 1 {
+                    calendar.properties = record;
+                }
             }
         }
     }
@@ -172,6 +151,48 @@ fn check_name_collision<'db>(
                 seen_names.insert(name.clone(), source);
             }
         }
+    }
+}
+
+/// Flatten a Value into a list of (Record, Blame) pairs for merge processing.
+/// A single record becomes a one-element list; a list is iterated.
+fn flatten_to_records<'db>(
+    db: &'db dyn crate::Db,
+    source: SourceFile,
+    value: Value<'db>,
+) -> Vec<(Record<'db>, super::types::Blame<'db>)> {
+    use super::interned::{DeclId, DeclKind, FieldPath};
+
+    let default_blame = || super::types::Blame {
+        decl: DeclId::new(db, source, 0, DeclKind::Calendar),
+        path: FieldPath::root(),
+    };
+
+    match value {
+        Value::Record(r) => {
+            let blame = r
+                .0
+                .values()
+                .next()
+                .map(|b| b.blame.clone())
+                .unwrap_or_else(default_blame);
+            vec![(r, blame)]
+        }
+        Value::List(items) => {
+            let mut result = Vec::new();
+            for item in items {
+                match item.value {
+                    Value::Record(r) => {
+                        result.push((r, item.blame));
+                    }
+                    _ => {
+                        // Non-record items in a list are skipped during merge
+                    }
+                }
+            }
+            result
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -249,8 +270,6 @@ mod tests {
                             type: "event",
                         },
                     ],
-                    includes: [],
-                    bindings: {},
                 }"#]],
         );
     }
@@ -330,8 +349,6 @@ mod tests {
                             type: "event",
                         },
                     ],
-                    includes: [],
-                    bindings: {},
                 }"#]],
         );
     }
@@ -404,27 +421,6 @@ mod tests {
     }
 
     #[test]
-    fn binding_collision() {
-        let db = Database::default();
-        let diags = merge_diagnostics(
-            &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    bind @cal.holidays "uid-a"
-                    "#,
-                ),
-                ("b.gnomon", r#"bind @cal.holidays "uid-b""#),
-            ],
-        );
-        assert!(diags
-            .iter()
-            .any(|d| d.contains("binding @cal.holidays already defined")));
-    }
-
-    #[test]
     fn empty_sources_error() {
         let db = Database::default();
         let sources: Vec<SourceFile> = vec![];
@@ -448,30 +444,6 @@ mod tests {
         );
         // Should have parse errors but merge continues.
         assert!(!diags.is_empty());
-    }
-
-    #[test]
-    fn includes_carried_through() {
-        let db = Database::default();
-        check_merge(
-            &db,
-            &[(
-                "a.gnomon",
-                r#"
-                calendar {}
-                include "holidays.ics"
-                "#,
-            )],
-            expect![[r#"
-                Calendar {
-                    properties: {},
-                    entries: [],
-                    includes: [
-                        "holidays.ics",
-                    ],
-                    bindings: {},
-                }"#]],
-        );
     }
 
     // ── Additional merge tests ──────────────────────────────────
@@ -531,64 +503,6 @@ mod tests {
                             type: "task",
                         },
                     ],
-                    includes: [],
-                    bindings: {},
-                }"#]],
-        );
-    }
-
-    #[test]
-    fn bindings_merged_across_files() {
-        let db = Database::default();
-        check_merge(
-            &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    bind @cal.work "work-uid"
-                    "#,
-                ),
-                ("b.gnomon", r#"bind @cal.personal "personal-uid""#),
-            ],
-            expect![[r#"
-                Calendar {
-                    properties: {},
-                    entries: [],
-                    includes: [],
-                    bindings: {
-                        cal.personal: "personal-uid",
-                        cal.work: "work-uid",
-                    },
-                }"#]],
-        );
-    }
-
-    #[test]
-    fn includes_merged_across_files() {
-        let db = Database::default();
-        check_merge(
-            &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    include "holidays.ics"
-                    "#,
-                ),
-                ("b.gnomon", r#"include "https://example.com/feed.ics""#),
-            ],
-            expect![[r#"
-                Calendar {
-                    properties: {},
-                    entries: [],
-                    includes: [
-                        "holidays.ics",
-                        "https://example.com/feed.ics",
-                    ],
-                    bindings: {},
                 }"#]],
         );
     }
@@ -602,17 +516,11 @@ mod tests {
                 ("a.gnomon", r#"calendar { uid: "main" }"#),
                 (
                     "b.gnomon",
-                    r#"
-                    event @standup 2026-03-01T09:00 30m "Standup"
-                    bind @cal.work "work-uid"
-                    "#,
+                    r#"event @standup 2026-03-01T09:00 30m "Standup""#,
                 ),
                 (
                     "c.gnomon",
-                    r#"
-                    task @review "Code review"
-                    include "holidays.ics"
-                    "#,
+                    r#"task @review "Code review""#,
                 ),
             ],
             expect![[r#"
@@ -651,12 +559,6 @@ mod tests {
                             type: "task",
                         },
                     ],
-                    includes: [
-                        "holidays.ics",
-                    ],
-                    bindings: {
-                        cal.work: "work-uid",
-                    },
                 }"#]],
         );
     }
@@ -767,30 +669,6 @@ mod tests {
     }
 
     #[test]
-    fn diagnostic_source_attribution_on_binding_collision() {
-        let db = Database::default();
-        let sources = vec![
-            make_source(
-                &db,
-                "a.gnomon",
-                r#"
-                calendar {}
-                bind @x "uid-a"
-                "#,
-            ),
-            make_source(&db, "b.gnomon", r#"bind @x "uid-b""#),
-        ];
-        let result = merge(&db, &sources);
-        let bind_diag = result
-            .diagnostics
-            .iter()
-            .find(|d| d.message.contains("binding @x"))
-            .expect("should have a binding collision diagnostic");
-        assert_eq!(bind_diag.source.path(&db).to_str().unwrap(), "b.gnomon");
-        assert!(bind_diag.message.contains("a.gnomon"));
-    }
-
-    #[test]
     fn multiple_errors_all_reported() {
         let db = Database::default();
         let sources = vec![
@@ -800,7 +678,6 @@ mod tests {
                 r#"
                 calendar {}
                 event @x 2026-01-01T09:00 1h "X"
-                bind @b "uid-1"
                 "#,
             ),
             make_source(
@@ -809,7 +686,6 @@ mod tests {
                 r#"
                 calendar {}
                 event @x 2026-02-01T10:00 1h "X again"
-                bind @b "uid-2"
                 "#,
             ),
         ];
@@ -822,10 +698,6 @@ mod tests {
         assert!(
             messages.iter().any(|m| m.contains("name @x")),
             "missing name collision error in: {messages:?}"
-        );
-        assert!(
-            messages.iter().any(|m| m.contains("binding @b")),
-            "missing binding collision error in: {messages:?}"
         );
     }
 
@@ -886,8 +758,6 @@ mod tests {
                         uid: "minimal",
                     },
                     entries: [],
-                    includes: [],
-                    bindings: {},
                 }"#]],
         );
     }
@@ -983,8 +853,6 @@ mod tests {
                             type: "event",
                         },
                     ],
-                    includes: [],
-                    bindings: {},
                 }"#]],
         );
     }

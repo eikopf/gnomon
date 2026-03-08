@@ -1049,6 +1049,7 @@ fn value_type_name(value: &Value<'_>) -> &'static str {
         Value::Name(_) => "name",
         Value::Record(_) => "record",
         Value::List(_) => "list",
+        Value::Path(_) => "path",
     }
 }
 

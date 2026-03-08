@@ -8,7 +8,7 @@ impl Parser {
         match self.current() {
             SyntaxKind::IDENT => matches!(
                 self.current_text(),
-                "include" | "bind" | "calendar" | "event" | "task"
+                "calendar" | "event" | "task"
             ),
             _ => false,
         }
@@ -18,8 +18,6 @@ impl Parser {
     /// Parse a single declaration.
     pub(super) fn parse_decl(&mut self) {
         match self.current_text() {
-            "include" => self.parse_inclusion(),
-            "bind" => self.parse_binding(),
             "calendar" => self.parse_calendar_decl(),
             "event" => self.parse_event_decl(),
             "task" => self.parse_task_decl(),
@@ -28,25 +26,6 @@ impl Parser {
                 self.error_recover();
             }
         }
-    }
-
-    // r[impl decl.syntax+2]
-    /// `include string-literal`
-    fn parse_inclusion(&mut self) {
-        self.start_node(SyntaxKind::INCLUSION_DECL);
-        self.bump_remap(SyntaxKind::INCLUDE_KW);
-        self.expect(SyntaxKind::STRING_LITERAL);
-        self.finish_node();
-    }
-
-    // r[impl decl.syntax+2]
-    /// `bind name string-literal`
-    fn parse_binding(&mut self) {
-        self.start_node(SyntaxKind::BINDING_DECL);
-        self.bump_remap(SyntaxKind::BIND_KW);
-        self.expect(SyntaxKind::NAME);
-        self.expect(SyntaxKind::STRING_LITERAL);
-        self.finish_node();
     }
 
     // r[impl decl.syntax+2]

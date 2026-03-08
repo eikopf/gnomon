@@ -69,8 +69,6 @@ macro_rules! ast_enum {
 // ── Node types ──────────────────────────────────────────────────────
 
 ast_node!(SourceFile, SOURCE_FILE);
-ast_node!(InclusionDecl, INCLUSION_DECL);
-ast_node!(BindingDecl, BINDING_DECL);
 ast_node!(CalendarDecl, CALENDAR_DECL);
 ast_node!(EventDecl, EVENT_DECL);
 ast_node!(TaskDecl, TASK_DECL);
@@ -78,21 +76,35 @@ ast_node!(LiteralExpr, LITERAL_EXPR);
 ast_node!(RecordExpr, RECORD_EXPR);
 ast_node!(ListExpr, LIST_EXPR);
 ast_node!(EveryExpr, EVERY_EXPR);
+ast_node!(ImportExpr, IMPORT_EXPR);
+ast_node!(LetExpr, LET_EXPR);
+ast_node!(LetBindingNode, LET_BINDING_NODE);
+ast_node!(BinaryExpr, BINARY_EXPR);
+ast_node!(FieldAccessExpr, FIELD_ACCESS_EXPR);
+ast_node!(IndexExpr, INDEX_EXPR);
+ast_node!(ParenExpr, PAREN_EXPR);
+ast_node!(IdentExpr, IDENT_EXPR);
 ast_node!(ShortSpan, SHORT_SPAN);
 ast_node!(ShortDt, SHORT_DT);
 ast_node!(Field, FIELD);
 
 // ── Enum types ──────────────────────────────────────────────────────
 
+ast_enum!(Decl, CalendarDecl, EventDecl, TaskDecl);
 ast_enum!(
-    Decl,
-    InclusionDecl,
-    BindingDecl,
-    CalendarDecl,
-    EventDecl,
-    TaskDecl
+    Expr,
+    LiteralExpr,
+    RecordExpr,
+    ListExpr,
+    EveryExpr,
+    ImportExpr,
+    LetExpr,
+    BinaryExpr,
+    FieldAccessExpr,
+    IndexExpr,
+    ParenExpr,
+    IdentExpr
 );
-ast_enum!(Expr, LiteralExpr, RecordExpr, ListExpr, EveryExpr);
 
 // ── Accessor methods ────────────────────────────────────────────────
 
@@ -100,21 +112,14 @@ impl SourceFile {
     pub fn decls(&self) -> impl Iterator<Item = Decl> {
         support::children(&self.syntax)
     }
-}
 
-impl InclusionDecl {
-    pub fn path(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::STRING_LITERAL)
-    }
-}
-
-impl BindingDecl {
-    pub fn name(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::NAME)
+    pub fn let_bindings(&self) -> impl Iterator<Item = LetBindingNode> {
+        support::children(&self.syntax)
     }
 
-    pub fn path(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::STRING_LITERAL)
+    /// The body expression (if file body is a single expression, not declarations).
+    pub fn body_expr(&self) -> Option<Expr> {
+        support::child(&self.syntax)
     }
 }
 
@@ -258,6 +263,129 @@ impl EveryExpr {
 
     pub fn times_kw(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::TIMES_KW)
+    }
+}
+
+impl ImportExpr {
+    /// The source token (PATH_LITERAL, URI_LITERAL, or STRING_LITERAL).
+    pub fn source(&self) -> Option<SyntaxToken> {
+        self.syntax
+            .children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::PATH_LITERAL
+                        | SyntaxKind::URI_LITERAL
+                        | SyntaxKind::STRING_LITERAL
+                )
+            })
+    }
+
+    /// The format keyword (GNOMON_KW, ICALENDAR_KW, or JSCALENDAR_KW), if present.
+    pub fn format(&self) -> Option<SyntaxToken> {
+        self.syntax
+            .children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::GNOMON_KW
+                        | SyntaxKind::ICALENDAR_KW
+                        | SyntaxKind::JSCALENDAR_KW
+                )
+            })
+    }
+}
+
+impl LetExpr {
+    pub fn name(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::IDENT)
+    }
+
+    /// The bound expression (first child Expr).
+    pub fn bound_expr(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+
+    /// The body expression (second child Expr).
+    pub fn body_expr(&self) -> Option<Expr> {
+        support::children::<Expr>(&self.syntax).nth(1)
+    }
+}
+
+impl LetBindingNode {
+    pub fn name(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::IDENT)
+    }
+
+    pub fn value_expr(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+}
+
+impl BinaryExpr {
+    /// The left-hand side expression (first child Expr).
+    pub fn lhs(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+
+    /// The operator token (PLUS_PLUS, SLASH_SLASH, EQ_EQ, or BANG_EQ).
+    pub fn op(&self) -> Option<SyntaxToken> {
+        self.syntax
+            .children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::PLUS_PLUS
+                        | SyntaxKind::SLASH_SLASH
+                        | SyntaxKind::EQ_EQ
+                        | SyntaxKind::BANG_EQ
+                )
+            })
+    }
+
+    /// The right-hand side expression (second child Expr).
+    pub fn rhs(&self) -> Option<Expr> {
+        support::children::<Expr>(&self.syntax).nth(1)
+    }
+}
+
+impl FieldAccessExpr {
+    /// The target expression being accessed.
+    pub fn target(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+
+    /// The field name identifier.
+    pub fn field_name(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::IDENT)
+    }
+}
+
+impl IndexExpr {
+    /// The target expression being indexed.
+    pub fn target(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+
+    /// The index expression inside brackets.
+    pub fn index_expr(&self) -> Option<Expr> {
+        support::children::<Expr>(&self.syntax).nth(1)
+    }
+}
+
+impl ParenExpr {
+    /// The inner expression.
+    pub fn inner(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+}
+
+impl IdentExpr {
+    pub fn name(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::IDENT)
     }
 }
 

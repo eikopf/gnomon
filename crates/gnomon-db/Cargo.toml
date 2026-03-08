@@ -10,3 +10,4 @@ rowan = "0.16"
 
 [dev-dependencies]
 expect-test = "1"
+tempfile = "3"

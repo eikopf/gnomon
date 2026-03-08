@@ -104,54 +104,6 @@ task @cleanup "Clean up" {
         assert_eq!(text, preprocessed);
     }
 
-    // ── Inclusion ────────────────────────────────────────────────
-
-    // r[verify decl.syntax+2]
-    #[test]
-    fn parse_inclusion() {
-        check(
-            r#"include "holidays.gnomon""#,
-            expect![[r#"
-                SOURCE_FILE@0..25
-                  INCLUSION_DECL@0..25
-                    INCLUDE_KW@0..7 "include"
-                    WHITESPACE@7..8 " "
-                    STRING_LITERAL@8..25 "\"holidays.gnomon\""
-            "#]],
-        );
-    }
-
-    // r[verify decl.syntax+2]
-    #[test]
-    fn parse_inclusion_no_errors() {
-        check_no_errors(r#"include "holidays.gnomon""#);
-    }
-
-    // ── Binding ──────────────────────────────────────────────────
-
-    // r[verify decl.syntax+2]
-    #[test]
-    fn parse_binding() {
-        check(
-            r#"bind @cal.holidays "holidays.gnomon""#,
-            expect![[r#"
-                SOURCE_FILE@0..36
-                  BINDING_DECL@0..36
-                    BIND_KW@0..4 "bind"
-                    WHITESPACE@4..5 " "
-                    NAME@5..18 "@cal.holidays"
-                    WHITESPACE@18..19 " "
-                    STRING_LITERAL@19..36 "\"holidays.gnomon\""
-            "#]],
-        );
-    }
-
-    // r[verify decl.syntax+2]
-    #[test]
-    fn parse_binding_no_errors() {
-        check_no_errors(r#"bind @cal.holidays "holidays.gnomon""#);
-    }
-
     // ── Calendar ─────────────────────────────────────────────────
 
     // r[verify decl.syntax+2]

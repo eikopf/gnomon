@@ -210,6 +210,18 @@ impl Parser {
         self.builder.finish_node();
     }
 
+    /// Create a checkpoint at the current position (after skipping trivia).
+    /// Used by the Pratt parser to retroactively wrap a left-hand side.
+    fn checkpoint(&mut self) -> rowan::Checkpoint {
+        self.skip_trivia();
+        self.builder.checkpoint()
+    }
+
+    /// Start a node at a previously saved checkpoint.
+    fn start_node_at(&mut self, cp: rowan::Checkpoint, kind: SyntaxKind) {
+        self.builder.start_node_at(cp, kind.into());
+    }
+
     // ── Entry point ──────────────────────────────────────────────
 
     pub fn parse(mut self) -> (rowan::GreenNode, Vec<ParseError>) {
@@ -220,14 +232,52 @@ impl Parser {
     // r[impl syntax.start]
     fn parse_source_file(&mut self) {
         self.start_node_before_trivia(SyntaxKind::SOURCE_FILE);
-        while !self.at_eof() {
-            if self.at_decl_start() {
-                self.parse_decl();
+
+        let mut parsed_body = false;
+
+        // File-level let bindings or let-expression.
+        // Disambiguate: parse `let IDENT = expr`, then check if `in` follows.
+        // If `in` → let-expression (the body IS this expression).
+        // Otherwise → file-level let binding (no `in`), continue parsing.
+        while self.at_keyword("let") && !self.at_eof() {
+            let cp = self.checkpoint();
+            self.bump_remap(SyntaxKind::LET_KW);
+            self.expect(SyntaxKind::IDENT);
+            self.expect(SyntaxKind::EQUALS);
+            self.parse_expr();
+
+            if self.at_keyword("in") {
+                // This is a let-expression — wrap and parse body.
+                self.start_node_at(cp, SyntaxKind::LET_EXPR);
+                self.bump_remap(SyntaxKind::IN_KW);
+                self.parse_expr();
+                self.finish_node();
+                parsed_body = true;
+                break;
             } else {
-                self.error_at_current("expected declaration");
-                self.error_recover();
+                // File-level let binding (no `in`).
+                self.start_node_at(cp, SyntaxKind::LET_BINDING_NODE);
+                self.finish_node();
             }
         }
+
+        // Body: declarations or expression (unless already consumed by a let-expression)
+        if !parsed_body && !self.at_eof() {
+            if self.at_decl_start() || self.current() == SyntaxKind::ERROR {
+                // Declaration mode (also entered when leading errors precede decls)
+                while !self.at_eof() {
+                    if self.at_decl_start() {
+                        self.parse_decl();
+                    } else {
+                        self.error_at_current("expected declaration");
+                        self.error_recover();
+                    }
+                }
+            } else {
+                self.parse_expr();
+            }
+        }
+
         // Consume any trailing trivia
         self.skip_trivia();
         self.finish_node();

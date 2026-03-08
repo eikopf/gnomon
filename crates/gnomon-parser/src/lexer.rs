@@ -32,16 +32,32 @@ enum LogosToken {
     LBracket,
     #[token("]")]
     RBracket,
+    #[token("(")]
+    LParen,
+    #[token(")")]
+    RParen,
     #[token(":")]
     Colon,
     #[token(",")]
     Comma,
+    #[token("==")]
+    EqEq,
     #[token("=")]
     Equals,
+    #[token("!=")]
+    BangEq,
     #[token("!")]
     Bang,
     #[token(".")]
     Dot,
+    #[token("++")]
+    PlusPlus,
+    #[token("+")]
+    Plus,
+    #[token("//")]
+    SlashSlash,
+    #[token("/")]
+    Slash,
 
     // ── Literals (ordered longest-match: datetime > date > month-day,
     //    time, duration > signed-int > integer) ───────────────────
@@ -99,6 +115,10 @@ enum LogosToken {
     #[token("undefined")]
     Undefined,
 
+    // r[impl lexer.path]
+    #[regex(r"(\.\.|\.)/[a-zA-Z0-9_\-./]*|[a-zA-Z_][a-zA-Z0-9_\-.]*(/[a-zA-Z0-9_\-./]*)+")]
+    PathLiteral,
+
     // r[impl lexer.ident]
     // r[impl lexer.keyword.weak]
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_-]*")]
@@ -114,11 +134,19 @@ impl LogosToken {
             LogosToken::RBrace => SyntaxKind::R_BRACE,
             LogosToken::LBracket => SyntaxKind::L_BRACKET,
             LogosToken::RBracket => SyntaxKind::R_BRACKET,
+            LogosToken::LParen => SyntaxKind::L_PAREN,
+            LogosToken::RParen => SyntaxKind::R_PAREN,
             LogosToken::Colon => SyntaxKind::COLON,
             LogosToken::Comma => SyntaxKind::COMMA,
+            LogosToken::EqEq => SyntaxKind::EQ_EQ,
             LogosToken::Equals => SyntaxKind::EQUALS,
+            LogosToken::BangEq => SyntaxKind::BANG_EQ,
             LogosToken::Bang => SyntaxKind::BANG,
             LogosToken::Dot => SyntaxKind::DOT,
+            LogosToken::PlusPlus => SyntaxKind::PLUS_PLUS,
+            LogosToken::Plus => SyntaxKind::PLUS,
+            LogosToken::SlashSlash => SyntaxKind::SLASH_SLASH,
+            LogosToken::Slash => SyntaxKind::SLASH,
             LogosToken::DatetimeLiteral => SyntaxKind::DATETIME_LITERAL,
             LogosToken::DateLiteral => SyntaxKind::DATE_LITERAL,
             LogosToken::TimeLiteral => SyntaxKind::TIME_LITERAL,
@@ -129,6 +157,7 @@ impl LogosToken {
             LogosToken::IntegerLiteral => SyntaxKind::INTEGER_LITERAL,
             LogosToken::UriLiteral => SyntaxKind::URI_LITERAL,
             LogosToken::AtomLiteral => SyntaxKind::ATOM_LITERAL,
+            LogosToken::PathLiteral => SyntaxKind::PATH_LITERAL,
             LogosToken::Name => SyntaxKind::NAME,
             LogosToken::True => SyntaxKind::TRUE_KW,
             LogosToken::False => SyntaxKind::FALSE_KW,
@@ -312,6 +341,13 @@ mod tests {
             "saturday",
             "sunday",
             "local",
+            "import",
+            "as",
+            "let",
+            "in",
+            "gnomon",
+            "icalendar",
+            "jscalendar",
         ] {
             let toks = kinds(kw);
             assert_eq!(toks, vec![(SyntaxKind::IDENT, kw)], "keyword: {kw}");
@@ -323,7 +359,7 @@ mod tests {
     // r[verify lexer.punctuation]
     #[test]
     fn punctuation() {
-        let toks = kinds("{}[]:,=!.");
+        let toks = kinds("{}[]():,=!.+/");
         assert_eq!(
             toks,
             vec![
@@ -331,13 +367,61 @@ mod tests {
                 (SyntaxKind::R_BRACE, "}"),
                 (SyntaxKind::L_BRACKET, "["),
                 (SyntaxKind::R_BRACKET, "]"),
+                (SyntaxKind::L_PAREN, "("),
+                (SyntaxKind::R_PAREN, ")"),
                 (SyntaxKind::COLON, ":"),
                 (SyntaxKind::COMMA, ","),
                 (SyntaxKind::EQUALS, "="),
                 (SyntaxKind::BANG, "!"),
                 (SyntaxKind::DOT, "."),
+                (SyntaxKind::PLUS, "+"),
+                (SyntaxKind::SLASH, "/"),
             ]
         );
+    }
+
+    #[test]
+    fn multi_char_punctuation() {
+        let toks = kinds("== != ++ //");
+        assert_eq!(
+            toks,
+            vec![
+                (SyntaxKind::EQ_EQ, "=="),
+                (SyntaxKind::WHITESPACE, " "),
+                (SyntaxKind::BANG_EQ, "!="),
+                (SyntaxKind::WHITESPACE, " "),
+                (SyntaxKind::PLUS_PLUS, "++"),
+                (SyntaxKind::WHITESPACE, " "),
+                (SyntaxKind::SLASH_SLASH, "//"),
+            ]
+        );
+    }
+
+    // ── Path literals ─────────────────────────────────────────────
+
+    #[test]
+    fn path_relative_dot() {
+        let toks = kinds("./foo.gnomon");
+        assert_eq!(toks, vec![(SyntaxKind::PATH_LITERAL, "./foo.gnomon")]);
+    }
+
+    #[test]
+    fn path_relative_dotdot() {
+        let toks = kinds("../bar/baz");
+        assert_eq!(toks, vec![(SyntaxKind::PATH_LITERAL, "../bar/baz")]);
+    }
+
+    #[test]
+    fn path_named() {
+        let toks = kinds("lib/core.gnomon");
+        assert_eq!(toks, vec![(SyntaxKind::PATH_LITERAL, "lib/core.gnomon")]);
+    }
+
+    #[test]
+    fn plus_signed_integer_still_works() {
+        // +5 should still lex as SIGNED_INTEGER_LITERAL (longest match)
+        let toks = kinds("+5");
+        assert_eq!(toks, vec![(SyntaxKind::SIGNED_INTEGER_LITERAL, "+5")]);
     }
 
     // ── Strings ──────────────────────────────────────────────────

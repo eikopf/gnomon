@@ -68,21 +68,29 @@ Whitespace does not have any semantic significance, and replacing any whitespace
 
 ### Punctuation
 
-> r[lexer.punctuation]
-> The following characters MUST be recognized as punctuation:
-> 
+> r[lexer.punctuation+2]
+> The following characters and character sequences MUST be recognized as punctuation:
+>
 > | Token | Name |
 > |-------|------|
 > | `{` | Left brace |
 > | `}` | Right brace |
 > | `[` | Left bracket |
 > | `]` | Right bracket |
+> | `(` | Left paren |
+> | `)` | Right paren |
 > | `:` | Colon |
 > | `,` | Comma |
-> | `=` | Equals |
-> | `!` | Bang |
 > | `.` | Dot |
 > | `-` | Hyphen |
+> | `=` | Equals |
+> | `!` | Bang |
+> | `==` | Equals-equals |
+> | `!=` | Bang-equals |
+> | `++` | Plus-plus |
+> | `//` | Slash-slash |
+> | `+` | Plus |
+> | `/` | Slash |
 
 
 ### Identifiers
@@ -113,16 +121,16 @@ The keywords `true`, `false`, and `undefined` MUST be treated as strict.
 
 All other keywords are weak.
 
-> r[lexer.keyword.weak]
+> r[lexer.keyword.weak+2]
 > All keywords other than `true`, `false`, and `undefined` MUST be treated as weak; these keywords are
-> 
+>
 > - `calendar`
-> - `include`
-> - `bind`
-> - `override`
 > - `event`
 > - `task`
-> - `group`
+> - `import`
+> - `as`
+> - `let`
+> - `in`
 > - `every`
 > - `day`
 > - `year`
@@ -133,6 +141,8 @@ All other keywords are weak.
 > - `forward`
 > - `backward`
 > - `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
+> - `gnomon`, `icalendar`, `jscalendar`
+> - `override`
 > - `local`
 
 
@@ -385,25 +395,59 @@ Atom literals desugar into strings containing the identifier without the `#` pre
 r[lexer.atom.desugar]
 The atom literal `#X` MUST desugar into the string `"X"`.
 
+### Path Literals
+
+A path literal represents a filesystem path. Path literals are used with `import` expressions to reference other source files. A path literal must contain at least one slash to distinguish it from an identifier.
+
+> r[lexer.path]
+> The syntax of a path literal is the following:
+>
+> ```ebnf
+> path literal = path segment, "/", { path char } ;
+> path segment = "." | ".." | path name ;
+> path name    = (letter | digit | "_" | "-" | "."), { letter | digit | "_" | "-" | "." } ;
+> path char    = letter | digit | "_" | "-" | "." | "/" ;
+> ```
+
+r[lexer.path.slash]
+A path literal MUST contain at least one `/` character.
+
+r[lexer.path.relative]
+Path literals are resolved relative to the directory containing the file in which they appear.
+
 ## Expressions
 
-Gnomon's expression syntax consists of only three grammar rules: literal expressions, record expressions, and list expressions.
+Gnomon's expression syntax includes literal expressions, record expressions, list expressions, import expressions, let-in expressions, every expressions, operator expressions, and parenthesized expressions.
 
-> r[expr.syntax]
+> r[expr.syntax+2]
 > The grammar for expressions is as follows:
 >
 > ```ebnf
-> expr = literal expr
->      | record expr
->      | list expr
->      ;
+> expr = unary expr, { binary op, unary expr } ;
+>
+> unary expr = literal expr
+>            | record expr
+>            | list expr
+>            | import expr
+>            | let expr
+>            | every expr
+>            | "(", expr, ")"
+>            | unary expr, ".", identifier
+>            | unary expr, "[", expr, "]"
+>            ;
+>
+> binary op = "++"    (* list concatenation *)
+>           | "//"    (* record merge *)
+>           | "=="    (* equality *)
+>           | "!="    (* inequality *)
+>           ;
 > ```
 
 ### Literal Expressions
 
-A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, name, `true`, `false`, or `undefined`.
+A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, path literal, name, `true`, `false`, or `undefined`.
 
-> r[expr.literal.syntax+3]
+> r[expr.literal.syntax+4]
 > The grammar for literal expressions is as follows:
 >
 > ```ebnf
@@ -417,7 +461,9 @@ A literal expression is a string literal, integer literal, signed integer litera
 >              | duration literal
 >              | uri literal
 >              | atom literal
+>              | path literal
 >              | name
+>              | identifier
 >              | "true"
 >              | "false"
 >              | "undefined"
@@ -426,13 +472,18 @@ A literal expression is a string literal, integer literal, signed integer litera
 
 Date, month-day, time, datetime, and duration literals are syntax sugar for records with specific fields set. In practice, an implementation should probably not desugar these values until a user explicitly asks them to (e.g. during rendering, or as an option when displaying values) in order to provide easier-to-read outputs.
 
+An identifier appearing as a literal expression refers to a variable introduced by a `let` binding.
+
+r[expr.literal.identifier]
+An identifier used as a literal expression MUST refer to a variable bound by an enclosing `let` expression. It is an error if the identifier does not refer to any binding in scope.
+
 ### Records
 
 A record is a table mapping from identifiers to values.
 
 > r[expr.record.syntax]
 > The grammar for record expressions is as follows:
-> 
+>
 > ```ebnf
 > record = "{", [ fields ], "}" ;
 > fields = field, { ",", field }, [ "," ] ;
@@ -455,6 +506,85 @@ A list is a contiguous sequence of zero or more values.
 > list = "[", list elements, "]" ;
 > list elements = expr, { ",", expr }, [ "," ] ;
 > ```
+
+### Import Expressions
+
+An import expression loads and evaluates a source file, producing a Gnomon value. The source may be a Gnomon file, an iCalendar file, a JSCalendar file, or any other supported format. The format is normally inferred from the file extension or content, but may be specified explicitly using the `as` keyword.
+
+> r[expr.import.syntax]
+> The grammar for import expressions is as follows:
+>
+> ```ebnf
+> import expr = "import", import source, [ "as", format ] ;
+> import source = path literal | uri literal | string literal ;
+> format = "gnomon" | "icalendar" | "jscalendar" ;
+> ```
+
+r[expr.import.eval]
+An `import` expression MUST evaluate the referenced source and produce the resulting Gnomon value. For Gnomon sources, this is the result of evaluating the file. For foreign formats, this is the translation of the foreign data into the Gnomon data model.
+
+r[expr.import.format]
+If the `as` keyword is present, the implementation MUST interpret the source in the specified format. If the `as` keyword is absent, the implementation MUST infer the format from the file extension or content.
+
+r[expr.import.eager]
+Import expressions MUST be evaluated eagerly.
+
+r[expr.import.cycle]
+Circular imports MUST be detected and rejected with an error.
+
+### Let Expressions
+
+A `let` expression introduces a local binding that is in scope for the body expression. Let bindings are sequential: a binding may refer to earlier bindings but not to itself or later bindings.
+
+> r[expr.let.syntax]
+> The grammar for let expressions is as follows:
+>
+> ```ebnf
+> let expr = "let", identifier, "=", expr, "in", expr ;
+> ```
+
+r[expr.let.sequential]
+Let bindings MUST be sequential: the bound expression may reference variables from enclosing or preceding `let` bindings, but MUST NOT reference the variable being bound or any later bindings.
+
+r[expr.let.scope]
+The variable introduced by a `let` binding MUST be in scope for the body expression (the expression after `in`).
+
+### Operators
+
+#### List Concatenation (`++`)
+
+The `++` operator concatenates two lists, producing a new list containing all elements of the left operand followed by all elements of the right operand.
+
+r[expr.op.concat]
+Both operands of the `++` operator MUST be lists. The result MUST be a list containing all elements of the left operand followed by all elements of the right operand.
+
+#### Record Merge (`//`)
+
+The `//` operator merges two records. Fields from the right operand take precedence when both records contain the same key.
+
+r[expr.op.merge]
+Both operands of the `//` operator MUST be records. The result MUST be a record containing all fields from both operands. If a field name appears in both operands, the value from the right operand MUST be used.
+
+#### Field Access (`.`)
+
+The `.` operator accesses a field on a record by name.
+
+r[expr.op.field]
+The left operand of the `.` operator MUST be a record and the right operand MUST be an identifier. The result MUST be the value of the named field. It is an error if the field does not exist.
+
+#### Index Access (`[]`)
+
+The `[]` operator accesses an element of a list by index.
+
+r[expr.op.index]
+The operand before `[` MUST be a list and the expression inside the brackets MUST evaluate to an unsigned integer. The result MUST be the element at the given zero-based index. It is an error if the index is out of bounds.
+
+#### Equality (`==`) and Inequality (`!=`)
+
+The `==` and `!=` operators compare two values for structural equality.
+
+r[expr.op.eq]
+The `==` operator MUST return `true` if the two operands are structurally equal and `false` otherwise. The `!=` operator MUST return the negation of `==`.
 
 ## Record Types
 
@@ -938,9 +1068,9 @@ If present, the `recur` field on an event or task MUST be a recurrence rule reco
 
 ## Data Model
 
-Gnomon evaluation is general-purpose: evaluating a Gnomon expression produces a Gnomon value. The value types are strings, integers, signed integers, booleans, records, lists, names, and `undefined`. These types are defined by the expression grammar and carry no intrinsic semantic meaning.
+Evaluating a Gnomon expression produces a Gnomon value. The value types are strings, integers, signed integers, booleans, records, lists, names, and `undefined`. These types are defined by the expression grammar and carry no intrinsic semantic meaning.
 
-Specific contexts impose shape expectations on the values they receive. The `merge` subcommand, for example, expects a calendar or a list of calendars; it is an error if evaluation produces a value that does not conform to one of these shapes. This section defines the shapes that the Gnomon tooling recognizes.
+Specific contexts impose shape expectations on the values they receive. The `merge` subcommand, for example, expects a value that conforms to the calendar shape; it is an error if evaluation produces something else. This section defines the shapes that the Gnomon tooling recognizes.
 
 ### Calendars
 
@@ -980,24 +1110,17 @@ Names serve as human-readable identifiers for calendar entries.
 > r[model.name.unique]
 > Within a single calendar, no two entries MAY share the same `name` value. Events and tasks share a single namespace.
 
-A name resolves uniquely without requiring additional type information. This constraint is enforced during merge when combining entries from multiple source files.
+A name resolves uniquely without requiring additional type information.
 
-### Include Resolution
+### Import Resolution
 
-An `include` declaration references a foreign data source (an iCalendar or JSCalendar file). Resolution of an include parses the foreign data and produces one or more Gnomon values: a calendar record, a single event record, a single task record, or a list of such values, depending on the source format.
+An `import` expression evaluates a referenced source file and produces a Gnomon value. The source may be a Gnomon file (evaluated recursively), an iCalendar file, a JSCalendar file, or another supported format. The result is a value in the Gnomon data model: a record, a list of records, or any other Gnomon value depending on the source content.
 
-> r[model.include.resolution]
-> Resolving an `include` declaration MUST produce a value that conforms to one of the recognized shapes (calendar, event, or task) or a list of such values.
+> r[model.import.resolution]
+> Evaluating an `import` expression MUST produce a Gnomon value. For foreign formats, the source data MUST be translated into the Gnomon data model.
 
-Include declarations may carry an optional record of bindings that assign names to objects from the included source.
-
-> r[model.include.bindings]
-> An `include` declaration MAY be followed by a record expression whose fields map names to UIDs of objects in the included source.
-
-Resolved includes contribute their contents to the enclosing evaluation context. The include declaration itself does not appear in the final calendar value.
-
-> r[model.include.dissolve]
-> After resolution, the contents of an included source MUST be incorporated into the enclosing calendar's entries. The include declaration itself MUST NOT appear in the evaluated output.
+> r[model.import.transparent]
+> Import expressions are transparent: after evaluation, the result is an ordinary Gnomon value with no trace of its origin. There is no distinct "import" value in the data model.
 
 ### Shape-checking
 
@@ -1027,36 +1150,40 @@ Shape-checking is applied recursively: if a field's expected type is itself a re
 > r[model.shape.recursive]
 > When a field's value is expected to be a record of a specific type, that record MUST itself be shape-checked against the corresponding record type definition.
 
-## Declarations
+## File Structure
 
-Declarations are the top-level grammar element in Gnomon, and source data is ultimately parsed as a sequence of declarations.
+A Gnomon source file consists of zero or more `let` bindings followed by a body. The body is either a single expression or one or more declarations. Multiple declarations evaluate to a list of their desugared values; a single declaration evaluates to its desugared value directly.
 
-> r[syntax.start]
-> Source data MUST be parsed as a sequence of declarations.
+> r[syntax.start+2]
+> Source data MUST be parsed according to the following grammar:
 >
 > ```ebnf
-> START = { decl } ;
+> START = { let binding }, body ;
+> let binding = "let", identifier, "=", expr ;
+> body = expr | declarations ;
+> declarations = decl, { decl } ;
 > ```
 
-> r[decl.syntax+2]
+r[syntax.file.let]
+Let bindings at the file level MUST precede all declarations or expressions. They are in scope for the entire body.
+
+r[syntax.file.body]
+If the body consists of a single expression, the file evaluates to that expression's value. If the body consists of declarations, a single declaration evaluates to its desugared value, and multiple declarations evaluate to a list of their desugared values.
+
+## Declarations
+
+Declarations are syntactic sugar for constructing record values. Each declaration keyword produces a record with specific fields; the keyword itself carries no semantic weight beyond determining the desugared form.
+
+> r[decl.syntax+3]
 > The grammar for declarations is as follows:
 >
 > ```ebnf
-> decl = inclusion
->      | binding
->      | short event
+> decl = short event
 >      | short task
->      | decl prefix, record expr
+>      | "calendar", record expr
+>      | "event", record expr
+>      | "task", record expr
 >      ;
->
-> inclusion = "include", string literal ;
->
-> binding = "bind", name, string literal ;
->
-> decl prefix = "calendar"
->             | "event"
->             | "task"
->             ;
 >
 > short event = "event", name,  short span,  [ string literal ], [ record expr ] ;
 > short task  = "task",  name, [ short dt ], [ string literal ], [ record expr ] ;
@@ -1067,6 +1194,19 @@ Declarations are the top-level grammar element in Gnomon, and source data is ult
 >          | datetime literal
 >          ;
 > ```
+
+### Declaration Desugaring
+
+Declarations are purely syntactic sugar for record construction. The `calendar` keyword is a no-op — it produces the record inside the braces unchanged. The `event` and `task` keywords insert a `type` field into the resulting record.
+
+r[decl.calendar.desugar]
+The calendar declaration `calendar { ... }` MUST evaluate to the record inside the braces. The `calendar` keyword does not add or modify any fields.
+
+r[decl.event.desugar]
+The event declaration `event { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"event"`.
+
+r[decl.task.desugar]
+The task declaration `task { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"task"`.
 
 ### Short-form Desugaring
 
@@ -1153,7 +1293,7 @@ If a file was successfully located, the program MUST run parse and validation pa
 
 #### `eval`
 
-The `eval` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon eval <file>` will parse, validate, and evaluate the file, producing a lowered document representation.
+The `eval` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon eval <file>` will parse, validate, and evaluate the file, producing the resulting Gnomon value.
 
 r[cli.subcommand.eval]
 The program MUST provide an `eval` subcommand for the root command which takes a single parameter describing a file path.
@@ -1162,7 +1302,7 @@ r[cli.subcommand.eval.no-file]
 If the file path argument to the `eval` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
 
 r[cli.subcommand.eval.output]
-If a file was successfully located, the program MUST write a textual representation of the evaluated document to STDOUT. Any diagnostics MUST be written to STDERR.
+If a file was successfully located, the program MUST write a textual representation of the evaluated value to STDOUT. Any diagnostics MUST be written to STDERR.
 
 #### `merge`
 

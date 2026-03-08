@@ -3,17 +3,12 @@ use std::fmt;
 use crate::Db;
 
 use super::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
-use super::types::{Blame, Blamed, Calendar, Document, IncludeRef, Record, ReifiedDecl, Value};
+use super::types::{Blame, Blamed, Calendar, Record, Value};
 
 /// Format a value using the salsa database for name resolution.
-///
-/// Salsa-interned types like [`FieldName`] and [`DeclId`] require database
-/// access to resolve to human-readable text. This trait threads the `&dyn Db`
-/// through the formatting pipeline.
 pub trait RenderWithDb<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result;
 
-    /// Return a thin wrapper that implements [`Display`](fmt::Display).
     fn render<'a>(&'a self, db: &'db dyn Db) -> Rendered<'a, 'db, Self> {
         Rendered { value: self, db }
     }
@@ -53,6 +48,7 @@ fn write_value<'db>(
         Value::Bool(b) => write!(w, "{b}"),
         Value::Undefined => write!(w, "undefined"),
         Value::Name(n) => write!(w, "@{n}"),
+        Value::Path(p) => write!(w, "{p}"),
         Value::Record(r) => write_record(w, r, db, indent),
         Value::List(items) => {
             write!(w, "[")?;
@@ -89,42 +85,6 @@ fn write_record<'db>(
     }
     write_indent(w, indent)?;
     write!(w, "}}")
-}
-
-fn write_reified_decl<'db>(
-    w: &mut dyn fmt::Write,
-    decl: &ReifiedDecl<'db>,
-    db: &'db dyn Db,
-    indent: usize,
-) -> fmt::Result {
-    match decl {
-        ReifiedDecl::Include { target, content } => {
-            writeln!(w, "Include {{")?;
-            write_indent(w, indent + 4)?;
-            writeln!(w, "target: {},", target.render(db))?;
-            if !content.is_empty() {
-                write_indent(w, indent + 4)?;
-                writeln!(w, "content: [")?;
-                for item in content {
-                    write_indent(w, indent + 8)?;
-                    write_record(w, &item.value, db, indent + 8)?;
-                    writeln!(w, ",")?;
-                }
-                write_indent(w, indent + 4)?;
-                writeln!(w, "],")?;
-            }
-            write_indent(w, indent)?;
-            write!(w, "}}")
-        }
-        ReifiedDecl::Calendar(r) => {
-            write!(w, "Calendar ")?;
-            write_record(w, r, db, indent)
-        }
-        ReifiedDecl::Entry(r) => {
-            write!(w, "Entry ")?;
-            write_record(w, r, db, indent)
-        }
-    }
 }
 
 // ── Interned types ──────────────────────────────────────────────────
@@ -197,58 +157,9 @@ impl<'db> RenderWithDb<'db> for Blame<'db> {
     }
 }
 
-impl<'db> RenderWithDb<'db> for IncludeRef {
-    fn render_fmt(&self, f: &mut fmt::Formatter<'_>, _db: &'db dyn Db) -> fmt::Result {
-        match self {
-            IncludeRef::Path(p) => write!(f, "\"{}\"", p.display()),
-            IncludeRef::Uri(u) => write!(f, "{u:?}"),
-        }
-    }
-}
-
-impl<'db> RenderWithDb<'db> for ReifiedDecl<'db> {
-    fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        write_reified_decl(f, self, db, 0)
-    }
-}
-
 impl<'db> RenderWithDb<'db> for String {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, _db: &'db dyn Db) -> fmt::Result {
         write!(f, "{self:?}")
-    }
-}
-
-impl<'db> RenderWithDb<'db> for Document<'db> {
-    fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        writeln!(f, "Document {{")?;
-
-        // Bindings
-        write!(f, "    bindings: ")?;
-        if self.bindings.is_empty() {
-            writeln!(f, "{{}},")?;
-        } else {
-            writeln!(f, "{{")?;
-            for (name, blamed_uid) in &self.bindings {
-                writeln!(f, "        {name}: {:?},", blamed_uid.value)?;
-            }
-            writeln!(f, "    }},")?;
-        }
-
-        // Decls
-        write!(f, "    decls: ")?;
-        if self.decls.is_empty() {
-            writeln!(f, "[],")?;
-        } else {
-            writeln!(f, "[")?;
-            for blamed_decl in &self.decls {
-                write!(f, "        ")?;
-                write_reified_decl(f, &blamed_decl.value, db, 8)?;
-                writeln!(f, ",")?;
-            }
-            writeln!(f, "    ],")?;
-        }
-
-        write!(f, "}}")
     }
 }
 
@@ -285,32 +196,6 @@ impl<'db> RenderWithDb<'db> for Calendar<'db> {
         write_record_list(f, &self.entries, db, 4)?;
         writeln!(f, ",")?;
 
-        // Includes
-        write!(f, "    includes: ")?;
-        if self.includes.is_empty() {
-            writeln!(f, "[],")?;
-        } else {
-            writeln!(f, "[")?;
-            for inc in &self.includes {
-                write_indent(f, 8)?;
-                inc.value.render_fmt(f, db)?;
-                writeln!(f, ",")?;
-            }
-            writeln!(f, "    ],")?;
-        }
-
-        // Bindings
-        write!(f, "    bindings: ")?;
-        if self.bindings.is_empty() {
-            writeln!(f, "{{}},")?;
-        } else {
-            writeln!(f, "{{")?;
-            for (name, blamed_uid) in &self.bindings {
-                writeln!(f, "        {name}: {:?},", blamed_uid.value)?;
-            }
-            writeln!(f, "    }},")?;
-        }
-
         write!(f, "}}")
     }
 }
@@ -326,22 +211,13 @@ mod tests {
         let db = Database::default();
         let sf = SourceFile::new(&db, PathBuf::from("test.gnomon"), source.into());
         let result = crate::evaluate(&db, sf);
-        let rendered = format!("{}", result.document.render(&db));
+        let rendered = format!("{}", result.value.render(&db));
         expected.assert_eq(&rendered);
     }
 
     #[test]
     fn empty_calendar() {
-        check(
-            "calendar {}",
-            expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Calendar {},
-                    ],
-                }"#]],
-        );
+        check("calendar {}", expect![[r#"{}"#]]);
     }
 
     #[test]
@@ -349,14 +225,9 @@ mod tests {
         check(
             r#"calendar { uid: "test-cal", name: "My Cal" }"#,
             expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Calendar {
-                            name: "My Cal",
-                            uid: "test-cal",
-                        },
-                    ],
+                {
+                    name: "My Cal",
+                    uid: "test-cal",
                 }"#]],
         );
     }
@@ -366,48 +237,29 @@ mod tests {
         check(
             r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#,
             expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Entry {
-                            duration: {
-                                days: 0,
-                                hours: 1,
-                                minutes: 30,
-                                seconds: 0,
-                                weeks: 0,
-                            },
-                            name: @meeting,
-                            start: {
-                                date: {
-                                    day: 1,
-                                    month: 3,
-                                    year: 2026,
-                                },
-                                time: {
-                                    hour: 14,
-                                    minute: 30,
-                                    second: 0,
-                                },
-                            },
-                            title: "Standup",
-                            type: "event",
-                        },
-                    ],
-                }"#]],
-        );
-    }
-
-    #[test]
-    fn binding() {
-        check(
-            r#"bind @cal.holidays "holidays-uid""#,
-            expect![[r#"
-                Document {
-                    bindings: {
-                        cal.holidays: "holidays-uid",
+                {
+                    duration: {
+                        days: 0,
+                        hours: 1,
+                        minutes: 30,
+                        seconds: 0,
+                        weeks: 0,
                     },
-                    decls: [],
+                    name: @meeting,
+                    start: {
+                        date: {
+                            day: 1,
+                            month: 3,
+                            year: 2026,
+                        },
+                        time: {
+                            hour: 14,
+                            minute: 30,
+                            second: 0,
+                        },
+                    },
+                    title: "Standup",
+                    type: "event",
                 }"#]],
         );
     }
@@ -417,29 +269,8 @@ mod tests {
         check(
             r#"calendar { keywords: ["work", "meeting"] }"#,
             expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Calendar {
-                            keywords: ["work", "meeting"],
-                        },
-                    ],
-                }"#]],
-        );
-    }
-
-    #[test]
-    fn include_path() {
-        check(
-            r#"include "holidays.ics""#,
-            expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Include {
-                            target: "holidays.ics",
-                        },
-                    ],
+                {
+                    keywords: ["work", "meeting"],
                 }"#]],
         );
     }
@@ -449,76 +280,22 @@ mod tests {
         check(
             r#"task @review 2026-03-15T17:00 "Code review""#,
             expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Entry {
-                            due: {
-                                date: {
-                                    day: 15,
-                                    month: 3,
-                                    year: 2026,
-                                },
-                                time: {
-                                    hour: 17,
-                                    minute: 0,
-                                    second: 0,
-                                },
-                            },
-                            name: @review,
-                            title: "Code review",
-                            type: "task",
+                {
+                    due: {
+                        date: {
+                            day: 15,
+                            month: 3,
+                            year: 2026,
                         },
-                    ],
-                }"#]],
-        );
-    }
-
-    #[test]
-    fn mixed_declarations() {
-        check(
-            r#"
-            event @a 2026-01-01T09:00 1h "A"
-            calendar { uid: "cal" }
-            task @b "B"
-            "#,
-            expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Entry {
-                            duration: {
-                                days: 0,
-                                hours: 1,
-                                minutes: 0,
-                                seconds: 0,
-                                weeks: 0,
-                            },
-                            name: @a,
-                            start: {
-                                date: {
-                                    day: 1,
-                                    month: 1,
-                                    year: 2026,
-                                },
-                                time: {
-                                    hour: 9,
-                                    minute: 0,
-                                    second: 0,
-                                },
-                            },
-                            title: "A",
-                            type: "event",
+                        time: {
+                            hour: 17,
+                            minute: 0,
+                            second: 0,
                         },
-                        Calendar {
-                            uid: "cal",
-                        },
-                        Entry {
-                            name: @b,
-                            title: "B",
-                            type: "task",
-                        },
-                    ],
+                    },
+                    name: @review,
+                    title: "Code review",
+                    type: "task",
                 }"#]],
         );
     }
@@ -528,14 +305,9 @@ mod tests {
         check(
             "calendar { show_without_time: true, priority: 5 }",
             expect![[r#"
-                Document {
-                    bindings: {},
-                    decls: [
-                        Calendar {
-                            priority: 5,
-                            show_without_time: true,
-                        },
-                    ],
+                {
+                    priority: 5,
+                    show_without_time: true,
                 }"#]],
         );
     }

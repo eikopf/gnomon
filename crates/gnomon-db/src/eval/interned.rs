@@ -64,11 +64,11 @@ impl<'db> FieldPath<'db> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DeclKind {
-    Include,
-    Bind,
     Calendar,
     Event,
     Task,
+    /// A file-level expression (no declaration keyword).
+    Expr,
 }
 
 #[salsa::interned]

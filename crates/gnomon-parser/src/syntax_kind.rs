@@ -13,18 +13,25 @@ pub enum SyntaxKind {
     COMMENT,
 
     // ── Punctuation ──────────────────────────────────────────────────
-    L_BRACE,   // {
-    R_BRACE,   // }
-    L_BRACKET, // [
-    R_BRACKET, // ]
-    COLON,     // :
-    COMMA,     // ,
-    EQUALS,    // =
-    BANG,      // !
-    DOT,       // .
-    HYPHEN,    // -
-    PLUS,      // +
-    AT,        // @
+    L_BRACE,      // {
+    R_BRACE,      // }
+    L_BRACKET,    // [
+    R_BRACKET,    // ]
+    L_PAREN,      // (
+    R_PAREN,      // )
+    COLON,        // :
+    COMMA,        // ,
+    EQUALS,       // =
+    EQ_EQ,        // ==
+    BANG,         // !
+    BANG_EQ,      // !=
+    DOT,          // .
+    HYPHEN,       // -
+    PLUS,         // +
+    PLUS_PLUS,    // ++
+    SLASH,        // /
+    SLASH_SLASH,  // //
+    AT,           // @
 
     // ── Literals ─────────────────────────────────────────────────────
     INTEGER_LITERAL,
@@ -37,6 +44,7 @@ pub enum SyntaxKind {
     DURATION_LITERAL,
     URI_LITERAL,
     ATOM_LITERAL,
+    PATH_LITERAL,
 
     // ── Identifiers / names ──────────────────────────────────────────
     IDENT,
@@ -49,12 +57,16 @@ pub enum SyntaxKind {
 
     // ── Weak keywords (parser-promoted from IDENT) ───────────────────
     CALENDAR_KW,
-    INCLUDE_KW,
-    BIND_KW,
-    OVERRIDE_KW,
     EVENT_KW,
     TASK_KW,
     EVERY_KW,
+    IMPORT_KW,
+    AS_KW,
+    LET_KW,
+    IN_KW,
+    GNOMON_KW,
+    ICALENDAR_KW,
+    JSCALENDAR_KW,
     DAY_KW,
     YEAR_KW,
     ON_KW,
@@ -77,8 +89,6 @@ pub enum SyntaxKind {
 
     // ── Node kinds (internal / composite) ────────────────────────────
     SOURCE_FILE,
-    INCLUSION_DECL,
-    BINDING_DECL,
     CALENDAR_DECL,
     EVENT_DECL,
     TASK_DECL,
@@ -89,6 +99,14 @@ pub enum SyntaxKind {
     LIST_EXPR,
     FIELD,
     EVERY_EXPR,
+    IMPORT_EXPR,
+    LET_EXPR,
+    LET_BINDING_NODE,
+    BINARY_EXPR,
+    FIELD_ACCESS_EXPR,
+    INDEX_EXPR,
+    PAREN_EXPR,
+    IDENT_EXPR,
     ERROR_NODE,
 }
 
@@ -117,7 +135,7 @@ impl rowan::Language for GnomonLanguage {
     type Kind = SyntaxKind;
 
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
-        assert!(raw.0 <= SyntaxKind::ERROR_NODE as u16);
+        assert!(raw.0 <= SyntaxKind::ERROR_NODE as u16, "SyntaxKind out of range: {}", raw.0);
         // SAFETY: SyntaxKind is repr(u16) and we checked the range.
         unsafe { std::mem::transmute::<u16, SyntaxKind>(raw.0) }
     }

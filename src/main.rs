@@ -122,7 +122,7 @@ fn main() -> ExitCode {
 
             let has_errors = print_diagnostics(&db, &diagnostics);
 
-            println!("{}", result.document.render(&db));
+            println!("{}", result.value.render(&db));
 
             if has_errors {
                 ExitCode::FAILURE

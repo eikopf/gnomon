@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
 
 use super::interned::{DeclId, FieldName, FieldPath};
 
@@ -42,37 +41,11 @@ pub enum Value<'db> {
     Name(String),
     Record(Record<'db>),
     List(Vec<Blamed<'db, Value<'db>>>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum IncludeRef {
-    Path(PathBuf),
-    Uri(String),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ReifiedDecl<'db> {
-    Include {
-        target: IncludeRef,
-        content: Vec<Blamed<'db, Record<'db>>>,
-    },
-    Calendar(Record<'db>),
-    Entry(Record<'db>),
-}
-
-pub type Name = String;
-pub type Uid = String;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Document<'db> {
-    pub bindings: BTreeMap<Name, Blamed<'db, Uid>>,
-    pub decls: Vec<Blamed<'db, ReifiedDecl<'db>>>,
+    Path(String),
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Calendar<'db> {
     pub properties: Record<'db>,
     pub entries: Vec<Blamed<'db, Record<'db>>>,
-    pub includes: Vec<Blamed<'db, IncludeRef>>,
-    pub bindings: BTreeMap<Name, Blamed<'db, Uid>>,
 }

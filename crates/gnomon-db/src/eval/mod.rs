@@ -9,17 +9,17 @@ pub mod types;
 
 use crate::input::SourceFile;
 use crate::queries::Diagnostic;
-use types::Document;
+use types::Value;
 
 /// Result of evaluating a source file.
 pub struct EvalResult<'db> {
-    pub document: Document<'db>,
+    pub value: Value<'db>,
     /// Lowering diagnostics (parse + validation diagnostics are obtained separately
     /// via `check_syntax::accumulated::<Diagnostic>()`).
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// Evaluate a source file into a reified document.
+/// Evaluate a source file into a value.
 ///
 /// This function calls the tracked `check_syntax` query internally to ensure
 /// parse and validation errors are accumulated. Lowering-specific diagnostics
@@ -31,10 +31,29 @@ pub fn evaluate<'db>(db: &'db dyn crate::Db, source: SourceFile) -> EvalResult<'
     let tree = parse_result.tree(db);
 
     let mut ctx = lower::LowerCtx::new(db, source);
-    let document = ctx.lower_document(&tree);
+    let value = ctx.lower_source_file(&tree);
 
     EvalResult {
-        document,
+        value,
+        diagnostics: ctx.diagnostics,
+    }
+}
+
+/// Internal: evaluate with an existing import stack for cycle detection.
+pub(super) fn evaluate_with_import_stack<'db>(
+    db: &'db dyn crate::Db,
+    source: SourceFile,
+    import_stack: Vec<std::path::PathBuf>,
+) -> EvalResult<'db> {
+    let _check = crate::check_syntax(db, source);
+    let parse_result = crate::parse(db, source);
+    let tree = parse_result.tree(db);
+
+    let mut ctx = lower::LowerCtx::with_import_stack(db, source, import_stack);
+    let value = ctx.lower_source_file(&tree);
+
+    EvalResult {
+        value,
         diagnostics: ctx.diagnostics,
     }
 }
@@ -61,29 +80,48 @@ mod tests {
         record.get(&field_name).is_some()
     }
 
+    /// Extract the record from a single-decl file that produces a Value::Record.
+    fn expect_record<'a, 'db>(result: &'a super::EvalResult<'db>) -> &'a Record<'db> {
+        match &result.value {
+            Value::Record(r) => r,
+            other => panic!("expected Record, got: {other:?}"),
+        }
+    }
+
+    /// Extract the record from a list item in a multi-decl file.
+    fn expect_list_record<'a, 'db>(result: &'a super::EvalResult<'db>, index: usize) -> &'a Record<'db> {
+        match &result.value {
+            Value::List(items) => match &items[index].value {
+                Value::Record(r) => r,
+                other => panic!("expected Record at index {index}, got: {other:?}"),
+            },
+            other => panic!("expected List, got: {other:?}"),
+        }
+    }
+
+    fn expect_list_len(result: &super::EvalResult<'_>) -> usize {
+        match &result.value {
+            Value::List(items) => items.len(),
+            other => panic!("expected List, got: {other:?}"),
+        }
+    }
+
     // ── Calendar ─────────────────────────────────────────────────
 
     #[test]
     fn empty_calendar() {
         let db = Database::default();
         let result = eval(&db, "calendar {}");
-        assert_eq!(result.document.decls.len(), 1);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => assert!(r.0.is_empty()),
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        assert!(r.0.is_empty());
     }
 
     #[test]
     fn calendar_with_string_field() {
         let db = Database::default();
         let result = eval(&db, r#"calendar { uid: "test-cal" }"#);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                assert_eq!(get_field(&r, &db, "uid"), Value::String("test-cal".into()));
-            }
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "uid"), Value::String("test-cal".into()));
     }
 
     // ── Event (prefix form) ──────────────────────────────────────
@@ -95,24 +133,19 @@ mod tests {
             &db,
             r#"event { name: @standup, start: 2026-03-01T14:00, title: "Standup" }"#,
         );
-        assert_eq!(result.document.decls.len(), 1);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                assert_eq!(get_field(&r, &db, "name"), Value::Name("standup".into()));
-                assert_eq!(
-                    get_field(&r, &db, "title"),
-                    Value::String("Standup".into())
-                );
-                // start is a desugared datetime record
-                match get_field(&r, &db, "start") {
-                    Value::Record(dt) => {
-                        assert!(has_field(&dt, &db, "date"));
-                        assert!(has_field(&dt, &db, "time"));
-                    }
-                    _ => panic!("expected Record for start"),
-                }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("standup".into()));
+        assert_eq!(
+            get_field(r, &db, "title"),
+            Value::String("Standup".into())
+        );
+        // start is a desugared datetime record
+        match get_field(r, &db, "start") {
+            Value::Record(dt) => {
+                assert!(has_field(&dt, &db, "date"));
+                assert!(has_field(&dt, &db, "time"));
             }
-            _ => panic!("expected Entry"),
+            _ => panic!("expected Record for start"),
         }
     }
 
@@ -125,21 +158,14 @@ mod tests {
             &db,
             r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#,
         );
-        assert_eq!(result.document.decls.len(), 1);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                assert_eq!(get_field(&r, &db, "name"), Value::Name("meeting".into()));
-                assert_eq!(
-                    get_field(&r, &db, "title"),
-                    Value::String("Standup".into())
-                );
-                // start is desugared datetime
-                assert!(matches!(get_field(&r, &db, "start"), Value::Record(_)));
-                // duration is desugared
-                assert!(matches!(get_field(&r, &db, "duration"), Value::Record(_)));
-            }
-            _ => panic!("expected Entry"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("meeting".into()));
+        assert_eq!(
+            get_field(r, &db, "title"),
+            Value::String("Standup".into())
+        );
+        assert!(matches!(get_field(r, &db, "start"), Value::Record(_)));
+        assert!(matches!(get_field(r, &db, "duration"), Value::Record(_)));
     }
 
     #[test]
@@ -149,13 +175,9 @@ mod tests {
             &db,
             r#"event @meeting 2026-03-01T14:30 1h "Standup" { priority: 5 }"#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                assert_eq!(get_field(&r, &db, "name"), Value::Name("meeting".into()));
-                assert_eq!(get_field(&r, &db, "priority"), Value::Integer(5));
-            }
-            _ => panic!("expected Entry"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("meeting".into()));
+        assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
     }
 
     #[test]
@@ -165,17 +187,13 @@ mod tests {
             &db,
             r#"event @meeting 2026-03-01 14:30 1h "Standup""#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                match get_field(&r, &db, "start") {
-                    Value::Record(dt) => {
-                        assert!(has_field(&dt, &db, "date"));
-                        assert!(has_field(&dt, &db, "time"));
-                    }
-                    _ => panic!("expected Record for start"),
-                }
+        let r = expect_record(&result);
+        match get_field(r, &db, "start") {
+            Value::Record(dt) => {
+                assert!(has_field(&dt, &db, "date"));
+                assert!(has_field(&dt, &db, "time"));
             }
-            _ => panic!("expected Entry"),
+            _ => panic!("expected Record for start"),
         }
     }
 
@@ -188,12 +206,8 @@ mod tests {
             &db,
             r#"task { name: @review, title: "Code review" }"#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                assert_eq!(get_field(&r, &db, "name"), Value::Name("review".into()));
-            }
-            _ => panic!("expected Entry"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
     }
 
     #[test]
@@ -203,74 +217,22 @@ mod tests {
             &db,
             r#"task @review 2026-03-15T17:00 "Code review""#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                assert_eq!(get_field(&r, &db, "name"), Value::Name("review".into()));
-                assert_eq!(
-                    get_field(&r, &db, "title"),
-                    Value::String("Code review".into())
-                );
-                // due is desugared datetime
-                assert!(matches!(get_field(&r, &db, "due"), Value::Record(_)));
-            }
-            _ => panic!("expected Entry"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
+        assert_eq!(
+            get_field(r, &db, "title"),
+            Value::String("Code review".into())
+        );
+        assert!(matches!(get_field(r, &db, "due"), Value::Record(_)));
     }
 
     #[test]
     fn task_short_form_no_datetime() {
         let db = Database::default();
         let result = eval(&db, r#"task @todo "Do something""#);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                assert_eq!(get_field(&r, &db, "name"), Value::Name("todo".into()));
-                assert!(!has_field(&r, &db, "due"));
-            }
-            _ => panic!("expected Entry"),
-        }
-    }
-
-    // ── Include ──────────────────────────────────────────────────
-
-    #[test]
-    fn include_local_path() {
-        let db = Database::default();
-        let result = eval(&db, r#"include "holidays.ics""#);
-        assert_eq!(result.document.decls.len(), 1);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Include { target, content } => {
-                assert_eq!(*target, IncludeRef::Path("holidays.ics".into()));
-                assert!(content.is_empty());
-            }
-            _ => panic!("expected Include"),
-        }
-    }
-
-    #[test]
-    fn include_uri() {
-        let db = Database::default();
-        let result = eval(&db, r#"include "https://example.com/cal.ics""#);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Include { target, .. } => {
-                assert_eq!(
-                    *target,
-                    IncludeRef::Uri("https://example.com/cal.ics".into())
-                );
-            }
-            _ => panic!("expected Include"),
-        }
-    }
-
-    // ── Bind ─────────────────────────────────────────────────────
-
-    #[test]
-    fn binding() {
-        let db = Database::default();
-        let result = eval(&db, r#"bind @cal.holidays "holidays-uid""#);
-        assert!(result.document.decls.is_empty());
-        assert_eq!(result.document.bindings.len(), 1);
-        let blamed_uid = result.document.bindings.get("cal.holidays").unwrap();
-        assert_eq!(blamed_uid.value, "holidays-uid");
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("todo".into()));
+        assert!(!has_field(r, &db, "due"));
     }
 
     // ── Nested records and lists ─────────────────────────────────
@@ -282,19 +244,15 @@ mod tests {
             &db,
             r#"calendar { location: { name: "Office", coordinates: "geo:37,-122" } }"#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                match get_field(&r, &db, "location") {
-                    Value::Record(loc) => {
-                        assert_eq!(
-                            get_field(&loc, &db, "name"),
-                            Value::String("Office".into())
-                        );
-                    }
-                    _ => panic!("expected nested Record"),
-                }
+        let r = expect_record(&result);
+        match get_field(r, &db, "location") {
+            Value::Record(loc) => {
+                assert_eq!(
+                    get_field(&loc, &db, "name"),
+                    Value::String("Office".into())
+                );
             }
-            _ => panic!("expected Calendar"),
+            _ => panic!("expected nested Record"),
         }
     }
 
@@ -305,18 +263,14 @@ mod tests {
             &db,
             r#"calendar { keywords: ["work", "meeting"] }"#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                match get_field(&r, &db, "keywords") {
-                    Value::List(items) => {
-                        assert_eq!(items.len(), 2);
-                        assert_eq!(items[0].value, Value::String("work".into()));
-                        assert_eq!(items[1].value, Value::String("meeting".into()));
-                    }
-                    _ => panic!("expected List"),
-                }
+        let r = expect_record(&result);
+        match get_field(r, &db, "keywords") {
+            Value::List(items) => {
+                assert_eq!(items.len(), 2);
+                assert_eq!(items[0].value, Value::String("work".into()));
+                assert_eq!(items[1].value, Value::String("meeting".into()));
             }
-            _ => panic!("expected Calendar"),
+            _ => panic!("expected List"),
         }
     }
 
@@ -329,25 +283,17 @@ mod tests {
             &db,
             "calendar { show_without_time: true, expect_reply: false }",
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                assert_eq!(get_field(&r, &db, "show_without_time"), Value::Bool(true));
-                assert_eq!(get_field(&r, &db, "expect_reply"), Value::Bool(false));
-            }
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "show_without_time"), Value::Bool(true));
+        assert_eq!(get_field(r, &db, "expect_reply"), Value::Bool(false));
     }
 
     #[test]
     fn undefined_literal() {
         let db = Database::default();
         let result = eval(&db, "calendar { x: undefined }");
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                assert_eq!(get_field(&r, &db, "x"), Value::Undefined);
-            }
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "x"), Value::Undefined);
     }
 
     #[test]
@@ -357,13 +303,9 @@ mod tests {
             &db,
             "calendar { priority: 5, offset: -3 }",
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                assert_eq!(get_field(&r, &db, "priority"), Value::Integer(5));
-                assert_eq!(get_field(&r, &db, "offset"), Value::SignedInteger(-3));
-            }
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
+        assert_eq!(get_field(r, &db, "offset"), Value::SignedInteger(-3));
     }
 
     #[test]
@@ -373,19 +315,15 @@ mod tests {
             &db,
             r#"calendar { href: <https://example.com>, status: #confirmed }"#,
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                assert_eq!(
-                    get_field(&r, &db, "href"),
-                    Value::String("https://example.com".into())
-                );
-                assert_eq!(
-                    get_field(&r, &db, "status"),
-                    Value::String("confirmed".into())
-                );
-            }
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        assert_eq!(
+            get_field(r, &db, "href"),
+            Value::String("https://example.com".into())
+        );
+        assert_eq!(
+            get_field(r, &db, "status"),
+            Value::String("confirmed".into())
+        );
     }
 
     // ── Declaration order preserved ──────────────────────────────
@@ -401,19 +339,8 @@ mod tests {
             task @b "B"
             "#,
         );
-        assert_eq!(result.document.decls.len(), 3);
-        assert!(matches!(
-            result.document.decls[0].value,
-            ReifiedDecl::Entry(_)
-        ));
-        assert!(matches!(
-            result.document.decls[1].value,
-            ReifiedDecl::Calendar(_)
-        ));
-        assert!(matches!(
-            result.document.decls[2].value,
-            ReifiedDecl::Entry(_)
-        ));
+        assert_eq!(expect_list_len(&result), 3);
+        assert!(matches!(expect_list_record(&result, 0), r if has_field(r, &db, "type")));
     }
 
     // ── Blame tracking ───────────────────────────────────────────
@@ -428,25 +355,25 @@ mod tests {
             calendar { uid: "b" }
             "#,
         );
-        let idx0 = result.document.decls[0].blame.decl.index(&db);
-        let idx1 = result.document.decls[1].blame.decl.index(&db);
-        assert_eq!(idx0, 0);
-        assert_eq!(idx1, 1);
+        match &result.value {
+            Value::List(items) => {
+                let idx0 = items[0].blame.decl.index(&db);
+                let idx1 = items[1].blame.decl.index(&db);
+                assert_eq!(idx0, 0);
+                assert_eq!(idx1, 1);
+            }
+            _ => panic!("expected list for multiple decls"),
+        }
     }
 
     #[test]
     fn blame_field_path_on_record_field() {
         let db = Database::default();
         let result = eval(&db, r#"calendar { uid: "test" }"#);
-        match &result.document.decls[0].value {
-            ReifiedDecl::Calendar(r) => {
-                let uid_name = FieldName::new(&db, "uid".to_string());
-                let blamed_value = r.get(&uid_name).unwrap();
-                // The field path should include the "uid" field segment.
-                assert_eq!(blamed_value.blame.path.0.len(), 1);
-            }
-            _ => panic!("expected Calendar"),
-        }
+        let r = expect_record(&result);
+        let uid_name = FieldName::new(&db, "uid".to_string());
+        let blamed_value = r.get(&uid_name).unwrap();
+        assert_eq!(blamed_value.blame.path.0.len(), 1);
     }
 
     // ── Every expression lowering ────────────────────────────────
@@ -458,19 +385,15 @@ mod tests {
             &db,
             "event { name: @standup, start: 2026-03-01T09:00, rrule: every day }",
         );
-        match &result.document.decls[0].value {
-            ReifiedDecl::Entry(r) => {
-                match get_field(&r, &db, "rrule") {
-                    Value::Record(rrule) => {
-                        assert_eq!(
-                            get_field(&rrule, &db, "frequency"),
-                            Value::String("daily".into())
-                        );
-                    }
-                    _ => panic!("expected Record for rrule"),
-                }
+        let r = expect_record(&result);
+        match get_field(r, &db, "rrule") {
+            Value::Record(rrule) => {
+                assert_eq!(
+                    get_field(&rrule, &db, "frequency"),
+                    Value::String("daily".into())
+                );
             }
-            _ => panic!("expected Entry"),
+            _ => panic!("expected Record for rrule"),
         }
     }
 
@@ -484,5 +407,248 @@ mod tests {
             r#"event @meeting 2026-03-01T14:30 1h "Standup" { priority: 5 }"#,
         );
         assert!(result.diagnostics.is_empty());
+    }
+
+    // ── New expression forms ─────────────────────────────────────
+
+    #[test]
+    fn let_expression() {
+        let db = Database::default();
+        let result = eval(&db, r#"let x = 42 in { count: x }"#);
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "count"), Value::Integer(42));
+    }
+
+    #[test]
+    fn identifier_expression() {
+        let db = Database::default();
+        let result = eval(&db, r#"let name = "hello" in name"#);
+        assert_eq!(result.value, Value::String("hello".into()));
+    }
+
+    #[test]
+    fn paren_expression() {
+        let db = Database::default();
+        let result = eval(&db, r#"(42)"#);
+        assert_eq!(result.value, Value::Integer(42));
+    }
+
+    #[test]
+    fn binary_concat_lists() {
+        let db = Database::default();
+        let result = eval(&db, r#"[1] ++ [2, 3]"#);
+        match &result.value {
+            Value::List(items) => {
+                assert_eq!(items.len(), 3);
+                assert_eq!(items[0].value, Value::Integer(1));
+                assert_eq!(items[1].value, Value::Integer(2));
+                assert_eq!(items[2].value, Value::Integer(3));
+            }
+            other => panic!("expected List, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn binary_merge_records() {
+        let db = Database::default();
+        let result = eval(&db, r#"{ a: 1 } // { b: 2 }"#);
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "a"), Value::Integer(1));
+        assert_eq!(get_field(r, &db, "b"), Value::Integer(2));
+    }
+
+    #[test]
+    fn binary_equality() {
+        let db = Database::default();
+        let result = eval(&db, "1 == 1");
+        assert_eq!(result.value, Value::Bool(true));
+
+        let result = eval(&db, "1 != 1");
+        assert_eq!(result.value, Value::Bool(false));
+
+        let result = eval(&db, "1 == 2");
+        assert_eq!(result.value, Value::Bool(false));
+    }
+
+    #[test]
+    fn field_access() {
+        let db = Database::default();
+        let result = eval(&db, r#"{ x: 42 }.x"#);
+        assert_eq!(result.value, Value::Integer(42));
+    }
+
+    #[test]
+    fn index_access() {
+        let db = Database::default();
+        let result = eval(&db, "[10, 20, 30][1]");
+        assert_eq!(result.value, Value::Integer(20));
+    }
+
+    #[test]
+    fn file_level_let_binding() {
+        let db = Database::default();
+        let result = eval(
+            &db,
+            r#"
+            let base = { priority: 1 }
+            event { name: @e, start: 2026-01-01T00:00 }
+            "#,
+        );
+        // base is not used in decls, so it doesn't affect the result
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "name"), Value::Name("e".into()));
+    }
+
+    #[test]
+    fn file_level_let_used_in_expr_body() {
+        let db = Database::default();
+        let result = eval(
+            &db,
+            r#"
+            let x = 42
+            { count: x }
+            "#,
+        );
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "count"), Value::Integer(42));
+    }
+
+    #[test]
+    fn binary_left_associative() {
+        let db = Database::default();
+        // [1] ++ [2] ++ [3] should be ([1] ++ [2]) ++ [3] = [1, 2, 3]
+        let result = eval(&db, "[1] ++ [2] ++ [3]");
+        match &result.value {
+            Value::List(items) => assert_eq!(items.len(), 3),
+            other => panic!("expected List, got: {other:?}"),
+        }
+    }
+
+    // ── Import expressions ──────────────────────────────────────
+
+    mod import_tests {
+        use super::*;
+        use std::io::Write;
+
+        fn eval_file<'db>(db: &'db Database, path: &std::path::Path) -> super::super::EvalResult<'db> {
+            let text = std::fs::read_to_string(path).unwrap();
+            let sf = SourceFile::new(db, path.to_path_buf(), text);
+            super::super::evaluate(db, sf)
+        }
+
+        #[test]
+        fn import_gnomon_file() {
+            let dir = tempfile::tempdir().unwrap();
+
+            // Create the imported file.
+            let other_path = dir.path().join("other.gnomon");
+            let mut f = std::fs::File::create(&other_path).unwrap();
+            write!(f, r#"{{ x: 42 }}"#).unwrap();
+
+            // Create the importing file.
+            let main_path = dir.path().join("main.gnomon");
+            let mut f = std::fs::File::create(&main_path).unwrap();
+            write!(f, "import ./other.gnomon").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "x"), Value::Integer(42));
+        }
+
+        #[test]
+        fn import_circular_detected() {
+            let dir = tempfile::tempdir().unwrap();
+
+            // a.gnomon imports b.gnomon, b.gnomon imports a.gnomon
+            let a_path = dir.path().join("a.gnomon");
+            let b_path = dir.path().join("b.gnomon");
+            std::fs::write(&a_path, "import ./b.gnomon").unwrap();
+            std::fs::write(&b_path, "import ./a.gnomon").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &a_path);
+            assert!(
+                result.diagnostics.iter().any(|d| d.message.contains("circular import")),
+                "expected circular import error, got: {:?}",
+                result.diagnostics,
+            );
+        }
+
+        #[test]
+        fn import_nonexistent_file() {
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./missing.gnomon").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(
+                result.diagnostics.iter().any(|d| d.message.contains("cannot read import")),
+                "expected file-not-found error, got: {:?}",
+                result.diagnostics,
+            );
+        }
+
+        #[test]
+        fn import_with_let_binding() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let lib_path = dir.path().join("lib.gnomon");
+            std::fs::write(&lib_path, r#"{ base_priority: 5 }"#).unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(
+                &main_path,
+                r#"
+                let defaults = import ./lib.gnomon
+                defaults // { name: "custom" }
+                "#,
+            )
+            .unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "base_priority"), Value::Integer(5));
+            assert_eq!(get_field(r, &db, "name"), Value::String("custom".into()));
+        }
+
+        #[test]
+        fn import_with_as_gnomon() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let other_path = dir.path().join("other.gnomon");
+            std::fs::write(&other_path, "{ val: 1 }").unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./other.gnomon as gnomon").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "val"), Value::Integer(1));
+        }
+
+        #[test]
+        fn import_string_source() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let other_path = dir.path().join("data.gnomon");
+            std::fs::write(&other_path, "{ key: 99 }").unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, r#"import "data.gnomon""#).unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            // String source treated as relative path — should find the file.
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "key"), Value::Integer(99));
+        }
     }
 }

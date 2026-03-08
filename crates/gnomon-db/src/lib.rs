@@ -6,7 +6,7 @@ pub use eval::{EvalResult, evaluate};
 pub use eval::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
 pub use eval::merge::{MergeResult, merge};
 pub use eval::render::{Rendered, RenderWithDb};
-pub use eval::types::{Blamed, Blame, Calendar, Document, IncludeRef, Record, ReifiedDecl, Value};
+pub use eval::types::{Blamed, Blame, Calendar, Record, Value};
 pub use input::SourceFile;
 pub use queries::{Diagnostic, ParseResult, Severity, SyntaxCheckResult, check_syntax, parse};
 
@@ -92,7 +92,9 @@ mod tests {
     #[test]
     fn check_syntax_accumulates_parse_and_validation_errors() {
         let db = Database::default();
-        // "~~~" causes a parse error; overflow causes a validation error
+        // "~~~" causes parse errors; overflow causes a validation error
+        // The error recovery wraps ~~~ as error nodes, then the parser picks up
+        // the calendar declaration containing the overflow.
         let source = SourceFile::new(
             &db,
             PathBuf::from("both.gnomon"),
@@ -101,8 +103,15 @@ mod tests {
         let result = check_syntax(&db, source);
         assert!(result.parse_has_errors(&db));
         let diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source);
-        assert!(diagnostics.iter().any(|d| d.message.contains("expected")));
-        assert!(diagnostics.iter().any(|d| d.message.contains("overflows")));
+        assert!(
+            diagnostics.iter().any(|d| d.message.contains("expected")
+                || d.message.contains("declaration")),
+            "should have parse error, got: {diagnostics:?}"
+        );
+        assert!(
+            diagnostics.iter().any(|d| d.message.contains("overflows")),
+            "should have overflow error, got: {diagnostics:?}"
+        );
     }
 
     #[test]
