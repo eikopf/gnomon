@@ -61,21 +61,37 @@ impl<'db> LowerCtx<'db> {
                         blame,
                     });
                 }
+                // r[impl model.entry.type.infer]
                 ast::Decl::EventDecl(ev) => {
                     let decl_id = self.make_decl_id(index, DeclKind::Event);
                     let blame = self.root_blame(decl_id);
-                    let record = self.lower_event(&ev, decl_id);
+                    let mut record = self.lower_event(&ev, decl_id);
+                    self.insert_field(
+                        &mut record,
+                        "type",
+                        Value::String("event".into()),
+                        decl_id,
+                        &FieldPath::root(),
+                    );
                     decls.push(Blamed {
-                        value: ReifiedDecl::Event(record),
+                        value: ReifiedDecl::Entry(record),
                         blame,
                     });
                 }
+                // r[impl model.entry.type.infer]
                 ast::Decl::TaskDecl(task) => {
                     let decl_id = self.make_decl_id(index, DeclKind::Task);
                     let blame = self.root_blame(decl_id);
-                    let record = self.lower_task(&task, decl_id);
+                    let mut record = self.lower_task(&task, decl_id);
+                    self.insert_field(
+                        &mut record,
+                        "type",
+                        Value::String("task".into()),
+                        decl_id,
+                        &FieldPath::root(),
+                    );
                     decls.push(Blamed {
-                        value: ReifiedDecl::Task(record),
+                        value: ReifiedDecl::Entry(record),
                         blame,
                     });
                 }

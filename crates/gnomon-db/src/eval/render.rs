@@ -120,12 +120,8 @@ fn write_reified_decl<'db>(
             write!(w, "Calendar ")?;
             write_record(w, r, db, indent)
         }
-        ReifiedDecl::Event(r) => {
-            write!(w, "Event ")?;
-            write_record(w, r, db, indent)
-        }
-        ReifiedDecl::Task(r) => {
-            write!(w, "Task ")?;
+        ReifiedDecl::Entry(r) => {
+            write!(w, "Entry ")?;
             write_record(w, r, db, indent)
         }
     }
@@ -284,14 +280,9 @@ impl<'db> RenderWithDb<'db> for Calendar<'db> {
         write_record(f, &self.properties, db, 4)?;
         writeln!(f, ",")?;
 
-        // Events
-        write!(f, "    events: ")?;
-        write_record_list(f, &self.events, db, 4)?;
-        writeln!(f, ",")?;
-
-        // Tasks
-        write!(f, "    tasks: ")?;
-        write_record_list(f, &self.tasks, db, 4)?;
+        // Entries
+        write!(f, "    entries: ")?;
+        write_record_list(f, &self.entries, db, 4)?;
         writeln!(f, ",")?;
 
         // Includes
@@ -378,7 +369,7 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Event {
+                        Entry {
                             duration: {
                                 days: 0,
                                 hours: 1,
@@ -400,6 +391,7 @@ mod tests {
                                 },
                             },
                             title: "Standup",
+                            type: "event",
                         },
                     ],
                 }"#]],
@@ -460,7 +452,7 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Task {
+                        Entry {
                             due: {
                                 date: {
                                     day: 15,
@@ -475,6 +467,7 @@ mod tests {
                             },
                             name: @review,
                             title: "Code review",
+                            type: "task",
                         },
                     ],
                 }"#]],
@@ -493,7 +486,7 @@ mod tests {
                 Document {
                     bindings: {},
                     decls: [
-                        Event {
+                        Entry {
                             duration: {
                                 days: 0,
                                 hours: 1,
@@ -515,13 +508,15 @@ mod tests {
                                 },
                             },
                             title: "A",
+                            type: "event",
                         },
                         Calendar {
                             uid: "cal",
                         },
-                        Task {
+                        Entry {
                             name: @b,
                             title: "B",
+                            type: "task",
                         },
                     ],
                 }"#]],

@@ -96,7 +96,7 @@ mod tests {
         );
         assert_eq!(result.document.decls.len(), 1);
         match &result.document.decls[0].value {
-            ReifiedDecl::Event(r) => {
+            ReifiedDecl::Entry(r) => {
                 assert_eq!(get_field(&r, &db, "name"), Value::Name("standup".into()));
                 assert_eq!(
                     get_field(&r, &db, "title"),
@@ -111,7 +111,7 @@ mod tests {
                     _ => panic!("expected Record for start"),
                 }
             }
-            _ => panic!("expected Event"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -126,7 +126,7 @@ mod tests {
         );
         assert_eq!(result.document.decls.len(), 1);
         match &result.document.decls[0].value {
-            ReifiedDecl::Event(r) => {
+            ReifiedDecl::Entry(r) => {
                 assert_eq!(get_field(&r, &db, "name"), Value::Name("meeting".into()));
                 assert_eq!(
                     get_field(&r, &db, "title"),
@@ -137,7 +137,7 @@ mod tests {
                 // duration is desugared
                 assert!(matches!(get_field(&r, &db, "duration"), Value::Record(_)));
             }
-            _ => panic!("expected Event"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -149,11 +149,11 @@ mod tests {
             r#"event @meeting 2026-03-01T14:30 1h "Standup" { priority: 5 }"#,
         );
         match &result.document.decls[0].value {
-            ReifiedDecl::Event(r) => {
+            ReifiedDecl::Entry(r) => {
                 assert_eq!(get_field(&r, &db, "name"), Value::Name("meeting".into()));
                 assert_eq!(get_field(&r, &db, "priority"), Value::Integer(5));
             }
-            _ => panic!("expected Event"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -165,7 +165,7 @@ mod tests {
             r#"event @meeting 2026-03-01 14:30 1h "Standup""#,
         );
         match &result.document.decls[0].value {
-            ReifiedDecl::Event(r) => {
+            ReifiedDecl::Entry(r) => {
                 match get_field(&r, &db, "start") {
                     Value::Record(dt) => {
                         assert!(has_field(&dt, &db, "date"));
@@ -174,7 +174,7 @@ mod tests {
                     _ => panic!("expected Record for start"),
                 }
             }
-            _ => panic!("expected Event"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -188,10 +188,10 @@ mod tests {
             r#"task { name: @review, title: "Code review" }"#,
         );
         match &result.document.decls[0].value {
-            ReifiedDecl::Task(r) => {
+            ReifiedDecl::Entry(r) => {
                 assert_eq!(get_field(&r, &db, "name"), Value::Name("review".into()));
             }
-            _ => panic!("expected Task"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -203,7 +203,7 @@ mod tests {
             r#"task @review 2026-03-15T17:00 "Code review""#,
         );
         match &result.document.decls[0].value {
-            ReifiedDecl::Task(r) => {
+            ReifiedDecl::Entry(r) => {
                 assert_eq!(get_field(&r, &db, "name"), Value::Name("review".into()));
                 assert_eq!(
                     get_field(&r, &db, "title"),
@@ -212,7 +212,7 @@ mod tests {
                 // due is desugared datetime
                 assert!(matches!(get_field(&r, &db, "due"), Value::Record(_)));
             }
-            _ => panic!("expected Task"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -221,11 +221,11 @@ mod tests {
         let db = Database::default();
         let result = eval(&db, r#"task @todo "Do something""#);
         match &result.document.decls[0].value {
-            ReifiedDecl::Task(r) => {
+            ReifiedDecl::Entry(r) => {
                 assert_eq!(get_field(&r, &db, "name"), Value::Name("todo".into()));
                 assert!(!has_field(&r, &db, "due"));
             }
-            _ => panic!("expected Task"),
+            _ => panic!("expected Entry"),
         }
     }
 
@@ -403,7 +403,7 @@ mod tests {
         assert_eq!(result.document.decls.len(), 3);
         assert!(matches!(
             result.document.decls[0].value,
-            ReifiedDecl::Event(_)
+            ReifiedDecl::Entry(_)
         ));
         assert!(matches!(
             result.document.decls[1].value,
@@ -411,7 +411,7 @@ mod tests {
         ));
         assert!(matches!(
             result.document.decls[2].value,
-            ReifiedDecl::Task(_)
+            ReifiedDecl::Entry(_)
         ));
     }
 
@@ -458,7 +458,7 @@ mod tests {
             "event { name: @standup, start: 2026-03-01T09:00, rrule: every day }",
         );
         match &result.document.decls[0].value {
-            ReifiedDecl::Event(r) => {
+            ReifiedDecl::Entry(r) => {
                 match get_field(&r, &db, "rrule") {
                     Value::Record(rrule) => {
                         assert_eq!(
@@ -469,7 +469,7 @@ mod tests {
                     _ => panic!("expected Record for rrule"),
                 }
             }
-            _ => panic!("expected Event"),
+            _ => panic!("expected Entry"),
         }
     }
 

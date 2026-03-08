@@ -56,7 +56,8 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
                         calendar.properties = record.clone();
                     }
                 }
-                ReifiedDecl::Event(record) => {
+                // r[impl model.calendar.entries]
+                ReifiedDecl::Entry(record) => {
                     check_name_collision(
                         db,
                         record,
@@ -66,22 +67,7 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
                         &mut diagnostics,
                         &mut has_errors,
                     );
-                    calendar.events.push(super::types::Blamed {
-                        value: record.clone(),
-                        blame: blamed_decl.blame.clone(),
-                    });
-                }
-                ReifiedDecl::Task(record) => {
-                    check_name_collision(
-                        db,
-                        record,
-                        &name_key,
-                        source,
-                        &mut seen_names,
-                        &mut diagnostics,
-                        &mut has_errors,
-                    );
-                    calendar.tasks.push(super::types::Blamed {
+                    calendar.entries.push(super::types::Blamed {
                         value: record.clone(),
                         blame: blamed_decl.blame.clone(),
                     });
@@ -230,7 +216,7 @@ mod tests {
                     properties: {
                         uid: "test",
                     },
-                    events: [
+                    entries: [
                         {
                             duration: {
                                 days: 0,
@@ -253,9 +239,9 @@ mod tests {
                                 },
                             },
                             title: "Standup",
+                            type: "event",
                         },
                     ],
-                    tasks: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -287,7 +273,7 @@ mod tests {
                     properties: {
                         uid: "cal",
                     },
-                    events: [
+                    entries: [
                         {
                             duration: {
                                 days: 0,
@@ -310,6 +296,7 @@ mod tests {
                                 },
                             },
                             title: "A",
+                            type: "event",
                         },
                         {
                             duration: {
@@ -333,9 +320,9 @@ mod tests {
                                 },
                             },
                             title: "B",
+                            type: "event",
                         },
                     ],
-                    tasks: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -471,8 +458,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {},
-                    events: [],
-                    tasks: [],
+                    entries: [],
                     includes: [
                         "holidays.ics",
                     ],
@@ -514,11 +500,11 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {},
-                    events: [],
-                    tasks: [
+                    entries: [
                         {
                             name: @review,
                             title: "Code review",
+                            type: "task",
                         },
                         {
                             due: {
@@ -535,6 +521,7 @@ mod tests {
                             },
                             name: @deploy,
                             title: "Ship it",
+                            type: "task",
                         },
                     ],
                     includes: [],
@@ -561,8 +548,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {},
-                    events: [],
-                    tasks: [],
+                    entries: [],
                     includes: [],
                     bindings: {
                         cal.personal: "personal-uid",
@@ -590,8 +576,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {},
-                    events: [],
-                    tasks: [],
+                    entries: [],
                     includes: [
                         "holidays.ics",
                         "https://example.com/feed.ics",
@@ -628,7 +613,7 @@ mod tests {
                     properties: {
                         uid: "main",
                     },
-                    events: [
+                    entries: [
                         {
                             duration: {
                                 days: 0,
@@ -651,12 +636,12 @@ mod tests {
                                 },
                             },
                             title: "Standup",
+                            type: "event",
                         },
-                    ],
-                    tasks: [
                         {
                             name: @review,
                             title: "Code review",
+                            type: "task",
                         },
                     ],
                     includes: [
@@ -857,7 +842,7 @@ mod tests {
             .iter()
             .any(|d| d.source.path(&db).to_str().unwrap() == "bad.gnomon"));
         // But the valid content still merged.
-        assert_eq!(result.calendar.events.len(), 1);
+        assert_eq!(result.calendar.entries.len(), 1);
         let uid_key = crate::eval::interned::FieldName::new(&db, "uid".to_string());
         assert_eq!(
             result.calendar.properties.get(&uid_key).unwrap().value,
@@ -893,8 +878,7 @@ mod tests {
                     properties: {
                         uid: "minimal",
                     },
-                    events: [],
-                    tasks: [],
+                    entries: [],
                     includes: [],
                     bindings: {},
                 }"#]],
@@ -918,8 +902,7 @@ mod tests {
         ];
         let result = merge(&db, &sources);
         assert!(!result.has_errors);
-        assert_eq!(result.calendar.events.len(), 1);
-        assert_eq!(result.calendar.tasks.len(), 1);
+        assert_eq!(result.calendar.entries.len(), 2);
     }
 
     #[test]
@@ -943,7 +926,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {},
-                    events: [
+                    entries: [
                         {
                             duration: {
                                 days: 0,
@@ -966,6 +949,7 @@ mod tests {
                                 },
                             },
                             title: "Second",
+                            type: "event",
                         },
                         {
                             duration: {
@@ -989,9 +973,9 @@ mod tests {
                                 },
                             },
                             title: "First",
+                            type: "event",
                         },
                     ],
-                    tasks: [],
                     includes: [],
                     bindings: {},
                 }"#]],
