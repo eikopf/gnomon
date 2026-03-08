@@ -131,6 +131,13 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
         }
     }
 
+    // Shape-check the merged calendar.
+    let shape_diags = super::shape::check_calendar_shape(db, &calendar, sources);
+    for diag in shape_diags {
+        has_errors |= diag.severity == Severity::Error;
+        diagnostics.push(diag);
+    }
+
     MergeResult {
         calendar,
         diagnostics,
@@ -894,7 +901,7 @@ mod tests {
                 &db,
                 "a.gnomon",
                 r#"
-                calendar {}
+                calendar { uid: "test" }
                 event @shared 2026-01-01T09:00 1h "Event"
                 "#,
             ),

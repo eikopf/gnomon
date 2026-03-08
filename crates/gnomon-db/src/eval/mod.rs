@@ -4,6 +4,7 @@ pub mod literals;
 pub mod lower;
 pub mod merge;
 pub mod render;
+pub mod shape;
 pub mod types;
 
 use crate::input::SourceFile;
