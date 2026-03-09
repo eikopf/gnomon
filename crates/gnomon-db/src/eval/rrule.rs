@@ -1,15 +1,12 @@
-//! Recurrence rule expansion for calendar entries.
+//! Recurrence rule validation for calendar entries.
 //!
-//! Converts gnomon-db `Value` records into `gnomon_rrule::RecurrenceRule`,
-//! expands occurrences, and stores them back as a list of datetime records.
+//! Converts gnomon-db `Value` records into `gnomon_rrule::RecurrenceRule`
+//! to validate that recurrence rules are well-formed. Does not materialize
+//! occurrences — that belongs in a future query pipeline.
 
-use super::desugar;
 use super::interned::FieldName;
-use super::types::{Blame, Blamed, Calendar, Record, Value};
+use super::types::{Calendar, Record, Value};
 use crate::queries::{Diagnostic, Severity};
-
-/// Maximum number of occurrences to materialize for infinite rules.
-const INFINITE_CAP: usize = 1000;
 
 /// Extract a field value from a record by name.
 fn get_field<'db>(
@@ -305,48 +302,23 @@ fn extract_unsigned_list(
     }
 }
 
-/// Convert a `jiff::civil::DateTime` into a datetime record value.
-fn datetime_to_record<'db>(
-    db: &'db dyn crate::Db,
-    dt: gnomon_rrule::DateTime,
-    blame: &Blame<'db>,
-) -> Value<'db> {
-    let date_fields = [
-        ("year", Value::Integer(dt.year() as u64)),
-        ("month", Value::Integer(dt.month() as u64)),
-        ("day", Value::Integer(dt.day() as u64)),
-    ];
-    let time_fields = [
-        ("hour", Value::Integer(dt.hour() as u64)),
-        ("minute", Value::Integer(dt.minute() as u64)),
-        ("second", Value::Integer(dt.second() as u64)),
-    ];
-    let fields = [
-        ("date", Value::Record(desugar::make_record(db, &date_fields, blame))),
-        ("time", Value::Record(desugar::make_record(db, &time_fields, blame))),
-    ];
-    Value::Record(desugar::make_record(db, &fields, blame))
-}
-
-/// Expand recurrence rules on calendar entries into materialized occurrences.
+/// Validate recurrence rules on calendar entries.
 ///
 /// For each entry with a `recur` field that is a Record, this function:
-/// 1. Extracts the `start` datetime and `recur` rule record
-/// 2. Converts them to gnomon-rrule types
+/// 1. Checks that a `start` datetime exists and is valid
+/// 2. Converts the `recur` record to a `RecurrenceRule` to validate it
 // r[impl record.rrule.eval.expansion]
-/// 3. Expands occurrences
-/// 4. Stores the result as an `occurrences` list field on the entry
-pub fn expand_entry_recurrences<'db>(
+/// 3. Reports diagnostics for any invalid rules
+pub fn validate_entry_recurrences<'db>(
     db: &'db dyn crate::Db,
-    calendar: &mut Calendar<'db>,
+    calendar: &Calendar<'db>,
     diagnostics: &mut Vec<Diagnostic>,
     has_errors: &mut bool,
 ) {
     let recur_key = FieldName::new(db, "recur".to_string());
     let start_key = FieldName::new(db, "start".to_string());
-    let occurrences_key = FieldName::new(db, "occurrences".to_string());
 
-    for entry in &mut calendar.entries {
+    for entry in &calendar.entries {
         let recur_record = match entry.value.get(&recur_key) {
             Some(blamed) => match &blamed.value {
                 Value::Record(r) => r.clone(),
@@ -385,7 +357,7 @@ pub fn expand_entry_recurrences<'db>(
             }
         };
 
-        let dtstart = match record_to_datetime(db, start_record) {
+        let _dtstart = match record_to_datetime(db, start_record) {
             Ok(dt) => dt,
             Err(e) => {
                 *has_errors = true;
@@ -399,53 +371,17 @@ pub fn expand_entry_recurrences<'db>(
             }
         };
 
-        let rule = match record_to_rule(db, &recur_record) {
-            Ok(r) => r,
-            Err(e) => {
-                *has_errors = true;
-                diagnostics.push(Diagnostic {
-                    source,
-                    range: rowan::TextRange::default(),
-                    severity: Severity::Error,
-                    message: format!("invalid recurrence rule: {e}"),
-                });
-                continue;
-            }
-        };
-
-        let occurrences = gnomon_rrule::Occurrences::new(rule, dtstart);
-        let is_finite = occurrences.is_finite();
-
-        let dates: Vec<gnomon_rrule::DateTime> = if is_finite {
-            occurrences.into_iter().collect()
-        } else {
+        // Validate the rule is well-formed by attempting conversion.
+        // We don't need the result — just checking for errors.
+        if let Err(e) = record_to_rule(db, &recur_record) {
+            *has_errors = true;
             diagnostics.push(Diagnostic {
                 source,
                 range: rowan::TextRange::default(),
-                severity: Severity::Warning,
-                message: format!(
-                    "infinite recurrence rule (no COUNT or UNTIL); capped at {INFINITE_CAP} occurrences"
-                ),
+                severity: Severity::Error,
+                message: format!("invalid recurrence rule: {e}"),
             });
-            occurrences.into_iter().take(INFINITE_CAP).collect()
-        };
-
-        let blame = &entry.blame;
-        let occurrence_values: Vec<Blamed<'db, Value<'db>>> = dates
-            .into_iter()
-            .map(|dt| Blamed {
-                value: datetime_to_record(db, dt, blame),
-                blame: blame.clone(),
-            })
-            .collect();
-
-        entry.value.insert(
-            occurrences_key.clone(),
-            Blamed {
-                value: Value::List(occurrence_values),
-                blame: entry.blame.clone(),
-            },
-        );
+        }
     }
 }
 
@@ -453,6 +389,8 @@ pub fn expand_entry_recurrences<'db>(
 mod tests {
     use super::*;
     use crate::eval::interned::{DeclId, DeclKind, FieldPath};
+    use crate::eval::desugar;
+    use crate::eval::types::{Blame, Blamed};
     use crate::input::SourceFile;
     use crate::Database;
     use std::path::PathBuf;
@@ -506,16 +444,6 @@ mod tests {
         assert_eq!(dt.hour(), 14);
         assert_eq!(dt.minute(), 30);
         assert_eq!(dt.second(), 0);
-
-        // Round-trip back to record.
-        let value = datetime_to_record(&db, dt, &blame);
-        match value {
-            Value::Record(r) => {
-                let rt_dt = record_to_datetime(&db, &r).unwrap();
-                assert_eq!(rt_dt, dt);
-            }
-            _ => panic!("expected Record"),
-        }
     }
 
     #[test]

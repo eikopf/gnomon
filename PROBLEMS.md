@@ -12,14 +12,6 @@ The spec introduction is still `TODO: write prose introduction`. Not a functiona
 
 ---
 
-## II. Implementation Gaps
-
-### 3. Eager Recurrence Materialization
-
-The `check` pipeline in `eval/rrule.rs` eagerly materializes all occurrences and injects an `occurrences` field onto each entry record. This is incorrect: `check` should not mutate entry records, and infinite rules should not need capping. The spec defines recurrence semantics abstractly (`r[record.rrule.eval.infinite]`), and implementations should evaluate occurrences lazily within a queried time range. The `occurrences` field is not part of the data model.
-
----
-
 ## Prioritized Recommendations
 
 **Near-term (design work):**
@@ -58,6 +50,7 @@ The following issues from the original analysis have been fully addressed:
 - **Calendar singularity** — specified via `r[model.calendar.singular]`; exactly one calendar declaration required
 - **Non-UUID calendar UID** — specified via `r[model.calendar.uid.derivation.non-uuid]`; derivation skipped with warning when calendar uid is not a valid UUID
 - **URI import content-type inference** — specified via `r[expr.import.format.uri]`; format inferred from HTTP Content-Type header for URI imports without explicit format or recognized extension
+- **Eager recurrence materialization** — `check` pipeline no longer materializes occurrences or injects an `occurrences` field; `validate_entry_recurrences` validates rule well-formedness only; infinite rules are valid per `r[record.rrule.eval.infinite]`; occurrence expansion deferred to future query pipeline
 - **Orphaned normative prose** — leap second tolerance tagged as `r[lexer.time.leap-second]`; whitespace insignificance tagged as `r[lexer.whitespace.insignificant]`
 - **String literal import source** — removed from spec grammar (`r[expr.import.syntax+2]`) and implementation; only path and URI literals are valid import sources
 - **Multi-file merge composability** — the old `merge` subcommand (which combined peer files) has been replaced by a unified `check` subcommand (`r[cli.subcommand.check+2]`) that evaluates a single root file (which transitively imports other files via `import` expressions), validates the result as a calendar, and warns about unused `.gnomon` files in the project directory (`r[cli.subcommand.check.unused]`)

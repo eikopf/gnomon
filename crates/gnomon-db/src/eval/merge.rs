@@ -127,8 +127,8 @@ pub fn validate_calendar<'db>(
         diagnostics.push(diag);
     }
 
-    // Expand recurrence rules into materialized occurrences.
-    super::rrule::expand_entry_recurrences(db, &mut calendar, &mut diagnostics, &mut has_errors);
+    // Validate recurrence rules (without materializing occurrences).
+    super::rrule::validate_entry_recurrences(db, &calendar, &mut diagnostics, &mut has_errors);
 
     CheckResult {
         calendar,
@@ -868,7 +868,7 @@ mod tests {
     // ── Recurrence expansion tests ──────────────────────────
 
     #[test]
-    fn entry_with_recur_gets_occurrences() {
+    fn entry_with_valid_recur_validates_cleanly() {
         let db = Database::default();
         let source = make_source(
             &db,
@@ -880,15 +880,10 @@ mod tests {
         );
         let result = check(&db, source);
         assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        // Validation should not inject an occurrences field.
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
-        let occ = entry.get(&occ_key).expect("should have occurrences field");
-        match &occ.value {
-            Value::List(items) => {
-                assert_eq!(items.len(), 5, "expected 5 daily occurrences Jan 1-5");
-            }
-            other => panic!("expected List for occurrences, got: {other:?}"),
-        }
+        assert!(entry.get(&occ_key).is_none(), "should not have occurrences field");
     }
 
     #[test]
@@ -929,7 +924,7 @@ mod tests {
     }
 
     #[test]
-    fn infinite_rule_capped_with_warning() {
+    fn infinite_rule_validates_cleanly() {
         let db = Database::default();
         let source = make_source(
             &db,
@@ -940,28 +935,20 @@ mod tests {
             "#,
         );
         let result = check(&db, source);
+        // Infinite rules are valid per r[record.rrule.eval.infinite] — no warnings or errors.
+        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
         assert!(
-            result.diagnostics.iter().any(|d| d.severity == Severity::Warning && d.message.contains("infinite recurrence")),
-            "expected infinite recurrence warning, got: {:?}",
-            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            !result.diagnostics.iter().any(|d| d.message.contains("infinite recurrence")),
+            "should not warn about infinite recurrence"
         );
-        let occ_key = FieldName::new(&db, "occurrences".to_string());
-        let entry = &result.calendar.entries[0].value;
-        match &entry.get(&occ_key).unwrap().value {
-            Value::List(items) => {
-                assert_eq!(items.len(), 1000, "infinite rule should be capped at 1000");
-            }
-            other => panic!("expected List, got: {other:?}"),
-        }
     }
 
     #[test]
-    fn weekly_recurrence_expanded() {
+    fn weekly_recurrence_validates_cleanly() {
         let db = Database::default();
         let source = make_source(
             &db,
             "a.gnomon",
-            // 2026-01-05 is a Monday. Until 2026-02-01 should give 4 Mondays: Jan 5, 12, 19, 26.
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event { name: @weekly, start: 2026-01-05T09:00, recur: { frequency: #weekly, by_day: [{ day: #monday }], termination: 2026-02-01T00:00 } }
@@ -969,13 +956,9 @@ mod tests {
         );
         let result = check(&db, source);
         assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        // Validation should not inject an occurrences field.
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
-        match &entry.get(&occ_key).unwrap().value {
-            Value::List(items) => {
-                assert_eq!(items.len(), 4, "expected 4 Mondays: Jan 5, 12, 19, 26");
-            }
-            other => panic!("expected List, got: {other:?}"),
-        }
+        assert!(entry.get(&occ_key).is_none(), "should not have occurrences field");
     }
 }
