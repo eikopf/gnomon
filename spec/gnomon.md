@@ -121,7 +121,7 @@ The keywords `true`, `false`, and `undefined` MUST be treated as strict.
 
 All other keywords are weak.
 
-> r[lexer.keyword.weak+2]
+> r[lexer.keyword.weak+3]
 > All keywords other than `true`, `false`, and `undefined` MUST be treated as weak; these keywords are
 >
 > - `calendar`
@@ -143,7 +143,6 @@ All other keywords are weak.
 > - `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
 > - `gnomon`, `icalendar`, `jscalendar`
 > - `override`
-> - `local`
 
 
 ### Names

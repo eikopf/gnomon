@@ -26,9 +26,9 @@ The reserved subcommand `query` hints at this. A calendar language without the a
 
 The `merge` subcommand works: it evaluates each source file, flattens the resulting values into records, separates calendar properties from entries, checks uniqueness constraints (single calendar, unique names), and runs shape-checking. However, the merge pipeline is a fixed post-evaluation stage rather than something expressible in the language itself. With `import` and `let` now available, a user *could* compose files via a root file that imports and merges others using `//` and `++`, but the `merge` CLI subcommand still applies its own uniqueness and shape-checking logic. Whether merge should eventually become a library of Gnomon functions rather than a hardcoded pipeline step is an open design question.
 
-### 6. Orphaned `local` Keyword
+### ~~6. Orphaned `local` Keyword~~ (resolved)
 
-`local` is listed as a weak keyword with no grammar production or semantic rule. It relates to the "local datetime" concept (defined in the spec via `r[lexer.datetime.local]`) but has no parser or evaluator support. It should be clarified or removed.
+Removed. See Resolved section.
 
 ---
 
@@ -42,7 +42,7 @@ The `merge` subcommand works: it evaluates each source file, flattens the result
 **Longer-term (design work):**
 4. Design query system (#4)
 5. Consider making merge composable in-language (#5)
-6. Clarify or remove `local` keyword (#6)
+6. ~~Clarify or remove `local` keyword (#6)~~ (done)
 
 ---
 
@@ -68,3 +68,4 @@ The following issues from the original analysis have been fully addressed:
 - **Include resolution semantics** — superseded by `import` expressions (`r[expr.import.*]`, `r[model.import.*]`)
 - **Binding semantics** — superseded by `let` bindings (`r[expr.let.*]`, `r[syntax.file.let]`)
 - **Shape-checking** — specified via `r[model.shape.*]` and implemented in `eval/shape.rs`; validates calendar, event, task, and all nested record types; error-resilient, recursive, preserves open records; wired into merge pipeline
+- **Orphaned `local` keyword** — removed from `r[lexer.keyword.weak]`; the "local datetime" concept (`r[lexer.datetime.local]`) remains but needs no keyword since locality is the default (absence of `time_zone` field)

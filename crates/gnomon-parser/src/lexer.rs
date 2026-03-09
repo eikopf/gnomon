@@ -340,7 +340,6 @@ mod tests {
             "friday",
             "saturday",
             "sunday",
-            "local",
             "import",
             "as",
             "let",
