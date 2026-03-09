@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/gnomon-parser", "crates/gnomon-db", "crates/gnomon-import"]
+members = ["crates/gnomon-parser", "crates/gnomon-db", "crates/gnomon-import", "crates/gnomon-rrule"]
 
 [package]
 name = "gnomon"

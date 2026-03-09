@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 gnomon-parser = { path = "../gnomon-parser" }
 gnomon-import = { path = "../gnomon-import" }
+gnomon-rrule = { path = "../gnomon-rrule" }
 salsa = "0.26"
 rowan = "0.16"
 uuid = { version = "1", features = ["v5"] }

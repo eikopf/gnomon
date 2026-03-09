@@ -1,0 +1,10 @@
+[package]
+name = "gnomon-rrule"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+jiff = "0.2"
+
+[dev-dependencies]
+expect-test = "1"
