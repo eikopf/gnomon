@@ -4,11 +4,12 @@ pub mod queries;
 
 pub use eval::{EvalResult, evaluate};
 pub use eval::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
-pub use eval::merge::{MergeResult, merge};
+pub use eval::merge::{CheckResult, validate_calendar};
 pub use eval::render::{Rendered, RenderWithDb};
 pub use eval::types::{Blamed, Blame, Calendar, Record, Value};
 pub use input::SourceFile;
 pub use queries::{Diagnostic, ParseResult, Severity, SyntaxCheckResult, check_syntax, parse};
+pub use rowan::TextRange;
 
 #[salsa::db]
 pub trait Db: salsa::Database {}

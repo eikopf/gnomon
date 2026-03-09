@@ -731,7 +731,7 @@ Records representing events MUST have a field named `start` whose value is a loc
 The `uid` field on events is always assigned a value. If omitted, it is derived per `r[model.calendar.uid.derivation]`.
 
 r[record.event.uid+2]
-Records representing events MUST have a field named `uid` whose value is a string. If the field is omitted in the source data, a UID is derived during merge.
+Records representing events MUST have a field named `uid` whose value is a string. If the field is omitted in the source data, a UID is derived during calendar validation.
 
 Events may also have the following optional fields:
 
@@ -754,7 +754,7 @@ Records representing tasks MUST have a field named `name` whose value is a name,
 The `uid` field on tasks is always assigned a value. If omitted, it is derived per `r[model.calendar.uid.derivation]`.
 
 r[record.task.uid+2]
-Records representing tasks MUST have a field named `uid` whose value is a string. If the field is omitted in the source data, a UID is derived during merge.
+Records representing tasks MUST have a field named `uid` whose value is a string. If the field is omitted in the source data, a UID is derived during calendar validation.
 
 Tasks may also have the following optional fields:
 
@@ -1069,7 +1069,7 @@ If present, the `recur` field on an event or task MUST be a recurrence rule reco
 
 Evaluating a Gnomon expression produces a Gnomon value. The value types are strings, integers, signed integers, booleans, records, lists, names, and `undefined`. These types are defined by the expression grammar and carry no intrinsic semantic meaning.
 
-Specific contexts impose shape expectations on the values they receive. The `merge` subcommand, for example, expects a value that conforms to the calendar shape; it is an error if evaluation produces something else. This section defines the shapes that the Gnomon tooling recognizes.
+Specific contexts impose shape expectations on the values they receive. The `check` subcommand, for example, expects a value that conforms to the calendar shape; it is an error if evaluation produces something else. This section defines the shapes that the Gnomon tooling recognizes.
 
 ### Calendars
 
@@ -1279,16 +1279,19 @@ If a file was successfully located, the program MUST write a textual representat
 
 #### `check`
 
-The `check` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon check <file>` will parse and validate the file, reporting any diagnostics.
+The `check` subcommand is a subcommand of the root command; it takes a single file path as a parameter, treated as the root of a calendar project. When executed, `gnomon check <file>` will parse, evaluate, and validate the file and all transitively imported files as a calendar. This subsumes both syntax checking and calendar validation in a single step.
 
-r[cli.subcommand.check]
-The program MUST provide a `check` subcommand for the root command which takes a single parameter describing a file path.
+r[cli.subcommand.check+2]
+The program MUST provide a `check` subcommand for the root command which takes a single parameter describing a file path. The file is treated as the root of a calendar project.
 
-r[cli.subcommand.check.no-file]
+r[cli.subcommand.check.no-file+2]
 If the file path argument to the `check` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
 
-r[cli.subcommand.check.output]
-If a file was successfully located, the program MUST run parse and validation passes on the file. Any diagnostics MUST be written to STDERR. The program MUST exit with a non-zero exit code if any errors were found.
+r[cli.subcommand.check.output+2]
+If a file was successfully located, the program MUST evaluate the file (transitively resolving imports), validate the result as a calendar (checking uniqueness constraints, shape conformance, UID derivation, and recurrence expansion), and report all diagnostics to STDERR. The program MUST exit with a non-zero exit code if any errors were found. The `check` subcommand MUST NOT produce output on STDOUT.
+
+r[cli.subcommand.check.unused]
+After evaluation, the program MUST recursively scan the root file's parent directory for files matching `*.gnomon`. Any such file that is not the root file and was not transitively imported by the root file MUST produce a warning diagnostic.
 
 #### `eval`
 
@@ -1303,24 +1306,11 @@ If the file path argument to the `eval` subcommand cannot be resolved to a file 
 r[cli.subcommand.eval.output]
 If a file was successfully located, the program MUST write a textual representation of the evaluated value to STDOUT. Any diagnostics MUST be written to STDERR.
 
-#### `merge`
-
-The `merge` subcommand is a subcommand of the root command; it takes one or more file paths and/or directory paths as parameters. When a directory is given, it is expanded to all files matching `*.gnomon` within that directory (non-recursive, sorted lexicographically). The resulting files are parsed, evaluated, and merged into a single calendar object.
-
-r[cli.subcommand.merge]
-The program MUST provide a `merge` subcommand for the root command which takes one or more parameters describing file or directory paths.
-
-r[cli.subcommand.merge.directory]
-If a parameter to the `merge` subcommand is a directory, the program MUST expand it to all files matching `*.gnomon` within that directory, sorted lexicographically. The expansion MUST NOT be recursive.
-
-r[cli.subcommand.merge.output]
-The program MUST write a textual representation of the merged calendar to STDOUT. Any diagnostics MUST be written to STDERR.
-
 #### Reserved Subcommands
 
 We reserve some identifiers for future use as subcommands.
 
-> r[cli.subcommand.reserved+2]
+> r[cli.subcommand.reserved+3]
 > The following identifiers MUST NOT be used by any implementation:
 >
 > - `about`
@@ -1329,6 +1319,7 @@ We reserve some identifiers for future use as subcommands.
 > - `daemon`
 > - `fetch`
 > - `lsp`
+> - `merge`
 > - `query`
 > - `run`
 

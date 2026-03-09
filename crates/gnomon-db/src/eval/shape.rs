@@ -585,15 +585,12 @@ const LEAP_MONTH_FIELDS: [FieldDef; 2] = [
 pub fn check_calendar_shape<'db>(
     db: &'db dyn crate::Db,
     calendar: &Calendar<'db>,
-    sources: &[SourceFile],
+    root_source: SourceFile,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
 
-    // Determine source for calendar-level diagnostics.
-    let calendar_source = sources
-        .first()
-        .copied()
-        .unwrap_or_else(|| SourceFile::new(db, "".into(), String::new()));
+    // Use root source for calendar-level diagnostics.
+    let calendar_source = root_source;
 
     // Check calendar properties.
     check_fields(
@@ -1066,26 +1063,24 @@ mod tests {
     use crate::Database;
     use std::path::PathBuf;
 
-    /// Helper: merge files and return shape-checking diagnostics only.
+    /// Helper: evaluate and validate, returning shape-checking diagnostics only.
     fn shape_diags(db: &Database, files: &[(&str, &str)]) -> Vec<String> {
-        let sources: Vec<SourceFile> = files
-            .iter()
-            .map(|&(path, text)| SourceFile::new(db, PathBuf::from(path), text.into()))
-            .collect();
-        let result = crate::eval::merge::merge(db, &sources);
-        // Shape diagnostics are appended after merge diagnostics;
+        let (path, text) = files[0];
+        let source = SourceFile::new(db, PathBuf::from(path), text.into());
+        let eval = crate::evaluate(db, source);
+        let result = crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
+        // Shape diagnostics are appended after validation diagnostics;
         // filter to only shape-related ones by re-running the check.
-        let diags = check_calendar_shape(db, &result.calendar, &sources);
+        let diags = check_calendar_shape(db, &result.calendar, source);
         diags.iter().map(|d| d.message.clone()).collect()
     }
 
-    /// Helper: merge and return all diagnostics (merge + shape).
+    /// Helper: evaluate and validate, returning all diagnostics.
     fn all_diags(db: &Database, files: &[(&str, &str)]) -> Vec<String> {
-        let sources: Vec<SourceFile> = files
-            .iter()
-            .map(|&(path, text)| SourceFile::new(db, PathBuf::from(path), text.into()))
-            .collect();
-        let result = crate::eval::merge::merge(db, &sources);
+        let (path, text) = files[0];
+        let source = SourceFile::new(db, PathBuf::from(path), text.into());
+        let eval = crate::evaluate(db, source);
+        let result = crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
         result.diagnostics.iter().map(|d| d.message.clone()).collect()
     }
 
@@ -1466,10 +1461,10 @@ mod tests {
         );
     }
 
-    // ── Shape-checking wired into merge ─────────────────────
+    // ── Shape-checking wired into validation ────────────────
 
     #[test]
-    fn shape_errors_appear_in_merge_diagnostics() {
+    fn shape_errors_appear_in_check_diagnostics() {
         let db = Database::default();
         let diags = all_diags(
             &db,
@@ -1477,7 +1472,7 @@ mod tests {
         );
         assert!(
             diags.iter().any(|d| d.contains("missing required field `uid`")),
-            "expected uid error in merge diagnostics, got: {diags:?}"
+            "expected uid error in check diagnostics, got: {diags:?}"
         );
     }
 }

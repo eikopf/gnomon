@@ -26,6 +26,8 @@ pub struct LowerCtx<'db> {
     env: Vec<(String, Value<'db>)>,
     /// Stack of file paths currently being evaluated, for cycle detection.
     import_stack: Vec<PathBuf>,
+    /// All transitively imported Gnomon file paths (canonical).
+    pub imported_files: Vec<PathBuf>,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -37,6 +39,7 @@ impl<'db> LowerCtx<'db> {
             diagnostics: Vec::new(),
             env: Vec::new(),
             import_stack: vec![path],
+            imported_files: Vec::new(),
         }
     }
 
@@ -51,6 +54,7 @@ impl<'db> LowerCtx<'db> {
             diagnostics: Vec::new(),
             env: Vec::new(),
             import_stack,
+            imported_files: Vec::new(),
         }
     }
 
@@ -719,12 +723,14 @@ impl<'db> LowerCtx<'db> {
             ImportFormat::Gnomon => {
                 let target_source = SourceFile::new(self.db, source_path.clone(), content);
                 let mut new_stack = self.import_stack.clone();
-                new_stack.push(source_path);
+                new_stack.push(source_path.clone());
 
                 let result =
                     super::evaluate_with_import_stack(self.db, target_source, new_stack);
 
                 self.diagnostics.extend(result.diagnostics);
+                self.imported_files.push(source_path);
+                self.imported_files.extend(result.imported_files);
                 result.value
             }
             ImportFormat::ICalendar => {

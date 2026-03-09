@@ -1,8 +1,9 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, merge, parse};
+use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, parse, validate_calendar};
 
 // r[impl cli.root]
 // r[impl cli.option.help]
@@ -27,22 +28,16 @@ enum Command {
         /// Path to the file to parse.
         file: PathBuf,
     },
-    // r[impl cli.subcommand.check]
-    /// Check a .gnomon file for errors.
+    // r[impl cli.subcommand.check+2]
+    /// Check a .gnomon file as a calendar project root.
     Check {
-        /// Path to the file to check.
+        /// Path to the root .gnomon file.
         file: PathBuf,
     },
     /// Evaluate a .gnomon file and print its lowered document.
     Eval {
         /// Path to the file to evaluate.
         file: PathBuf,
-    },
-    /// Merge .gnomon files into a single calendar.
-    Merge {
-        /// Paths to .gnomon files or directories. If empty, merges all
-        /// .gnomon files in the current directory.
-        paths: Vec<PathBuf>,
     },
 }
 
@@ -130,7 +125,9 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
         }
+        // r[impl cli.subcommand.check+2]
         Command::Check { file } => {
+            // r[impl cli.subcommand.check.no-file+2]
             let text = match std::fs::read_to_string(&file) {
                 Ok(s) => s,
                 Err(e) => {
@@ -140,74 +137,56 @@ fn main() -> ExitCode {
             };
 
             let db = Database::default();
-            let source = SourceFile::new(&db, file.clone(), text);
-            check_syntax(&db, source);
-            let mut diagnostics: Vec<Diagnostic> = check_syntax::accumulated::<Diagnostic>(&db, source)
-                .into_iter()
-                .cloned()
-                .collect();
-            diagnostics.sort_by_key(|d| d.range.start());
+            let root_path = file.canonicalize().unwrap_or_else(|_| file.clone());
+            let source = SourceFile::new(&db, root_path.clone(), text);
 
-            if diagnostics.is_empty() {
-                ExitCode::SUCCESS
-            } else {
-                print_diagnostics(&db, &diagnostics);
-                ExitCode::FAILURE
-            }
-        }
-        Command::Merge { paths } => {
-            let db = Database::default();
+            // Evaluate the root file.
+            let eval_result = evaluate(&db, source);
+            let imported_files = eval_result.imported_files.clone();
 
-            // File discovery: expand directories to *.gnomon files.
-            let paths = if paths.is_empty() {
-                vec![std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))]
-            } else {
-                paths
-            };
+            // Validate the evaluated value as a calendar.
+            let check_result = validate_calendar(
+                &db,
+                source,
+                eval_result.value,
+                eval_result.diagnostics,
+            );
 
-            let mut files = Vec::new();
-            for path in &paths {
-                if path.is_dir() {
-                    let mut entries: Vec<_> = std::fs::read_dir(path)
-                        .unwrap_or_else(|e| {
-                            eprintln!("error: could not read directory {}: {e}", path.display());
-                            std::process::exit(1);
-                        })
-                        .filter_map(|e| e.ok())
-                        .map(|e| e.path())
-                        .filter(|p| p.extension().is_some_and(|ext| ext == "gnomon"))
-                        .collect();
-                    entries.sort();
-                    files.extend(entries);
-                } else {
-                    files.push(path.clone());
+            let mut diagnostics = check_result.diagnostics;
+
+            // r[impl cli.subcommand.check.unused]
+            // Detect unused .gnomon files in the project directory.
+            if let Some(project_dir) = root_path.parent() {
+                let mut known: HashSet<PathBuf> = HashSet::new();
+                known.insert(root_path.clone());
+                for p in &imported_files {
+                    if let Ok(canon) = p.canonicalize() {
+                        known.insert(canon);
+                    } else {
+                        known.insert(p.clone());
+                    }
+                }
+
+                for found in find_gnomon_files(project_dir) {
+                    let canon = found.canonicalize().unwrap_or_else(|_| found.clone());
+                    if !known.contains(&canon) {
+                        diagnostics.push(Diagnostic {
+                            source,
+                            range: gnomon_db::TextRange::default(),
+                            severity: gnomon_db::Severity::Warning,
+                            message: format!(
+                                "file {} is not imported (directly or indirectly) by the root file",
+                                found.display()
+                            ),
+                        });
+                    }
                 }
             }
 
-            if files.is_empty() {
-                eprintln!("error: no .gnomon files found");
-                return ExitCode::FAILURE;
-            }
+            diagnostics.sort_by_key(|d| (d.source.path(&db).clone(), d.range.start()));
 
-            let mut source_files = Vec::new();
-            for file in &files {
-                let text = match std::fs::read_to_string(file) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("error: could not read {}: {e}", file.display());
-                        return ExitCode::FAILURE;
-                    }
-                };
-                source_files.push(SourceFile::new(&db, file.clone(), text));
-            }
-
-            let result = merge(&db, &source_files);
-            let mut diagnostics = result.diagnostics;
-            diagnostics.sort_by_key(|d| d.range.start());
-
+            // r[impl cli.subcommand.check.output+2]
             let has_errors = print_diagnostics(&db, &diagnostics);
-
-            println!("{}", result.calendar.render(&db));
 
             if has_errors {
                 ExitCode::FAILURE
@@ -216,6 +195,22 @@ fn main() -> ExitCode {
             }
         }
     }
+}
+
+/// Recursively find all .gnomon files under a directory.
+fn find_gnomon_files(dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut result = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_dir() {
+                result.extend(find_gnomon_files(&path));
+            } else if path.extension().is_some_and(|ext| ext == "gnomon") {
+                result.push(path);
+            }
+        }
+    }
+    result
 }
 
 /// Print diagnostics to stderr. Returns true if any errors were found.

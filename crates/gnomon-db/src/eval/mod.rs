@@ -9,6 +9,8 @@ pub mod rrule;
 pub mod shape;
 pub mod types;
 
+use std::path::PathBuf;
+
 use crate::input::SourceFile;
 use crate::queries::Diagnostic;
 use types::Value;
@@ -19,6 +21,8 @@ pub struct EvalResult<'db> {
     /// Lowering diagnostics (parse + validation diagnostics are obtained separately
     /// via `check_syntax::accumulated::<Diagnostic>()`).
     pub diagnostics: Vec<Diagnostic>,
+    /// All transitively imported Gnomon file paths (canonical).
+    pub imported_files: Vec<PathBuf>,
 }
 
 /// Evaluate a source file into a value.
@@ -38,6 +42,7 @@ pub fn evaluate<'db>(db: &'db dyn crate::Db, source: SourceFile) -> EvalResult<'
     EvalResult {
         value,
         diagnostics: ctx.diagnostics,
+        imported_files: ctx.imported_files,
     }
 }
 
@@ -57,6 +62,7 @@ pub(super) fn evaluate_with_import_stack<'db>(
     EvalResult {
         value,
         diagnostics: ctx.diagnostics,
+        imported_files: ctx.imported_files,
     }
 }
 
@@ -993,6 +999,91 @@ mod tests {
                 }
                 _ => panic!("expected list"),
             }
+        }
+
+        // ── Imported files tracking ────────────────────────────
+
+        #[test]
+        fn imported_files_tracked() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let other_path = dir.path().join("other.gnomon");
+            std::fs::write(&other_path, "{ x: 42 }").unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./other.gnomon").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+
+            let canon = other_path.canonicalize().unwrap();
+            assert!(
+                result.imported_files.contains(&canon),
+                "expected imported_files to contain {:?}, got: {:?}",
+                canon,
+                result.imported_files,
+            );
+        }
+
+        #[test]
+        fn imported_files_transitive() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let c_path = dir.path().join("c.gnomon");
+            std::fs::write(&c_path, "{ z: 1 }").unwrap();
+
+            let b_path = dir.path().join("b.gnomon");
+            std::fs::write(&b_path, "import ./c.gnomon").unwrap();
+
+            let a_path = dir.path().join("a.gnomon");
+            std::fs::write(&a_path, "import ./b.gnomon").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &a_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+
+            let b_canon = b_path.canonicalize().unwrap();
+            let c_canon = c_path.canonicalize().unwrap();
+            assert!(
+                result.imported_files.contains(&b_canon),
+                "expected imported_files to contain b: {:?}, got: {:?}",
+                b_canon,
+                result.imported_files,
+            );
+            assert!(
+                result.imported_files.contains(&c_canon),
+                "expected imported_files to contain c: {:?}, got: {:?}",
+                c_canon,
+                result.imported_files,
+            );
+        }
+
+        #[test]
+        fn imported_files_excludes_non_gnomon() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let ics_path = dir.path().join("cal.ics");
+            std::fs::write(
+                &ics_path,
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\
+                 BEGIN:VEVENT\r\nUID:ev1\r\nSUMMARY:Lunch\r\n\
+                 DTSTART:20260315T120000\r\nDURATION:PT1H\r\n\
+                 END:VEVENT\r\nEND:VCALENDAR\r\n",
+            )
+            .unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./cal.ics").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.imported_files.is_empty(),
+                "non-Gnomon imports should not appear in imported_files, got: {:?}",
+                result.imported_files,
+            );
         }
     }
 }

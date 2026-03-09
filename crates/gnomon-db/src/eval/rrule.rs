@@ -6,7 +6,6 @@
 use super::desugar;
 use super::interned::FieldName;
 use super::types::{Blame, Blamed, Calendar, Record, Value};
-use crate::input::SourceFile;
 use crate::queries::{Diagnostic, Severity};
 
 /// Maximum number of occurrences to materialize for infinite rules.
@@ -339,7 +338,6 @@ fn datetime_to_record<'db>(
 pub fn expand_entry_recurrences<'db>(
     db: &'db dyn crate::Db,
     calendar: &mut Calendar<'db>,
-    _sources: &[SourceFile],
     diagnostics: &mut Vec<Diagnostic>,
     has_errors: &mut bool,
 ) {
@@ -453,6 +451,7 @@ pub fn expand_entry_recurrences<'db>(
 mod tests {
     use super::*;
     use crate::eval::interned::{DeclId, DeclKind, FieldPath};
+    use crate::input::SourceFile;
     use crate::Database;
     use std::path::PathBuf;
 

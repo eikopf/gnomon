@@ -7,126 +7,128 @@ use super::types::{Blamed, Calendar, Record, Value};
 use crate::input::SourceFile;
 use crate::queries::{Diagnostic, Severity};
 
-/// Result of merging multiple source files into a calendar.
-pub struct MergeResult<'db> {
+/// Result of validating a calendar.
+pub struct CheckResult<'db> {
     pub calendar: Calendar<'db>,
-    /// All diagnostics: parse, validation, lowering, and merge-level.
+    /// All diagnostics: parse, validation, lowering, and check-level.
     pub diagnostics: Vec<Diagnostic>,
     pub has_errors: bool,
 }
 
-/// Merge multiple source files into a single calendar.
+/// Validate a pre-evaluated value as a calendar.
 ///
-/// This function evaluates each source file and combines the results,
-/// checking for uniqueness constraints (single calendar declaration,
-/// unique names across events/tasks/groups, unique binding keys).
-pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult<'db> {
+/// Takes the root source file (for diagnostic attribution), the evaluated value,
+/// and any diagnostics from evaluation. Flattens the value into records, checks
+/// uniqueness constraints (single calendar, unique names), derives UIDs,
+/// runs shape-checking, and expands recurrence rules.
+pub fn validate_calendar<'db>(
+    db: &'db dyn crate::Db,
+    root_source: SourceFile,
+    value: Value<'db>,
+    eval_diagnostics: Vec<Diagnostic>,
+) -> CheckResult<'db> {
     let mut calendar = Calendar::default();
     let mut diagnostics = Vec::new();
     let mut has_errors = false;
 
-    // Track calendar declarations for uniqueness.
-    let mut calendar_sources: Vec<SourceFile> = Vec::new();
+    // Collect parse + validation diagnostics from tracked queries on root source.
+    let check_diags = crate::check_syntax::accumulated::<Diagnostic>(db, root_source);
+    for diag in check_diags {
+        has_errors |= diag.severity == Severity::Error;
+        diagnostics.push(diag.clone());
+    }
 
-    // Track names for collision detection (global namespace across events/tasks/groups).
+    // Fold in eval diagnostics (includes diagnostics from imported files).
+    for diag in eval_diagnostics {
+        has_errors |= diag.severity == Severity::Error;
+        diagnostics.push(diag);
+    }
+
+    // Track calendar declarations for uniqueness.
+    let mut calendar_count = 0usize;
+    let mut first_calendar_source: Option<SourceFile> = None;
+
+    // Track names for collision detection (global namespace across events/tasks).
     let mut seen_names: HashMap<String, SourceFile> = HashMap::new();
 
     let name_key = FieldName::new(db, "name".to_string());
-
     let type_key = FieldName::new(db, "type".to_string());
 
-    for &source in sources {
-        let result = crate::evaluate(db, source);
+    // Flatten value into records.
+    let records = flatten_to_records(db, root_source, value);
 
-        // Collect parse + validation diagnostics from tracked queries.
-        let check_diags = crate::check_syntax::accumulated::<Diagnostic>(db, source);
-        for diag in check_diags {
-            has_errors |= diag.severity == Severity::Error;
-            diagnostics.push(diag.clone());
-        }
+    for (record, blame) in records {
+        // Determine if this is an entry (has type: "event"|"task") or calendar.
+        let is_entry = record.get(&type_key).is_some_and(|v| {
+            matches!(&v.value, Value::String(s) if s == "event" || s == "task")
+        });
 
-        // Collect lowering diagnostics.
-        for diag in result.diagnostics {
-            has_errors |= diag.severity == Severity::Error;
-            diagnostics.push(diag);
-        }
+        let source = blame.decl.source(db);
 
-        // Flatten value into records.
-        let records = flatten_to_records(db, source, result.value);
-
-        for (record, blame) in records {
-            // Determine if this is an entry (has type: "event"|"task") or calendar.
-            let is_entry = record.get(&type_key).is_some_and(|v| {
-                matches!(&v.value, Value::String(s) if s == "event" || s == "task")
+        if is_entry {
+            check_name_collision(
+                db,
+                &record,
+                &name_key,
+                source,
+                &mut seen_names,
+                &mut diagnostics,
+                &mut has_errors,
+            );
+            calendar.entries.push(Blamed {
+                value: record,
+                blame,
             });
-
-            if is_entry {
-                check_name_collision(
-                    db,
-                    &record,
-                    &name_key,
-                    source,
-                    &mut seen_names,
-                    &mut diagnostics,
-                    &mut has_errors,
-                );
-                calendar.entries.push(Blamed {
-                    value: record,
-                    blame,
-                });
+        } else {
+            // Calendar
+            calendar_count += 1;
+            if calendar_count == 1 {
+                first_calendar_source = Some(source);
+                calendar.properties = record;
             } else {
-                // Calendar
-                calendar_sources.push(source);
-                if calendar_sources.len() == 1 {
-                    calendar.properties = record;
-                }
+                has_errors = true;
+                diagnostics.push(Diagnostic {
+                    source,
+                    range: rowan::TextRange::default(),
+                    severity: Severity::Error,
+                    message: format!(
+                        "duplicate calendar declaration (first defined in {})",
+                        first_calendar_source
+                            .unwrap_or(root_source)
+                            .path(db)
+                            .display()
+                    ),
+                });
             }
         }
     }
 
     // Check calendar declaration uniqueness.
-    if calendar_sources.is_empty() {
+    if calendar_count == 0 {
         has_errors = true;
-        let source = sources
-            .first()
-            .copied()
-            .unwrap_or_else(|| SourceFile::new(db, "".into(), String::new()));
         diagnostics.push(Diagnostic {
-            source,
+            source: root_source,
             range: rowan::TextRange::default(),
             severity: Severity::Error,
             message: "no calendar declaration found".into(),
         });
-    } else if calendar_sources.len() > 1 {
-        has_errors = true;
-        for &extra_source in &calendar_sources[1..] {
-            diagnostics.push(Diagnostic {
-                source: extra_source,
-                range: rowan::TextRange::default(),
-                severity: Severity::Error,
-                message: format!(
-                    "duplicate calendar declaration (first defined in {})",
-                    calendar_sources[0].path(db).display()
-                ),
-            });
-        }
     }
 
     // r[impl model.calendar.uid.derivation]
     // Derive UUIDv5 UIDs for entries that omit an explicit uid.
-    derive_uids(db, &mut calendar, sources, &mut diagnostics, &mut has_errors);
+    derive_uids(db, &mut calendar, root_source, &mut diagnostics, &mut has_errors);
 
     // Shape-check the merged calendar.
-    let shape_diags = super::shape::check_calendar_shape(db, &calendar, sources);
+    let shape_diags = super::shape::check_calendar_shape(db, &calendar, root_source);
     for diag in shape_diags {
         has_errors |= diag.severity == Severity::Error;
         diagnostics.push(diag);
     }
 
     // Expand recurrence rules into materialized occurrences.
-    super::rrule::expand_entry_recurrences(db, &mut calendar, sources, &mut diagnostics, &mut has_errors);
+    super::rrule::expand_entry_recurrences(db, &mut calendar, &mut diagnostics, &mut has_errors);
 
-    MergeResult {
+    CheckResult {
         calendar,
         diagnostics,
         has_errors,
@@ -141,7 +143,7 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
 fn derive_uids<'db>(
     db: &'db dyn crate::Db,
     calendar: &mut Calendar<'db>,
-    sources: &[SourceFile],
+    root_source: SourceFile,
     diagnostics: &mut Vec<Diagnostic>,
     has_errors: &mut bool,
 ) {
@@ -154,12 +156,9 @@ fn derive_uids<'db>(
             Value::String(s) => match Uuid::parse_str(s) {
                 Ok(uuid) => uuid,
                 Err(_) => {
-                    let source = sources.first().copied().unwrap_or_else(|| {
-                        SourceFile::new(db, "".into(), String::new())
-                    });
                     *has_errors = true;
                     diagnostics.push(Diagnostic {
-                        source,
+                        source: root_source,
                         range: rowan::TextRange::default(),
                         severity: Severity::Error,
                         message: format!(
@@ -231,7 +230,7 @@ fn check_name_collision<'db>(
     }
 }
 
-/// Flatten a Value into a list of (Record, Blame) pairs for merge processing.
+/// Flatten a Value into a list of (Record, Blame) pairs for validation.
 /// A single record becomes a one-element list; a list is iterated.
 fn flatten_to_records<'db>(
     db: &'db dyn crate::Db,
@@ -263,7 +262,7 @@ fn flatten_to_records<'db>(
                         result.push((r, item.blame));
                     }
                     _ => {
-                        // Non-record items in a list are skipped during merge
+                        // Non-record items in a list are skipped during validation
                     }
                 }
             }
@@ -285,37 +284,34 @@ mod tests {
         SourceFile::new(db, PathBuf::from(path), text.into())
     }
 
-    fn check_merge(db: &Database, files: &[(&str, &str)], expected: Expect) {
-        let sources: Vec<SourceFile> = files
-            .iter()
-            .map(|(path, text)| make_source(db, path, text))
-            .collect();
-        let result = merge(db, &sources);
+    /// Evaluate a source file and validate the result as a calendar.
+    fn check(db: &Database, source: SourceFile) -> CheckResult<'_> {
+        let result = crate::evaluate(db, source);
+        validate_calendar(db, source, result.value, result.diagnostics)
+    }
+
+    fn check_output(db: &Database, text: &str, expected: Expect) {
+        let source = make_source(db, "test.gnomon", text);
+        let result = check(db, source);
         let rendered = format!("{}", result.calendar.render(db));
         expected.assert_eq(&rendered);
     }
 
-    fn merge_diagnostics(db: &Database, files: &[(&str, &str)]) -> Vec<String> {
-        let sources: Vec<SourceFile> = files
-            .iter()
-            .map(|(path, text)| make_source(db, path, text))
-            .collect();
-        let result = merge(db, &sources);
+    fn check_diagnostics(db: &Database, text: &str) -> Vec<String> {
+        let source = make_source(db, "test.gnomon", text);
+        let result = check(db, source);
         result.diagnostics.iter().map(|d| d.message.clone()).collect()
     }
 
     #[test]
     fn single_file_with_calendar_and_event() {
         let db = Database::default();
-        check_merge(
+        check_output(
             &db,
-            &[(
-                "a.gnomon",
-                r#"
-                calendar { uid: "test" }
-                event @meeting 2026-03-01T14:30 1h "Standup"
-                "#,
-            )],
+            r#"
+            calendar { uid: "test" }
+            event @meeting 2026-03-01T14:30 1h "Standup"
+            "#,
             expect![[r#"
                 Calendar {
                     properties: {
@@ -352,25 +348,15 @@ mod tests {
     }
 
     #[test]
-    fn two_files_events_merged() {
+    fn calendar_with_multiple_entries() {
         let db = Database::default();
-        check_merge(
+        check_output(
             &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar { uid: "cal" }
-                    event @a 2026-01-01T09:00 1h "A"
-                    "#,
-                ),
-                (
-                    "b.gnomon",
-                    r#"
-                    event @b 2026-02-01T10:00 2h "B"
-                    "#,
-                ),
-            ],
+            r#"
+            calendar { uid: "cal" }
+            event @a 2026-01-01T09:00 1h "A"
+            event @b 2026-02-01T10:00 2h "B"
+            "#,
             expect![[r#"
                 Calendar {
                     properties: {
@@ -433,9 +419,9 @@ mod tests {
     #[test]
     fn no_calendar_declaration_error() {
         let db = Database::default();
-        let diags = merge_diagnostics(
+        let diags = check_diagnostics(
             &db,
-            &[("a.gnomon", r#"event @a 2026-01-01T09:00 1h "A""#)],
+            r#"event @a 2026-01-01T09:00 1h "A""#,
         );
         assert!(diags.iter().any(|d| d.contains("no calendar declaration")));
     }
@@ -443,12 +429,12 @@ mod tests {
     #[test]
     fn duplicate_calendar_error() {
         let db = Database::default();
-        let diags = merge_diagnostics(
+        let diags = check_diagnostics(
             &db,
-            &[
-                ("a.gnomon", r#"calendar { uid: "a" }"#),
-                ("b.gnomon", r#"calendar { uid: "b" }"#),
-            ],
+            r#"
+            calendar { uid: "a" }
+            calendar { uid: "b" }
+            "#,
         );
         assert!(diags
             .iter()
@@ -456,20 +442,15 @@ mod tests {
     }
 
     #[test]
-    fn name_collision_across_files() {
+    fn name_collision() {
         let db = Database::default();
-        let diags = merge_diagnostics(
+        let diags = check_diagnostics(
             &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    event @meeting 2026-01-01T09:00 1h "A"
-                    "#,
-                ),
-                ("b.gnomon", r#"event @meeting 2026-02-01T10:00 1h "B""#),
-            ],
+            r#"
+            calendar {}
+            event @meeting 2026-01-01T09:00 1h "A"
+            event @meeting 2026-02-01T10:00 1h "B"
+            "#,
         );
         assert!(diags
             .iter()
@@ -479,18 +460,13 @@ mod tests {
     #[test]
     fn name_collision_different_kinds() {
         let db = Database::default();
-        let diags = merge_diagnostics(
+        let diags = check_diagnostics(
             &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    event @x 2026-01-01T09:00 1h "Event X"
-                    "#,
-                ),
-                ("b.gnomon", r#"task @x "Task X""#),
-            ],
+            r#"
+            calendar {}
+            event @x 2026-01-01T09:00 1h "Event X"
+            task @x "Task X"
+            "#,
         );
         assert!(diags
             .iter()
@@ -498,10 +474,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_sources_error() {
+    fn empty_file_error() {
         let db = Database::default();
-        let sources: Vec<SourceFile> = vec![];
-        let result = merge(&db, &sources);
+        let source = make_source(&db, "empty.gnomon", "");
+        let result = check(&db, source);
         assert!(result.has_errors);
         assert!(result
             .diagnostics
@@ -512,47 +488,37 @@ mod tests {
     #[test]
     fn file_with_parse_errors_continues() {
         let db = Database::default();
-        let diags = merge_diagnostics(
+        let diags = check_diagnostics(
             &db,
-            &[
-                ("a.gnomon", r#"calendar { uid: "test" }"#),
-                ("b.gnomon", r#"~~~ event @x 2026-01-01T09:00 1h "X""#),
-            ],
+            r#"~~~ calendar { uid: "test" }"#,
         );
-        // Should have parse errors but merge continues.
+        // Should have parse errors but validation continues.
         assert!(!diags.is_empty());
     }
 
-    // ── Additional merge tests ──────────────────────────────────
-
     #[test]
-    fn valid_merge_has_no_errors() {
+    fn valid_check_has_no_errors() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }"#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(!result.has_errors);
         assert!(result.diagnostics.is_empty());
     }
 
     #[test]
-    fn tasks_merged_across_files() {
+    fn tasks_and_events_together() {
         let db = Database::default();
-        check_merge(
+        check_output(
             &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    task @review "Code review"
-                    "#,
-                ),
-                ("b.gnomon", r#"task @deploy 2026-06-01T12:00 "Ship it""#),
-            ],
+            r#"
+            calendar {}
+            task @review "Code review"
+            task @deploy 2026-06-01T12:00 "Ship it"
+            "#,
             expect![[r#"
                 Calendar {
                     properties: {},
@@ -585,21 +551,15 @@ mod tests {
     }
 
     #[test]
-    fn mixed_decl_types_across_three_files() {
+    fn mixed_decl_types() {
         let db = Database::default();
-        check_merge(
+        check_output(
             &db,
-            &[
-                ("a.gnomon", r#"calendar { uid: "main" }"#),
-                (
-                    "b.gnomon",
-                    r#"event @standup 2026-03-01T09:00 30m "Standup""#,
-                ),
-                (
-                    "c.gnomon",
-                    r#"task @review "Code review""#,
-                ),
-            ],
+            r#"
+            calendar { uid: "main" }
+            event @standup 2026-03-01T09:00 30m "Standup"
+            task @review "Code review"
+            "#,
             expect![[r#"
                 Calendar {
                     properties: {
@@ -641,51 +601,17 @@ mod tests {
     }
 
     #[test]
-    fn name_collision_within_same_file() {
-        let db = Database::default();
-        let diags = merge_diagnostics(
-            &db,
-            &[(
-                "a.gnomon",
-                r#"
-                calendar {}
-                event @dup 2026-01-01T09:00 1h "First"
-                event @dup 2026-02-01T10:00 1h "Second"
-                "#,
-            )],
-        );
-        assert!(diags
-            .iter()
-            .any(|d| d.contains("name @dup already defined")));
-    }
-
-    #[test]
-    fn duplicate_calendar_within_same_file() {
-        let db = Database::default();
-        let diags = merge_diagnostics(
-            &db,
-            &[(
-                "a.gnomon",
-                r#"
-                calendar { uid: "first" }
-                calendar { uid: "second" }
-                "#,
-            )],
-        );
-        assert!(diags
-            .iter()
-            .any(|d| d.contains("duplicate calendar declaration")));
-    }
-
-    #[test]
     fn first_calendar_properties_win_on_duplicate() {
         let db = Database::default();
-        let sources = vec![
-            make_source(&db, "a.gnomon", r#"calendar { uid: "first" }"#),
-            make_source(&db, "b.gnomon", r#"calendar { uid: "second" }"#),
-        ];
-        let result = merge(&db, &sources);
-        // Should have an error, but properties come from the first calendar.
+        let source = make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "first" }
+            calendar { uid: "second" }
+            "#,
+        );
+        let result = check(&db, source);
         assert!(result.has_errors);
         let uid_key = crate::eval::interned::FieldName::new(&db, "uid".to_string());
         let uid = result.calendar.properties.get(&uid_key).unwrap();
@@ -693,80 +619,19 @@ mod tests {
     }
 
     #[test]
-    fn diagnostic_source_attribution_on_name_collision() {
-        let db = Database::default();
-        let sources = vec![
-            make_source(&db, "first.gnomon", r#"calendar {}"#),
-            make_source(
-                &db,
-                "events-a.gnomon",
-                r#"event @dup 2026-01-01T09:00 1h "A""#,
-            ),
-            make_source(
-                &db,
-                "events-b.gnomon",
-                r#"event @dup 2026-02-01T10:00 1h "B""#,
-            ),
-        ];
-        let result = merge(&db, &sources);
-        let collision_diag = result
-            .diagnostics
-            .iter()
-            .find(|d| d.message.contains("name @dup"))
-            .expect("should have a name collision diagnostic");
-        // Error attributed to the second occurrence.
-        assert_eq!(
-            collision_diag.source.path(&db).to_str().unwrap(),
-            "events-b.gnomon"
-        );
-        // Message names the first file.
-        assert!(collision_diag.message.contains("events-a.gnomon"));
-    }
-
-    #[test]
-    fn diagnostic_source_attribution_on_duplicate_calendar() {
-        let db = Database::default();
-        let sources = vec![
-            make_source(&db, "main.gnomon", r#"calendar { uid: "a" }"#),
-            make_source(&db, "extra.gnomon", r#"calendar { uid: "b" }"#),
-        ];
-        let result = merge(&db, &sources);
-        let dup_diag = result
-            .diagnostics
-            .iter()
-            .find(|d| d.message.contains("duplicate calendar"))
-            .expect("should have a duplicate calendar diagnostic");
-        // Error attributed to the second file.
-        assert_eq!(
-            dup_diag.source.path(&db).to_str().unwrap(),
-            "extra.gnomon"
-        );
-        // Message names the first file.
-        assert!(dup_diag.message.contains("main.gnomon"));
-    }
-
-    #[test]
     fn multiple_errors_all_reported() {
         let db = Database::default();
-        let sources = vec![
-            make_source(
-                &db,
-                "a.gnomon",
-                r#"
-                calendar {}
-                event @x 2026-01-01T09:00 1h "X"
-                "#,
-            ),
-            make_source(
-                &db,
-                "b.gnomon",
-                r#"
-                calendar {}
-                event @x 2026-02-01T10:00 1h "X again"
-                "#,
-            ),
-        ];
-        let result = merge(&db, &sources);
+        let source = make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar {}
+            calendar {}
+            event @x 2026-01-01T09:00 1h "X"
+            event @x 2026-02-01T10:00 1h "X again"
+            "#,
+        );
+        let result = check(&db, source);
         let messages: Vec<&str> = result.diagnostics.iter().map(|d| d.message.as_str()).collect();
         assert!(
             messages.iter().any(|m| m.contains("duplicate calendar")),
@@ -779,43 +644,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_errors_surface_but_valid_files_still_merge() {
+    fn validation_errors_surface_through_check() {
         let db = Database::default();
-        let sources = vec![
-            make_source(&db, "good.gnomon", r#"calendar { uid: "ok" }"#),
-            make_source(&db, "bad.gnomon", r#"~~~ not valid syntax"#),
-            make_source(
-                &db,
-                "also-good.gnomon",
-                r#"event @meeting 2026-03-01T09:00 1h "Hi""#,
-            ),
-        ];
-        let result = merge(&db, &sources);
-        assert!(result.has_errors);
-        // Parse errors from bad.gnomon are present.
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|d| d.source.path(&db).to_str().unwrap() == "bad.gnomon"));
-        // But the valid content still merged.
-        assert_eq!(result.calendar.entries.len(), 1);
-        let uid_key = crate::eval::interned::FieldName::new(&db, "uid".to_string());
-        assert_eq!(
-            result.calendar.properties.get(&uid_key).unwrap().value,
-            Value::String("ok".into())
-        );
-    }
-
-    #[test]
-    fn validation_errors_surface_through_merge() {
-        let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             // Duplicate field "uid" triggers a validation error.
             r#"calendar { uid: "a", uid: "b" }"#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(result.has_errors);
         assert!(result
             .diagnostics
@@ -826,9 +663,9 @@ mod tests {
     #[test]
     fn calendar_only_no_events_or_tasks() {
         let db = Database::default();
-        check_merge(
+        check_output(
             &db,
-            &[("a.gnomon", r#"calendar { uid: "minimal" }"#)],
+            r#"calendar { uid: "minimal" }"#,
             expect![[r#"
                 Calendar {
                     properties: {
@@ -840,43 +677,32 @@ mod tests {
     }
 
     #[test]
-    fn distinct_names_across_kinds_no_collision() {
-        // event @a and task @b should not collide — only same names collide.
+    fn distinct_names_no_collision() {
         let db = Database::default();
-        let sources = vec![
-            make_source(
-                &db,
-                "a.gnomon",
-                r#"
-                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
-                event @shared 2026-01-01T09:00 1h "Event"
-                "#,
-            ),
-            make_source(&db, "b.gnomon", r#"task @other "Task""#),
-        ];
-        let result = merge(&db, &sources);
+        let source = make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event @shared 2026-01-01T09:00 1h "Event"
+            task @other "Task"
+            "#,
+        );
+        let result = check(&db, source);
         assert!(!result.has_errors);
         assert_eq!(result.calendar.entries.len(), 2);
     }
 
     #[test]
-    fn events_preserve_source_order() {
+    fn entries_preserve_declaration_order() {
         let db = Database::default();
-        check_merge(
+        check_output(
             &db,
-            &[
-                (
-                    "a.gnomon",
-                    r#"
-                    calendar {}
-                    event @second 2026-06-01T09:00 1h "Second"
-                    "#,
-                ),
-                (
-                    "b.gnomon",
-                    r#"event @first 2026-01-01T09:00 1h "First""#,
-                ),
-            ],
+            r#"
+            calendar {}
+            event @second 2026-06-01T09:00 1h "Second"
+            event @first 2026-01-01T09:00 1h "First"
+            "#,
             expect![[r#"
                 Calendar {
                     properties: {},
@@ -939,22 +765,21 @@ mod tests {
     #[test]
     fn uid_derived_for_entry_without_uid() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event @meeting 2026-03-01T14:30 1h "Standup"
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
         let uid_key = FieldName::new(&db, "uid".to_string());
         let entry = &result.calendar.entries[0].value;
         let uid = entry.get(&uid_key).expect("entry should have derived uid");
         match &uid.value {
             Value::String(s) => {
-                // Should be a valid UUID.
                 assert!(uuid::Uuid::parse_str(s).is_ok(), "derived uid is not a valid UUID: {s}");
             }
             other => panic!("expected string uid, got: {other:?}"),
@@ -964,14 +789,14 @@ mod tests {
     #[test]
     fn uid_derivation_is_deterministic() {
         let db = Database::default();
-        let source_text = r#"
+        let text = r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event @meeting 2026-03-01T14:30 1h "Standup"
         "#;
-        let sources1 = vec![make_source(&db, "a.gnomon", source_text)];
-        let sources2 = vec![make_source(&db, "b.gnomon", source_text)];
-        let result1 = merge(&db, &sources1);
-        let result2 = merge(&db, &sources2);
+        let source1 = make_source(&db, "a.gnomon", text);
+        let source2 = make_source(&db, "b.gnomon", text);
+        let result1 = check(&db, source1);
+        let result2 = check(&db, source2);
         let uid_key = FieldName::new(&db, "uid".to_string());
         let uid1 = &result1.calendar.entries[0].value.get(&uid_key).unwrap().value;
         let uid2 = &result2.calendar.entries[0].value.get(&uid_key).unwrap().value;
@@ -981,15 +806,15 @@ mod tests {
     #[test]
     fn uid_not_overwritten_when_explicit() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event @meeting 2026-03-01T14:30 1h "Standup" { uid: "custom-uid" }
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         let uid_key = FieldName::new(&db, "uid".to_string());
         let uid = &result.calendar.entries[0].value.get(&uid_key).unwrap().value;
         assert_eq!(uid, &Value::String("custom-uid".into()));
@@ -998,15 +823,15 @@ mod tests {
     #[test]
     fn uid_derivation_skipped_for_non_uuid_calendar_uid() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "not-a-uuid" }
             event @meeting 2026-03-01T14:30 1h "Standup"
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(result.has_errors);
         assert!(
             result.diagnostics.iter().any(|d| d.message.contains("not a valid UUID")),
@@ -1018,12 +843,16 @@ mod tests {
     #[test]
     fn three_calendars_produce_two_errors() {
         let db = Database::default();
-        let sources = vec![
-            make_source(&db, "a.gnomon", "calendar {}"),
-            make_source(&db, "b.gnomon", "calendar {}"),
-            make_source(&db, "c.gnomon", "calendar {}"),
-        ];
-        let result = merge(&db, &sources);
+        let source = make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar {}
+            calendar {}
+            calendar {}
+            "#,
+        );
+        let result = check(&db, source);
         let dup_count = result
             .diagnostics
             .iter()
@@ -1037,15 +866,15 @@ mod tests {
     #[test]
     fn entry_with_recur_gets_occurrences() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event { name: @daily, start: 2026-01-01T00:00, recur: { frequency: #daily, termination: 2026-01-05T00:00 } }
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
@@ -1061,15 +890,15 @@ mod tests {
     #[test]
     fn entry_without_recur_unchanged() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event @meeting 2026-03-01T14:30 1h "Standup"
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
         assert!(entry.get(&occ_key).is_none(), "should not have occurrences");
@@ -1078,15 +907,15 @@ mod tests {
     #[test]
     fn entry_with_recur_but_no_start_produces_error() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event { name: @nostart, recur: { frequency: #daily, termination: 5 } }
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(result.has_errors);
         assert!(
             result.diagnostics.iter().any(|d| d.message.contains("recurrence requires")),
@@ -1098,16 +927,15 @@ mod tests {
     #[test]
     fn infinite_rule_capped_with_warning() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             r#"
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event { name: @inf, start: 2026-01-01T00:00, recur: { frequency: #daily } }
             "#,
-        )];
-        let result = merge(&db, &sources);
-        // Should have a warning, not an error.
+        );
+        let result = check(&db, source);
         assert!(
             result.diagnostics.iter().any(|d| d.severity == Severity::Warning && d.message.contains("infinite recurrence")),
             "expected infinite recurrence warning, got: {:?}",
@@ -1126,7 +954,7 @@ mod tests {
     #[test]
     fn weekly_recurrence_expanded() {
         let db = Database::default();
-        let sources = vec![make_source(
+        let source = make_source(
             &db,
             "a.gnomon",
             // 2026-01-05 is a Monday. Until 2026-02-01 should give 4 Mondays: Jan 5, 12, 19, 26.
@@ -1134,8 +962,8 @@ mod tests {
             calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
             event { name: @weekly, start: 2026-01-05T09:00, recur: { frequency: #weekly, by_day: [{ day: #monday }], termination: 2026-02-01T00:00 } }
             "#,
-        )];
-        let result = merge(&db, &sources);
+        );
+        let result = check(&db, source);
         assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
