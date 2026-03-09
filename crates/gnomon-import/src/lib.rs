@@ -9,8 +9,11 @@ use std::collections::BTreeMap;
 
 use calico::model::component::{Calendar as ICalCalendar, CalendarComponent};
 use calico::model::primitive::{
-    DateTimeOrDate, Duration, NominalDuration, Sign, SignedDuration, Status,
+    Attachment, ClassValue, DateTime, DateTimeOrDate, Duration, ExactDuration, Geo, NominalDuration,
+    RDateSeq, RequestStatus, Sign, SignedDuration, Status, TimeTransparency, Token, Utc, Weekday,
 };
+use calico::model::rrule::{FreqByRules, RRule};
+use calico::model::string::CaselessStr;
 
 use jscalendar::json::TryFromJson;
 use jscalendar::model::object::{Event as JsEvent, Group as JsGroup, Task as JsTask, TaskOrEvent};
@@ -43,162 +46,1034 @@ fn make_record(fields: &[(&str, ImportValue)]) -> ImportRecord {
 
 // ── iCalendar ────────────────────────────────────────────────
 
-/// Translate an iCalendar string into an `ImportValue::List` of records.
+/// Translate an iCalendar string into a calendar record.
+///
+/// The result is a single record with `type: "calendar"`, VCALENDAR-level
+/// properties, and an `entries` field containing the translated VEVENT and
+/// VTODO component records.
 pub fn translate_icalendar(content: &str) -> Result<ImportValue, String> {
     let calendars =
         ICalCalendar::parse(content).map_err(|e| format!("iCalendar parse error: {e}"))?;
 
-    let mut records: Vec<ImportValue> = Vec::new();
-
+    // Each VCALENDAR object becomes a calendar record with nested entries.
+    let mut result: Vec<ImportValue> = Vec::new();
     for cal in &calendars {
+        let mut cal_record = translate_vcalendar_properties(cal);
+
+        let mut entries: Vec<ImportValue> = Vec::new();
         for component in cal.components() {
             match component {
                 CalendarComponent::Event(event) => {
-                    let mut fields: Vec<(&str, ImportValue)> = Vec::new();
-                    fields.push(("type", ImportValue::String("event".into())));
-
-                    if let Some(uid_prop) = event.uid() {
-                        fields.push((
-                            "uid",
-                            ImportValue::String(uid_prop.value.as_str().to_string()),
-                        ));
-                    }
-                    if let Some(summary) = event.summary() {
-                        fields.push(("title", ImportValue::String(summary.value.clone())));
-                    }
-                    if let Some(desc) = event.description() {
-                        fields.push(("description", ImportValue::String(desc.value.clone())));
-                    }
-                    if let Some(dtstart) = event.dtstart() {
-                        if let Some(val) = translate_datetime_or_date(&dtstart.value) {
-                            fields.push(("start", val));
-                        }
-                        if let Some(tz) = dtstart.params.tz_id() {
-                            fields.push((
-                                "time_zone",
-                                ImportValue::String(tz.as_str().to_string()),
-                            ));
-                        }
-                    }
-                    if let Some(dur) = event.duration() {
-                        if let Some(val) = translate_signed_duration(&dur.value) {
-                            fields.push(("duration", val));
-                        }
-                    } else if let (Some(dtstart), Some(dtend)) =
-                        (event.dtstart(), event.dtend())
-                    {
-                        if let Some(val) =
-                            compute_duration_from_endpoints(&dtstart.value, &dtend.value)
-                        {
-                            fields.push(("duration", val));
-                        }
-                    }
-                    if let Some(status_prop) = event.status() {
-                        fields.push(("status", translate_status(&status_prop.value)));
-                    }
-                    if let Some(priority_prop) = event.priority() {
-                        fields.push((
-                            "priority",
-                            ImportValue::Integer(priority_to_u64(&priority_prop.value)),
-                        ));
-                    }
-                    if let Some(loc) = event.location() {
-                        fields.push(("location", ImportValue::String(loc.value.clone())));
-                    }
-                    if let Some(color) = event.color() {
-                        fields.push(("color", ImportValue::String(color.value.to_string())));
-                    }
-                    if let Some(cats) = event.categories() {
-                        let all_cats: Vec<ImportValue> = cats
-                            .iter()
-                            .flat_map(|c| c.value.iter())
-                            .map(|s: &String| ImportValue::String(s.clone()))
-                            .collect();
-                        if !all_cats.is_empty() {
-                            fields.push(("categories", ImportValue::List(all_cats)));
-                        }
-                    }
-
-                    records.push(ImportValue::Record(make_record(&fields)));
+                    entries.push(ImportValue::Record(translate_ical_event(event)));
                 }
                 CalendarComponent::Todo(todo) => {
-                    let mut fields: Vec<(&str, ImportValue)> = Vec::new();
-                    fields.push(("type", ImportValue::String("task".into())));
-
-                    if let Some(uid_prop) = todo.uid() {
-                        fields.push((
-                            "uid",
-                            ImportValue::String(uid_prop.value.as_str().to_string()),
-                        ));
-                    }
-                    if let Some(summary) = todo.summary() {
-                        fields.push(("title", ImportValue::String(summary.value.clone())));
-                    }
-                    if let Some(desc) = todo.description() {
-                        fields.push(("description", ImportValue::String(desc.value.clone())));
-                    }
-                    if let Some(due_prop) = todo.due() {
-                        if let Some(val) = translate_datetime_or_date(&due_prop.value) {
-                            fields.push(("due", val));
-                        }
-                    }
-                    if let Some(dtstart) = todo.dtstart() {
-                        if let Some(val) = translate_datetime_or_date(&dtstart.value) {
-                            fields.push(("start", val));
-                        }
-                        if let Some(tz) = dtstart.params.tz_id() {
-                            fields.push((
-                                "time_zone",
-                                ImportValue::String(tz.as_str().to_string()),
-                            ));
-                        }
-                    }
-                    if let Some(dur) = todo.duration() {
-                        if let Some(val) = translate_signed_duration(&dur.value) {
-                            fields.push(("estimated_duration", val));
-                        }
-                    }
-                    if let Some(pct) = todo.percent_complete() {
-                        fields.push((
-                            "percent_complete",
-                            ImportValue::Integer(pct.value.get() as u64),
-                        ));
-                    }
-                    if let Some(status_prop) = todo.status() {
-                        fields.push(("status", translate_status(&status_prop.value)));
-                    }
-                    if let Some(priority_prop) = todo.priority() {
-                        fields.push((
-                            "priority",
-                            ImportValue::Integer(priority_to_u64(&priority_prop.value)),
-                        ));
-                    }
-                    if let Some(loc) = todo.location() {
-                        fields.push(("location", ImportValue::String(loc.value.clone())));
-                    }
-                    if let Some(color) = todo.color() {
-                        fields.push(("color", ImportValue::String(color.value.to_string())));
-                    }
-                    if let Some(cats) = todo.categories() {
-                        let all_cats: Vec<ImportValue> = cats
-                            .iter()
-                            .flat_map(|c| c.value.iter())
-                            .map(|s: &String| ImportValue::String(s.clone()))
-                            .collect();
-                        if !all_cats.is_empty() {
-                            fields.push(("categories", ImportValue::List(all_cats)));
-                        }
-                    }
-
-                    records.push(ImportValue::Record(make_record(&fields)));
+                    entries.push(ImportValue::Record(translate_ical_todo(todo)));
                 }
-                // Skip VJOURNAL, VFREEBUSY, VTIMEZONE, etc.
                 _ => {}
+            }
+        }
+
+        cal_record.insert("entries".to_string(), ImportValue::List(entries));
+        result.push(ImportValue::Record(cal_record));
+    }
+
+    Ok(ImportValue::List(result))
+}
+
+/// Translate VCALENDAR-level properties into a calendar record.
+fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
+    let mut fields: Vec<(&str, ImportValue)> = Vec::new();
+    fields.push(("type", ImportValue::String("calendar".into())));
+
+    // PRODID is required.
+    fields.push((
+        "prod_id",
+        ImportValue::String(cal.prod_id().value.clone()),
+    ));
+
+    // Optional RFC 7986 properties.
+    if let Some(uid) = cal.uid() {
+        fields.push(("uid", ImportValue::String(uid.value.as_str().to_string())));
+    }
+    if let Some(names) = cal.name() {
+        if let Some(first) = names.first() {
+            fields.push(("name", ImportValue::String(first.value.clone())));
+        }
+    }
+    if let Some(descs) = cal.description() {
+        if let Some(first) = descs.first() {
+            fields.push((
+                "description",
+                ImportValue::String(first.value.clone()),
+            ));
+        }
+    }
+    if let Some(color) = cal.color() {
+        fields.push(("color", ImportValue::String(color.value.to_string())));
+    }
+    if let Some(url) = cal.url() {
+        fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
+    }
+    if let Some(cats) = cal.categories() {
+        let all_cats: Vec<ImportValue> = cats
+            .iter()
+            .flat_map(|c| c.value.iter())
+            .map(|s: &String| ImportValue::String(s.clone()))
+            .collect();
+        if !all_cats.is_empty() {
+            fields.push(("categories", ImportValue::List(all_cats)));
+        }
+    }
+    if let Some(lm) = cal.last_modified() {
+        fields.push(("last_modified", translate_utc_datetime(&lm.value)));
+    }
+    if let Some(ri) = cal.refresh_interval() {
+        if let Some(val) = translate_signed_duration(&ri.value) {
+            fields.push(("refresh_interval", val));
+        }
+    }
+    if let Some(source) = cal.source() {
+        fields.push((
+            "source",
+            ImportValue::String(source.value.as_str().to_string()),
+        ));
+    }
+
+    let mut record = make_record(&fields);
+    append_x_properties(cal, &mut record);
+    record
+}
+
+/// Translate a VEVENT component into an event record.
+fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord {
+    let mut fields: Vec<(&str, ImportValue)> = Vec::new();
+    fields.push(("type", ImportValue::String("event".into())));
+
+    if let Some(uid_prop) = event.uid() {
+        fields.push((
+            "uid",
+            ImportValue::String(uid_prop.value.as_str().to_string()),
+        ));
+    }
+    if let Some(summary) = event.summary() {
+        fields.push(("title", ImportValue::String(summary.value.clone())));
+    }
+    if let Some(desc) = event.description() {
+        fields.push(("description", ImportValue::String(desc.value.clone())));
+    }
+    if let Some(dtstart) = event.dtstart() {
+        if let Some(val) = translate_datetime_or_date(&dtstart.value) {
+            fields.push(("start", val));
+        }
+        if let Some(tz) = dtstart.params.tz_id() {
+            fields.push((
+                "time_zone",
+                ImportValue::String(tz.as_str().to_string()),
+            ));
+        }
+    }
+    if let Some(dur) = event.duration() {
+        if let Some(val) = translate_signed_duration(&dur.value) {
+            fields.push(("duration", val));
+        }
+    } else if let (Some(dtstart), Some(dtend)) = (event.dtstart(), event.dtend()) {
+        if let Some(val) = compute_duration_from_endpoints(&dtstart.value, &dtend.value) {
+            fields.push(("duration", val));
+        }
+    }
+    if let Some(status_prop) = event.status() {
+        fields.push(("status", translate_status(&status_prop.value)));
+    }
+    if let Some(priority_prop) = event.priority() {
+        fields.push((
+            "priority",
+            ImportValue::Integer(priority_to_u64(&priority_prop.value)),
+        ));
+    }
+    if let Some(loc) = event.location() {
+        fields.push(("location", ImportValue::String(loc.value.clone())));
+    }
+    if let Some(color) = event.color() {
+        fields.push(("color", ImportValue::String(color.value.to_string())));
+    }
+    if let Some(cats) = event.categories() {
+        let all_cats: Vec<ImportValue> = cats
+            .iter()
+            .flat_map(|c| c.value.iter())
+            .map(|s: &String| ImportValue::String(s.clone()))
+            .collect();
+        if !all_cats.is_empty() {
+            fields.push(("categories", ImportValue::List(all_cats)));
+        }
+    }
+
+    // Expanded properties.
+    if let Some(dtstamp) = event.dtstamp() {
+        fields.push(("dtstamp", translate_utc_datetime(&dtstamp.value)));
+    }
+    if let Some(class) = event.class() {
+        fields.push(("class", translate_class(&class.value)));
+    }
+    if let Some(created) = event.created() {
+        fields.push(("created", translate_utc_datetime(&created.value)));
+    }
+    if let Some(geo) = event.geo() {
+        fields.push(("geo", translate_geo(&geo.value)));
+    }
+    if let Some(lm) = event.last_modified() {
+        fields.push(("last_modified", translate_utc_datetime(&lm.value)));
+    }
+    if let Some(org) = event.organizer() {
+        fields.push((
+            "organizer",
+            ImportValue::String(org.value.as_str().to_string()),
+        ));
+    }
+    if let Some(seq) = event.sequence() {
+        fields.push(("sequence", ImportValue::SignedInteger(seq.value as i64)));
+    }
+    if let Some(transp) = event.transp() {
+        fields.push(("transparency", translate_transp(&transp.value)));
+    }
+    if let Some(url) = event.url() {
+        fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
+    }
+    if let Some(recurrence_id) = event.recurrence_id() {
+        if let Some(val) = translate_datetime_or_date(&recurrence_id.value) {
+            fields.push(("recurrence_id", val));
+        }
+    }
+    if let Some(rrules) = event.rrule() {
+        if let Some(first) = rrules.first() {
+            fields.push(("recur", translate_rrule(&first.value)));
+        }
+    }
+    if let Some(rdates) = event.rdate() {
+        let items: Vec<ImportValue> = rdates
+            .iter()
+            .flat_map(|r| translate_rdate_seq(&r.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("rdates", ImportValue::List(items)));
+        }
+    }
+    if let Some(exdates) = event.exdate() {
+        let items: Vec<ImportValue> = exdates
+            .iter()
+            .flat_map(|e| translate_datetime_or_date(&DateTimeOrDate::from(e.value.clone())))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("exdates", ImportValue::List(items)));
+        }
+    }
+    if let Some(attachments) = event.attach() {
+        let items: Vec<ImportValue> = attachments
+            .iter()
+            .map(|a| translate_attachment(&a.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("attachments", ImportValue::List(items)));
+        }
+    }
+    if let Some(attendees) = event.attendee() {
+        let items: Vec<ImportValue> = attendees
+            .iter()
+            .map(|a| ImportValue::String(a.value.as_str().to_string()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("attendees", ImportValue::List(items)));
+        }
+    }
+    if let Some(comments) = event.comment() {
+        let items: Vec<ImportValue> = comments
+            .iter()
+            .map(|c| ImportValue::String(c.value.clone()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("comments", ImportValue::List(items)));
+        }
+    }
+    if let Some(contacts) = event.contact() {
+        let items: Vec<ImportValue> = contacts
+            .iter()
+            .map(|c| ImportValue::String(c.value.clone()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("contacts", ImportValue::List(items)));
+        }
+    }
+    if let Some(related) = event.related_to() {
+        let items: Vec<ImportValue> = related
+            .iter()
+            .map(|r| ImportValue::String(r.value.as_str().to_string()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("related_to", ImportValue::List(items)));
+        }
+    }
+    if let Some(resources) = event.resources() {
+        let items: Vec<ImportValue> = resources
+            .iter()
+            .map(|r| {
+                ImportValue::List(
+                    r.value.iter().map(|s| ImportValue::String(s.clone())).collect(),
+                )
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("resources", ImportValue::List(items)));
+        }
+    }
+    if let Some(images) = event.image() {
+        let items: Vec<ImportValue> = images
+            .iter()
+            .map(|i| translate_attachment(&i.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("images", ImportValue::List(items)));
+        }
+    }
+    if let Some(conferences) = event.conference() {
+        let items: Vec<ImportValue> = conferences
+            .iter()
+            .map(|c| ImportValue::String(c.value.as_str().to_string()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("conferences", ImportValue::List(items)));
+        }
+    }
+    if let Some(statuses) = event.request_status() {
+        let items: Vec<ImportValue> = statuses
+            .iter()
+            .map(|s| translate_request_status(&s.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("request_statuses", ImportValue::List(items)));
+        }
+    }
+
+    let mut record = make_record(&fields);
+    append_x_properties(event, &mut record);
+    record
+}
+
+/// Translate a VTODO component into a task record.
+fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
+    let mut fields: Vec<(&str, ImportValue)> = Vec::new();
+    fields.push(("type", ImportValue::String("task".into())));
+
+    if let Some(uid_prop) = todo.uid() {
+        fields.push((
+            "uid",
+            ImportValue::String(uid_prop.value.as_str().to_string()),
+        ));
+    }
+    if let Some(summary) = todo.summary() {
+        fields.push(("title", ImportValue::String(summary.value.clone())));
+    }
+    if let Some(desc) = todo.description() {
+        fields.push(("description", ImportValue::String(desc.value.clone())));
+    }
+    if let Some(due_prop) = todo.due() {
+        if let Some(val) = translate_datetime_or_date(&due_prop.value) {
+            fields.push(("due", val));
+        }
+    }
+    if let Some(dtstart) = todo.dtstart() {
+        if let Some(val) = translate_datetime_or_date(&dtstart.value) {
+            fields.push(("start", val));
+        }
+        if let Some(tz) = dtstart.params.tz_id() {
+            fields.push((
+                "time_zone",
+                ImportValue::String(tz.as_str().to_string()),
+            ));
+        }
+    }
+    if let Some(dur) = todo.duration() {
+        if let Some(val) = translate_signed_duration(&dur.value) {
+            fields.push(("estimated_duration", val));
+        }
+    }
+    if let Some(pct) = todo.percent_complete() {
+        fields.push((
+            "percent_complete",
+            ImportValue::Integer(pct.value.get() as u64),
+        ));
+    }
+    if let Some(status_prop) = todo.status() {
+        fields.push(("status", translate_status(&status_prop.value)));
+    }
+    if let Some(priority_prop) = todo.priority() {
+        fields.push((
+            "priority",
+            ImportValue::Integer(priority_to_u64(&priority_prop.value)),
+        ));
+    }
+    if let Some(loc) = todo.location() {
+        fields.push(("location", ImportValue::String(loc.value.clone())));
+    }
+    if let Some(color) = todo.color() {
+        fields.push(("color", ImportValue::String(color.value.to_string())));
+    }
+    if let Some(cats) = todo.categories() {
+        let all_cats: Vec<ImportValue> = cats
+            .iter()
+            .flat_map(|c| c.value.iter())
+            .map(|s: &String| ImportValue::String(s.clone()))
+            .collect();
+        if !all_cats.is_empty() {
+            fields.push(("categories", ImportValue::List(all_cats)));
+        }
+    }
+
+    // Expanded properties.
+    if let Some(dtstamp) = todo.dtstamp() {
+        fields.push(("dtstamp", translate_utc_datetime(&dtstamp.value)));
+    }
+    if let Some(class) = todo.class() {
+        fields.push(("class", translate_class(&class.value)));
+    }
+    if let Some(created) = todo.created() {
+        fields.push(("created", translate_utc_datetime(&created.value)));
+    }
+    if let Some(geo) = todo.geo() {
+        fields.push(("geo", translate_geo(&geo.value)));
+    }
+    if let Some(lm) = todo.last_modified() {
+        fields.push(("last_modified", translate_utc_datetime(&lm.value)));
+    }
+    if let Some(org) = todo.organizer() {
+        fields.push((
+            "organizer",
+            ImportValue::String(org.value.as_str().to_string()),
+        ));
+    }
+    if let Some(seq) = todo.sequence() {
+        fields.push(("sequence", ImportValue::SignedInteger(seq.value as i64)));
+    }
+    if let Some(url) = todo.url() {
+        fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
+    }
+    if let Some(completed) = todo.completed() {
+        fields.push(("completed", translate_utc_datetime(&completed.value)));
+    }
+    if let Some(recurrence_id) = todo.recurrence_id() {
+        if let Some(val) = translate_datetime_or_date(&recurrence_id.value) {
+            fields.push(("recurrence_id", val));
+        }
+    }
+    if let Some(rrules) = todo.rrule() {
+        if let Some(first) = rrules.first() {
+            fields.push(("recur", translate_rrule(&first.value)));
+        }
+    }
+    if let Some(rdates) = todo.rdate() {
+        let items: Vec<ImportValue> = rdates
+            .iter()
+            .flat_map(|r| translate_rdate_seq(&r.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("rdates", ImportValue::List(items)));
+        }
+    }
+    if let Some(exdates) = todo.exdate() {
+        let items: Vec<ImportValue> = exdates
+            .iter()
+            .flat_map(|e| translate_datetime_or_date(&DateTimeOrDate::from(e.value.clone())))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("exdates", ImportValue::List(items)));
+        }
+    }
+    if let Some(attachments) = todo.attach() {
+        let items: Vec<ImportValue> = attachments
+            .iter()
+            .map(|a| translate_attachment(&a.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("attachments", ImportValue::List(items)));
+        }
+    }
+    if let Some(attendees) = todo.attendee() {
+        let items: Vec<ImportValue> = attendees
+            .iter()
+            .map(|a| ImportValue::String(a.value.as_str().to_string()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("attendees", ImportValue::List(items)));
+        }
+    }
+    if let Some(comments) = todo.comment() {
+        let items: Vec<ImportValue> = comments
+            .iter()
+            .map(|c| ImportValue::String(c.value.clone()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("comments", ImportValue::List(items)));
+        }
+    }
+    if let Some(contacts) = todo.contact() {
+        let items: Vec<ImportValue> = contacts
+            .iter()
+            .map(|c| ImportValue::String(c.value.clone()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("contacts", ImportValue::List(items)));
+        }
+    }
+    if let Some(related) = todo.related_to() {
+        let items: Vec<ImportValue> = related
+            .iter()
+            .map(|r| ImportValue::String(r.value.as_str().to_string()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("related_to", ImportValue::List(items)));
+        }
+    }
+    if let Some(resources) = todo.resources() {
+        let items: Vec<ImportValue> = resources
+            .iter()
+            .map(|r| {
+                ImportValue::List(
+                    r.value.iter().map(|s| ImportValue::String(s.clone())).collect(),
+                )
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("resources", ImportValue::List(items)));
+        }
+    }
+    if let Some(images) = todo.image() {
+        let items: Vec<ImportValue> = images
+            .iter()
+            .map(|i| translate_attachment(&i.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("images", ImportValue::List(items)));
+        }
+    }
+    if let Some(conferences) = todo.conference() {
+        let items: Vec<ImportValue> = conferences
+            .iter()
+            .map(|c| ImportValue::String(c.value.as_str().to_string()))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("conferences", ImportValue::List(items)));
+        }
+    }
+    if let Some(statuses) = todo.request_status() {
+        let items: Vec<ImportValue> = statuses
+            .iter()
+            .map(|s| translate_request_status(&s.value))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("request_statuses", ImportValue::List(items)));
+        }
+    }
+
+    let mut record = make_record(&fields);
+    append_x_properties(todo, &mut record);
+    record
+}
+
+// ── iCalendar property translation helpers ────────────────────
+
+/// Translate a UTC datetime into an import datetime record.
+fn translate_utc_datetime(dt: &DateTime<Utc>) -> ImportValue {
+    let date = dt.date;
+    let time = dt.time;
+    let date_fields = [
+        ("year", ImportValue::Integer(date.year().get() as u64)),
+        (
+            "month",
+            ImportValue::Integer(date.month().number().get() as u64),
+        ),
+        ("day", ImportValue::Integer(date.day() as u8 as u64)),
+    ];
+    let time_fields = [
+        ("hour", ImportValue::Integer(time.hour() as u8 as u64)),
+        (
+            "minute",
+            ImportValue::Integer(time.minute() as u8 as u64),
+        ),
+        (
+            "second",
+            ImportValue::Integer(time.second() as u8 as u64),
+        ),
+    ];
+    let dt_fields = [
+        ("date", ImportValue::Record(make_record(&date_fields))),
+        ("time", ImportValue::Record(make_record(&time_fields))),
+    ];
+    ImportValue::Record(make_record(&dt_fields))
+}
+
+/// Translate a CLASS property value to a lowercase string.
+fn translate_class(val: &Token<ClassValue, String>) -> ImportValue {
+    let s = match val {
+        Token::Known(ClassValue::Public) => "public".to_string(),
+        Token::Known(ClassValue::Private) => "private".to_string(),
+        Token::Known(ClassValue::Confidential) => "confidential".to_string(),
+        Token::Known(_) => "unknown".to_string(),
+        Token::Unknown(s) => s.to_lowercase(),
+    };
+    ImportValue::String(s)
+}
+
+/// Translate a TRANSP property value to a lowercase string.
+fn translate_transp(val: &TimeTransparency) -> ImportValue {
+    let s = match val {
+        TimeTransparency::Opaque => "opaque",
+        TimeTransparency::Transparent => "transparent",
+        _ => "opaque",
+    };
+    ImportValue::String(s.into())
+}
+
+/// Translate a GEO property to a record with latitude and longitude strings.
+fn translate_geo(geo: &Geo) -> ImportValue {
+    let fields = [
+        ("latitude", ImportValue::String(geo.lat.to_string())),
+        ("longitude", ImportValue::String(geo.lon.to_string())),
+    ];
+    ImportValue::Record(make_record(&fields))
+}
+
+/// Translate an ATTACH or IMAGE property.
+fn translate_attachment(val: &Attachment) -> ImportValue {
+    match val {
+        Attachment::Uri(uri) => ImportValue::String(uri.as_str().to_string()),
+        Attachment::Binary(data) => {
+            let fields = [
+                ("encoding", ImportValue::String("base64".into())),
+                ("data", ImportValue::String(base64_encode(data))),
+            ];
+            ImportValue::Record(make_record(&fields))
+        }
+    }
+}
+
+/// Simple base64 encoder (no external dep needed — just use a manual implementation).
+fn base64_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as u32;
+        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(ALPHABET[((triple >> 18) & 0x3F) as usize] as char);
+        result.push(ALPHABET[((triple >> 12) & 0x3F) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(ALPHABET[((triple >> 6) & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(ALPHABET[(triple & 0x3F) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    result
+}
+
+/// Translate a REQUEST-STATUS property to a string.
+fn translate_request_status(rs: &RequestStatus) -> ImportValue {
+    let code = &rs.code;
+    let class = code.class.as_u8();
+    let desc = &rs.description;
+    let s = if let Some(minor) = code.minor {
+        format!("{}.{}.{};{}", class, code.major, minor, desc)
+    } else {
+        format!("{}.{};{}", class, code.major, desc)
+    };
+    ImportValue::String(s)
+}
+
+/// Translate an RRULE property to a recurrence rule record.
+fn translate_rrule(rrule: &RRule) -> ImportValue {
+    let mut fields: Vec<(&str, ImportValue)> = Vec::new();
+
+    // Frequency.
+    let freq_str = match &rrule.freq {
+        FreqByRules::Secondly(_) => "secondly",
+        FreqByRules::Minutely(_) => "minutely",
+        FreqByRules::Hourly(_) => "hourly",
+        FreqByRules::Daily(_) => "daily",
+        FreqByRules::Weekly => "weekly",
+        FreqByRules::Monthly(_) => "monthly",
+        FreqByRules::Yearly(_) => "yearly",
+    };
+    fields.push(("frequency", ImportValue::String(freq_str.into())));
+
+    // Interval.
+    if let Some(interval) = rrule.interval {
+        fields.push((
+            "interval",
+            ImportValue::Integer(interval.get().get()),
+        ));
+    }
+
+    // Termination.
+    if let Some(ref term) = rrule.termination {
+        match term {
+            calico::model::rrule::Termination::Count(c) => {
+                fields.push(("count", ImportValue::Integer(*c)));
+            }
+            calico::model::rrule::Termination::Until(dtod) => {
+                if let Some(val) = translate_datetime_or_date(dtod) {
+                    fields.push(("until", val));
+                }
             }
         }
     }
 
-    Ok(ImportValue::List(records))
+    // Week start.
+    if let Some(wkst) = rrule.week_start {
+        fields.push(("week_start", translate_weekday(wkst)));
+    }
+
+    // Core BY rules.
+    let core = &rrule.core_by_rules;
+    if let Some(ref by_second) = core.by_second {
+        let items: Vec<ImportValue> = (0..=60u8)
+            .filter_map(|s| {
+                let sec = calico::model::rrule::Second::from_repr(s)?;
+                if by_second.get(sec) {
+                    Some(ImportValue::Integer(s as u64))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_second", ImportValue::List(items)));
+        }
+    }
+    if let Some(ref by_minute) = core.by_minute {
+        let items: Vec<ImportValue> = (0..=59u8)
+            .filter_map(|m| {
+                let min = calico::model::rrule::Minute::from_repr(m)?;
+                if by_minute.get(min) {
+                    Some(ImportValue::Integer(m as u64))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_minute", ImportValue::List(items)));
+        }
+    }
+    if let Some(ref by_hour) = core.by_hour {
+        let items: Vec<ImportValue> = (0..=23u8)
+            .filter_map(|h| {
+                let hour = calico::model::rrule::Hour::from_repr(h)?;
+                if by_hour.get(hour) {
+                    Some(ImportValue::Integer(h as u64))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_hour", ImportValue::List(items)));
+        }
+    }
+    if let Some(ref by_month) = core.by_month {
+        let items: Vec<ImportValue> = (1..=12u8)
+            .filter_map(|m| {
+                let month = calico::model::primitive::Month::new(m).ok()?;
+                if by_month.get(month) {
+                    Some(ImportValue::Integer(m as u64))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_month", ImportValue::List(items)));
+        }
+    }
+    if let Some(ref by_day) = core.by_day {
+        let items: Vec<ImportValue> = by_day
+            .iter()
+            .map(|wdn| {
+                let day_str = weekday_to_str(wdn.weekday);
+                if let Some((sign, week)) = wdn.ordinal {
+                    let ord = match sign {
+                        Sign::Pos => week as u8 as i64,
+                        Sign::Neg => -(week as u8 as i64),
+                    };
+                    let fields = [
+                        ("day", ImportValue::String(day_str.into())),
+                        ("ordinal", ImportValue::SignedInteger(ord)),
+                    ];
+                    ImportValue::Record(make_record(&fields))
+                } else {
+                    ImportValue::String(day_str.into())
+                }
+            })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_day", ImportValue::List(items)));
+        }
+    }
+    if let Some(ref by_set_pos) = core.by_set_pos {
+        let items: Vec<ImportValue> = by_set_pos
+            .iter()
+            .map(|ydn| ImportValue::SignedInteger(ydn.get() as i64))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_set_pos", ImportValue::List(items)));
+        }
+    }
+
+    // Frequency-dependent BY rules.
+    match &rrule.freq {
+        FreqByRules::Secondly(rules)
+        | FreqByRules::Minutely(rules)
+        | FreqByRules::Hourly(rules) => {
+            translate_by_month_day(&rules.by_month_day, &mut fields);
+            translate_by_year_day(&rules.by_year_day, &mut fields);
+        }
+        FreqByRules::Daily(rules) | FreqByRules::Monthly(rules) => {
+            translate_by_month_day(&rules.by_month_day, &mut fields);
+        }
+        FreqByRules::Yearly(rules) => {
+            translate_by_month_day(&rules.by_month_day, &mut fields);
+            translate_by_year_day(&rules.by_year_day, &mut fields);
+            translate_by_week_no(&rules.by_week_no, &mut fields);
+        }
+        FreqByRules::Weekly => {}
+    }
+
+    ImportValue::Record(make_record(&fields))
+}
+
+fn translate_by_month_day(
+    by_month_day: &Option<calico::model::rrule::MonthDaySet>,
+    fields: &mut Vec<(&str, ImportValue)>,
+) {
+    if let Some(set) = by_month_day {
+        let mut items: Vec<ImportValue> = Vec::new();
+        // Positive days 1..=31
+        for d in 1..=31u8 {
+            if let Some(day) = calico::model::rrule::MonthDay::from_repr(d) {
+                let idx = calico::model::rrule::MonthDaySetIndex::from_signed_month_day(
+                    Sign::Pos,
+                    day,
+                );
+                if set.get(idx) {
+                    items.push(ImportValue::SignedInteger(d as i64));
+                }
+            }
+        }
+        // Negative days -31..=-1
+        for d in 1..=31u8 {
+            if let Some(day) = calico::model::rrule::MonthDay::from_repr(d) {
+                let idx = calico::model::rrule::MonthDaySetIndex::from_signed_month_day(
+                    Sign::Neg,
+                    day,
+                );
+                if set.get(idx) {
+                    items.push(ImportValue::SignedInteger(-(d as i64)));
+                }
+            }
+        }
+        if !items.is_empty() {
+            fields.push(("by_month_day", ImportValue::List(items)));
+        }
+    }
+}
+
+fn translate_by_year_day(
+    by_year_day: &Option<std::collections::BTreeSet<calico::model::rrule::YearDayNum>>,
+    fields: &mut Vec<(&str, ImportValue)>,
+) {
+    if let Some(set) = by_year_day {
+        let items: Vec<ImportValue> = set
+            .iter()
+            .map(|ydn| ImportValue::SignedInteger(ydn.get() as i64))
+            .collect();
+        if !items.is_empty() {
+            fields.push(("by_year_day", ImportValue::List(items)));
+        }
+    }
+}
+
+fn translate_by_week_no(
+    by_week_no: &Option<calico::model::rrule::WeekNoSet>,
+    fields: &mut Vec<(&str, ImportValue)>,
+) {
+    if let Some(set) = by_week_no {
+        let mut items: Vec<ImportValue> = Vec::new();
+        // Positive weeks 1..=53
+        for w in 1..=53u8 {
+            if let Some(week) = calico::model::primitive::IsoWeek::from_index(w) {
+                let idx = calico::model::rrule::WeekNoSetIndex::from_signed_week(Sign::Pos, week);
+                if set.get(idx) {
+                    items.push(ImportValue::SignedInteger(w as i64));
+                }
+            }
+        }
+        // Negative weeks -53..=-1
+        for w in 1..=53u8 {
+            if let Some(week) = calico::model::primitive::IsoWeek::from_index(w) {
+                let idx = calico::model::rrule::WeekNoSetIndex::from_signed_week(Sign::Neg, week);
+                if set.get(idx) {
+                    items.push(ImportValue::SignedInteger(-(w as i64)));
+                }
+            }
+        }
+        if !items.is_empty() {
+            fields.push(("by_week_no", ImportValue::List(items)));
+        }
+    }
+}
+
+fn translate_weekday(wd: Weekday) -> ImportValue {
+    ImportValue::String(weekday_to_str(wd).into())
+}
+
+fn weekday_to_str(wd: Weekday) -> &'static str {
+    match wd {
+        Weekday::Monday => "monday",
+        Weekday::Tuesday => "tuesday",
+        Weekday::Wednesday => "wednesday",
+        Weekday::Thursday => "thursday",
+        Weekday::Friday => "friday",
+        Weekday::Saturday => "saturday",
+        Weekday::Sunday => "sunday",
+    }
+}
+
+/// Translate an RDATE sequence into a list of datetime/date records.
+fn translate_rdate_seq(seq: &RDateSeq) -> Vec<ImportValue> {
+    match seq {
+        RDateSeq::DateTime(dts) => dts
+            .iter()
+            .filter_map(|dt| {
+                translate_datetime_or_date(&DateTimeOrDate::DateTime(dt.clone()))
+            })
+            .collect(),
+        RDateSeq::Date(dates) => dates
+            .iter()
+            .filter_map(|d| translate_datetime_or_date(&DateTimeOrDate::Date(*d)))
+            .collect(),
+        RDateSeq::Period(periods) => periods
+            .iter()
+            .filter_map(|p| {
+                let start_dt = match p {
+                    calico::model::primitive::Period::Explicit { start, .. } => start,
+                    calico::model::primitive::Period::Start { start, .. } => start,
+                };
+                let start = DateTimeOrDate::DateTime(start_dt.clone());
+                translate_datetime_or_date(&start)
+            })
+            .collect(),
+    }
+}
+
+/// Translate a calico `Value<String>` (used for x-properties) to an ImportValue.
+fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> ImportValue {
+    use calico::model::primitive::Value;
+    match val {
+        Value::Text(s) => ImportValue::String(s.clone()),
+        Value::Integer(i) => ImportValue::SignedInteger(*i as i64),
+        Value::Boolean(b) => ImportValue::Bool(*b),
+        Value::DateTime(dt) => {
+            let dtod = DateTimeOrDate::DateTime(dt.clone());
+            translate_datetime_or_date(&dtod).unwrap_or(ImportValue::Undefined)
+        }
+        Value::Date(d) => {
+            translate_datetime_or_date(&DateTimeOrDate::Date(*d))
+                .unwrap_or(ImportValue::Undefined)
+        }
+        Value::Duration(sd) => {
+            translate_signed_duration(sd).unwrap_or(ImportValue::Undefined)
+        }
+        Value::Uri(u) => ImportValue::String(u.as_str().to_string()),
+        Value::CalAddress(u) => ImportValue::String(u.as_str().to_string()),
+        Value::Float(f) => ImportValue::String(f.to_string()),
+        Value::Binary(b) => ImportValue::String(base64_encode(b)),
+        Value::Recur(rrule) => translate_rrule(rrule),
+        Value::Time(t, _) => {
+            let fields = [
+                ("hour", ImportValue::Integer(t.hour() as u8 as u64)),
+                ("minute", ImportValue::Integer(t.minute() as u8 as u64)),
+                ("second", ImportValue::Integer(t.second() as u8 as u64)),
+            ];
+            ImportValue::Record(make_record(&fields))
+        }
+        Value::UtcOffset(off) => {
+            let sign_char = match off.sign {
+                Sign::Pos => '+',
+                Sign::Neg => '-',
+            };
+            ImportValue::String(format!(
+                "{}{:02}:{:02}",
+                sign_char,
+                off.hour as u8,
+                off.minute as u8,
+            ))
+        }
+        Value::Period(p) => {
+            let start_dt = match p {
+                calico::model::primitive::Period::Explicit { start, .. } => start,
+                calico::model::primitive::Period::Start { start, .. } => start,
+            };
+            let start = DateTimeOrDate::DateTime(start_dt.clone());
+            translate_datetime_or_date(&start).unwrap_or(ImportValue::Undefined)
+        }
+        Value::Other { value, .. } => ImportValue::String(value.clone()),
+    }
+}
+
+/// Trait for components that have x_property_iter().
+trait HasXProperties {
+    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)>;
+}
+
+impl HasXProperties for ICalCalendar {
+    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
+        self.x_property_iter()
+            .flat_map(|(k, props)| {
+                props.iter().map(move |prop| (k.as_ref(), &prop.value))
+            })
+            .collect()
+    }
+}
+
+impl HasXProperties for calico::model::component::Event {
+    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
+        self.x_property_iter()
+            .flat_map(|(k, props)| {
+                props.iter().map(move |prop| (k.as_ref(), &prop.value))
+            })
+            .collect()
+    }
+}
+
+impl HasXProperties for calico::model::component::Todo {
+    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
+        self.x_property_iter()
+            .flat_map(|(k, props)| {
+                props.iter().map(move |prop| (k.as_ref(), &prop.value))
+            })
+            .collect()
+    }
+}
+
+/// Append x-property fields to a record.
+fn append_x_properties<T: HasXProperties>(component: &T, record: &mut ImportRecord) {
+    for (key, value) in component.x_property_pairs() {
+        let field_name = key.as_str().to_lowercase().replace('-', "_");
+        record.insert(field_name, translate_ical_value(value));
+    }
 }
 
 // ── JSCalendar ───────────────────────────────────────────────
@@ -618,7 +1493,7 @@ fn translate_signed_duration(sd: &SignedDuration) -> Option<ImportValue> {
 fn translate_nominal_duration(
     positive: bool,
     nom: &NominalDuration,
-    exact: Option<&calico::model::primitive::ExactDuration>,
+    exact: Option<&ExactDuration>,
 ) -> Option<ImportValue> {
     let hours = exact.map_or(0, |e| e.hours as u64);
     let minutes = exact.map_or(0, |e| e.minutes as u64);
@@ -671,7 +1546,7 @@ fn compute_duration_from_endpoints(
     }
 }
 
-fn datetime_to_total_seconds<M>(dt: &calico::model::primitive::DateTime<M>) -> u64 {
+fn datetime_to_total_seconds<M>(dt: &DateTime<M>) -> u64 {
     let date = dt.date;
     // Approximate: just convert to a day count + time seconds.
     let y = date.year().get() as u64;
@@ -730,6 +1605,34 @@ mod tests {
         record.contains_key(name)
     }
 
+    /// Helper to extract the calendar record and its entries from an iCal result.
+    fn split_ical_result(result: &ImportValue) -> (&ImportRecord, Vec<&ImportRecord>) {
+        let calendars = match result {
+            ImportValue::List(items) => items,
+            _ => panic!("expected list, got {result:?}"),
+        };
+        assert_eq!(calendars.len(), 1, "expected singleton list");
+        let cal = match &calendars[0] {
+            ImportValue::Record(r) => r,
+            _ => panic!("expected record"),
+        };
+        assert_eq!(
+            get_field(cal, "type"),
+            &ImportValue::String("calendar".into()),
+        );
+        let entries: Vec<&ImportRecord> = match get_field(cal, "entries") {
+            ImportValue::List(items) => items
+                .iter()
+                .map(|item| match item {
+                    ImportValue::Record(r) => r,
+                    _ => panic!("expected record"),
+                })
+                .collect(),
+            _ => panic!("expected entries list"),
+        };
+        (cal, entries)
+    }
+
     // ── iCalendar tests ──────────────────────────────────────
 
     #[test]
@@ -747,15 +1650,17 @@ END:VEVENT\r\n\
 END:VCALENDAR\r\n";
 
         let result = translate_icalendar(ics).unwrap();
-        let items = match &result {
-            ImportValue::List(items) => items,
-            _ => panic!("expected list"),
-        };
-        assert_eq!(items.len(), 1);
-        let rec = match &items[0] {
-            ImportValue::Record(r) => r,
-            _ => panic!("expected record"),
-        };
+        let (cal, entries) = split_ical_result(&result);
+
+        // Calendar record.
+        assert_eq!(
+            get_field(cal, "prod_id"),
+            &ImportValue::String("-//Test//Test//EN".into())
+        );
+
+        // Event record.
+        assert_eq!(entries.len(), 1);
+        let rec = entries[0];
         assert_eq!(
             get_field(rec, "type"),
             &ImportValue::String("event".into())
@@ -818,15 +1723,9 @@ END:VTODO\r\n\
 END:VCALENDAR\r\n";
 
         let result = translate_icalendar(ics).unwrap();
-        let items = match &result {
-            ImportValue::List(items) => items,
-            _ => panic!("expected list"),
-        };
-        assert_eq!(items.len(), 1);
-        let rec = match &items[0] {
-            ImportValue::Record(r) => r,
-            _ => panic!("expected record"),
-        };
+        let (_cal, entries) = split_ical_result(&result);
+        assert_eq!(entries.len(), 1);
+        let rec = entries[0];
         assert_eq!(
             get_field(rec, "type"),
             &ImportValue::String("task".into())
@@ -867,14 +1766,8 @@ END:VEVENT\r\n\
 END:VCALENDAR\r\n";
 
         let result = translate_icalendar(ics).unwrap();
-        let items = match &result {
-            ImportValue::List(items) => items,
-            _ => panic!("expected list"),
-        };
-        let rec = match &items[0] {
-            ImportValue::Record(r) => r,
-            _ => panic!("expected record"),
-        };
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
         // Duration should be computed from DTEND - DTSTART = 1h30m.
         match get_field(rec, "duration") {
             ImportValue::Record(dur) => {
@@ -884,6 +1777,203 @@ END:VCALENDAR\r\n";
             }
             _ => panic!("expected duration record"),
         }
+    }
+
+    #[test]
+    fn ical_vcalendar_properties() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Acme//Calendar//EN\r\n\
+NAME:Work Calendar\r\n\
+COLOR:indigo\r\n\
+BEGIN:VEVENT\r\n\
+UID:e1\r\n\
+SUMMARY:Test\r\n\
+DTSTART:20260101T000000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (cal, _entries) = split_ical_result(&result);
+        assert_eq!(
+            get_field(cal, "prod_id"),
+            &ImportValue::String("-//Acme//Calendar//EN".into())
+        );
+        assert_eq!(
+            get_field(cal, "name"),
+            &ImportValue::String("Work Calendar".into())
+        );
+        assert_eq!(
+            get_field(cal, "color"),
+            &ImportValue::String("indigo".into())
+        );
+    }
+
+    #[test]
+    fn ical_x_properties_on_event() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:xprop-test\r\n\
+SUMMARY:Test Event\r\n\
+DTSTART:20260101T000000\r\n\
+X-CUSTOM-FIELD:hello world\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        assert_eq!(
+            get_field(rec, "x_custom_field"),
+            &ImportValue::String("hello world".into())
+        );
+    }
+
+    #[test]
+    fn ical_expanded_event_properties() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:expanded-1\r\n\
+SUMMARY:Full Event\r\n\
+DTSTART:20260315T140000\r\n\
+DTSTAMP:20260101T120000Z\r\n\
+CREATED:20260101T100000Z\r\n\
+LAST-MODIFIED:20260102T080000Z\r\n\
+CLASS:CONFIDENTIAL\r\n\
+TRANSP:TRANSPARENT\r\n\
+SEQUENCE:3\r\n\
+GEO:48.856614;2.352222\r\n\
+URL:https://example.com/event\r\n\
+ORGANIZER:mailto:boss@example.com\r\n\
+COMMENT:First comment\r\n\
+COMMENT:Second comment\r\n\
+ATTENDEE:mailto:alice@example.com\r\n\
+ATTENDEE:mailto:bob@example.com\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+
+        assert!(has_field(rec, "dtstamp"));
+        assert!(has_field(rec, "created"));
+        assert!(has_field(rec, "last_modified"));
+
+        assert_eq!(
+            get_field(rec, "class"),
+            &ImportValue::String("confidential".into())
+        );
+        assert_eq!(
+            get_field(rec, "transparency"),
+            &ImportValue::String("transparent".into())
+        );
+        assert_eq!(
+            get_field(rec, "sequence"),
+            &ImportValue::SignedInteger(3)
+        );
+        assert_eq!(
+            get_field(rec, "url"),
+            &ImportValue::String("https://example.com/event".into())
+        );
+        assert_eq!(
+            get_field(rec, "organizer"),
+            &ImportValue::String("mailto:boss@example.com".into())
+        );
+
+        // GEO.
+        match get_field(rec, "geo") {
+            ImportValue::Record(geo) => {
+                assert!(has_field(geo, "latitude"));
+                assert!(has_field(geo, "longitude"));
+            }
+            _ => panic!("expected geo record"),
+        }
+
+        // Comments.
+        match get_field(rec, "comments") {
+            ImportValue::List(items) => {
+                assert_eq!(items.len(), 2);
+                assert_eq!(items[0], ImportValue::String("First comment".into()));
+                assert_eq!(items[1], ImportValue::String("Second comment".into()));
+            }
+            _ => panic!("expected comments list"),
+        }
+
+        // Attendees.
+        match get_field(rec, "attendees") {
+            ImportValue::List(items) => {
+                assert_eq!(items.len(), 2);
+                assert_eq!(
+                    items[0],
+                    ImportValue::String("mailto:alice@example.com".into())
+                );
+            }
+            _ => panic!("expected attendees list"),
+        }
+    }
+
+    #[test]
+    fn ical_rrule_event() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:rrule-1\r\n\
+SUMMARY:Weekly Meeting\r\n\
+DTSTART:20260315T140000\r\n\
+RRULE:FREQ=WEEKLY;COUNT=10;BYDAY=MO,WE,FR\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+
+        assert!(has_field(rec, "recur"));
+        match get_field(rec, "recur") {
+            ImportValue::Record(rrule) => {
+                assert_eq!(
+                    get_field(rrule, "frequency"),
+                    &ImportValue::String("weekly".into())
+                );
+                assert_eq!(get_field(rrule, "count"), &ImportValue::Integer(10));
+                assert!(has_field(rrule, "by_day"));
+            }
+            _ => panic!("expected recur record"),
+        }
+    }
+
+    #[test]
+    fn ical_todo_completed() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VTODO\r\n\
+UID:todo-completed-1\r\n\
+SUMMARY:Done task\r\n\
+STATUS:COMPLETED\r\n\
+COMPLETED:20260301T120000Z\r\n\
+END:VTODO\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        assert_eq!(
+            get_field(rec, "status"),
+            &ImportValue::String("completed".into())
+        );
+        assert!(has_field(rec, "completed"));
     }
 
     // ── JSCalendar tests ─────────────────────────────────────

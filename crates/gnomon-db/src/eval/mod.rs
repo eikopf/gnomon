@@ -107,6 +107,23 @@ mod tests {
         }
     }
 
+    /// Unwrap a singleton list containing a calendar record.
+    fn unwrap_singleton_calendar<'a, 'db>(value: &'a Value<'db>, db: &'db Database) -> &'a Record<'db> {
+        match value {
+            Value::List(items) => {
+                assert_eq!(items.len(), 1, "expected singleton calendar list");
+                match &items[0].value {
+                    Value::Record(r) => {
+                        assert_eq!(get_field(r, db, "type"), Value::String("calendar".into()));
+                        r
+                    }
+                    other => panic!("expected calendar record, got: {other:?}"),
+                }
+            }
+            other => panic!("expected list, got: {other:?}"),
+        }
+    }
+
     fn expect_list_len(result: &super::EvalResult<'_>) -> usize {
         match &result.value {
             Value::List(items) => items.len(),
@@ -663,19 +680,20 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
-            match &result.value {
+            let cal = unwrap_singleton_calendar(&result.value, &db);
+            match get_field(cal, &db, "entries") {
                 Value::List(items) => {
                     assert_eq!(items.len(), 1);
                     match &items[0].value {
-                        Value::Record(r) => {
-                            assert_eq!(get_field(r, &db, "type"), Value::String("event".into()));
-                            assert_eq!(get_field(r, &db, "uid"), Value::String("ev1".into()));
-                            assert_eq!(get_field(r, &db, "title"), Value::String("Lunch".into()));
+                        Value::Record(e) => {
+                            assert_eq!(get_field(e, &db, "type"), Value::String("event".into()));
+                            assert_eq!(get_field(e, &db, "uid"), Value::String("ev1".into()));
+                            assert_eq!(get_field(e, &db, "title"), Value::String("Lunch".into()));
                         }
-                        _ => panic!("expected record"),
+                        _ => panic!("expected event record"),
                     }
                 }
-                _ => panic!("expected list"),
+                _ => panic!("expected entries list"),
             }
         }
 
@@ -700,17 +718,18 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
-            match &result.value {
+            let cal = unwrap_singleton_calendar(&result.value, &db);
+            match get_field(cal, &db, "entries") {
                 Value::List(items) => {
                     assert_eq!(items.len(), 1);
                     match &items[0].value {
-                        Value::Record(r) => {
-                            assert_eq!(get_field(r, &db, "uid"), Value::String("ev-infer".into()));
+                        Value::Record(e) => {
+                            assert_eq!(get_field(e, &db, "uid"), Value::String("ev-infer".into()));
                         }
-                        _ => panic!("expected record"),
+                        _ => panic!("expected event record"),
                     }
                 }
-                _ => panic!("expected list"),
+                _ => panic!("expected entries list"),
             }
         }
 
@@ -843,18 +862,19 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
-            match &result.value {
+            let cal = unwrap_singleton_calendar(&result.value, &db);
+            match get_field(cal, &db, "entries") {
                 Value::List(items) => {
                     assert_eq!(items.len(), 1);
                     match &items[0].value {
-                        Value::Record(r) => {
-                            assert_eq!(get_field(r, &db, "uid"), Value::String("uri-ev1".into()));
-                            assert_eq!(get_field(r, &db, "title"), Value::String("URI Event".into()));
+                        Value::Record(e) => {
+                            assert_eq!(get_field(e, &db, "uid"), Value::String("uri-ev1".into()));
+                            assert_eq!(get_field(e, &db, "title"), Value::String("URI Event".into()));
                         }
-                        _ => panic!("expected record"),
+                        _ => panic!("expected event record"),
                     }
                 }
-                _ => panic!("expected list"),
+                _ => panic!("expected entries list"),
             }
         }
 
@@ -919,17 +939,18 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
-            match &result.value {
+            let cal = unwrap_singleton_calendar(&result.value, &db);
+            match get_field(cal, &db, "entries") {
                 Value::List(items) => {
                     assert_eq!(items.len(), 1);
                     match &items[0].value {
-                        Value::Record(r) => {
-                            assert_eq!(get_field(r, &db, "uid"), Value::String("ext-infer".into()));
+                        Value::Record(e) => {
+                            assert_eq!(get_field(e, &db, "uid"), Value::String("ext-infer".into()));
                         }
-                        _ => panic!("expected record"),
+                        _ => panic!("expected event record"),
                     }
                 }
-                _ => panic!("expected list"),
+                _ => panic!("expected entries list"),
             }
         }
 
@@ -969,17 +990,18 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
-            match &result.value {
+            let cal = unwrap_singleton_calendar(&result.value, &db);
+            match get_field(cal, &db, "entries") {
                 Value::List(items) => {
                     assert_eq!(items.len(), 1);
                     match &items[0].value {
-                        Value::Record(r) => {
-                            assert_eq!(get_field(r, &db, "uid"), Value::String("ct-infer".into()));
+                        Value::Record(entry) => {
+                            assert_eq!(get_field(entry, &db, "uid"), Value::String("ct-infer".into()));
                         }
                         _ => panic!("expected record"),
                     }
                 }
-                _ => panic!("expected list"),
+                _ => panic!("expected entries list"),
             }
         }
 

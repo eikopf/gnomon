@@ -1157,12 +1157,32 @@ An `import` expression evaluates a referenced source file and produces a Gnomon 
 
 ### Foreign Format Translation
 
-When an import source is in a foreign format, it MUST be translated into the Gnomon data model according to the rules in this section. Fields not listed below are not translated and are silently discarded.
+When an import source is in a foreign format, it MUST be translated into the Gnomon data model according to the rules in this section.
+
+> r[model.import.preserve]
+> Foreign format translation MUST NOT silently discard properties. All properties on the source object MUST be translated into the resulting record, even if no explicit mapping is defined.
 
 #### iCalendar Translation
 
 > r[model.import.icalendar.components]
 > An iCalendar import MUST translate `VEVENT` components into event records and `VTODO` components into task records. `VJOURNAL`, `VFREEBUSY`, `VTIMEZONE`, and all other component types MUST be silently skipped.
+
+> r[model.import.icalendar.calendar]
+> An iCalendar import MUST produce a list of calendar records, one per VCALENDAR object. Each calendar record MUST translate VCALENDAR-level properties into fields and place translated component records in an `entries` field. The following VCALENDAR properties MUST be mapped:
+>
+> | iCalendar Property | Gnomon Field | Type |
+> |--------------------|-------------|------|
+> | (implicit) | `type` | `"calendar"` |
+> | `UID` (RFC 7986) | `uid` | string |
+> | `NAME` (RFC 7986) | `name` | string (first value) |
+> | `DESCRIPTION` (RFC 7986) | `description` | string (first value) |
+> | `COLOR` (RFC 7986) | `color` | string |
+> | `URL` (RFC 7986) | `url` | string |
+> | `CATEGORIES` (RFC 7986) | `categories` | list of strings |
+> | `PRODID` | `prod_id` | string |
+> | `LAST-MODIFIED` (RFC 7986) | `last_modified` | datetime record |
+> | `REFRESH-INTERVAL` (RFC 7986) | `refresh_interval` | duration record |
+> | `SOURCE` (RFC 7986) | `source` | string |
 
 > r[model.import.icalendar.event]
 > A `VEVENT` component MUST be translated to a record with the following field mapping:
@@ -1181,6 +1201,28 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 > | `LOCATION` | `location` | string |
 > | `COLOR` | `color` | string |
 > | `CATEGORIES` | `categories` | list of strings |
+> | `DTSTAMP` | `dtstamp` | datetime record |
+> | `CLASS` | `class` | string (lowercase) |
+> | `CREATED` | `created` | datetime record |
+> | `GEO` | `geo` | record `{ latitude, longitude }` (strings) |
+> | `LAST-MODIFIED` | `last_modified` | datetime record |
+> | `ORGANIZER` | `organizer` | string (URI) |
+> | `SEQUENCE` | `sequence` | integer |
+> | `TRANSP` | `transparency` | string (lowercase) |
+> | `URL` | `url` | string |
+> | `RECURRENCE-ID` | `recurrence_id` | datetime or date record |
+> | `RRULE` | `recur` | recurrence rule record |
+> | `RDATE` | `rdates` | list of datetime/date records |
+> | `EXDATE` | `exdates` | list of datetime/date records |
+> | `ATTACH` | `attachments` | list of strings (URIs) or records |
+> | `ATTENDEE` | `attendees` | list of strings (URIs) |
+> | `COMMENT` | `comments` | list of strings |
+> | `CONTACT` | `contacts` | list of strings |
+> | `RELATED-TO` | `related_to` | list of strings (UIDs) |
+> | `RESOURCES` | `resources` | list of lists of strings |
+> | `IMAGE` | `images` | list of strings (URIs) or records |
+> | `CONFERENCE` | `conferences` | list of strings (URIs) |
+> | `REQUEST-STATUS` | `request_statuses` | list of strings |
 
 > r[model.import.icalendar.event.duration-fallback]
 > If a `VEVENT` has `DTSTART` and `DTEND` but no `DURATION`, the duration MUST be computed as the difference between `DTEND` and `DTSTART`.
@@ -1204,12 +1246,40 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 > | `LOCATION` | `location` | string |
 > | `COLOR` | `color` | string |
 > | `CATEGORIES` | `categories` | list of strings |
+> | `DTSTAMP` | `dtstamp` | datetime record |
+> | `CLASS` | `class` | string (lowercase) |
+> | `CREATED` | `created` | datetime record |
+> | `GEO` | `geo` | record `{ latitude, longitude }` (strings) |
+> | `LAST-MODIFIED` | `last_modified` | datetime record |
+> | `ORGANIZER` | `organizer` | string (URI) |
+> | `SEQUENCE` | `sequence` | integer |
+> | `URL` | `url` | string |
+> | `COMPLETED` | `completed` | datetime record |
+> | `RECURRENCE-ID` | `recurrence_id` | datetime or date record |
+> | `RRULE` | `recur` | recurrence rule record |
+> | `RDATE` | `rdates` | list of datetime/date records |
+> | `EXDATE` | `exdates` | list of datetime/date records |
+> | `ATTACH` | `attachments` | list of strings (URIs) or records |
+> | `ATTENDEE` | `attendees` | list of strings (URIs) |
+> | `COMMENT` | `comments` | list of strings |
+> | `CONTACT` | `contacts` | list of strings |
+> | `RELATED-TO` | `related_to` | list of strings (UIDs) |
+> | `RESOURCES` | `resources` | list of lists of strings |
+> | `IMAGE` | `images` | list of strings (URIs) or records |
+> | `CONFERENCE` | `conferences` | list of strings (URIs) |
+> | `REQUEST-STATUS` | `request_statuses` | list of strings |
 
 > r[model.import.icalendar.status]
 > iCalendar status values MUST be translated to lowercase strings: `TENTATIVE` → `"tentative"`, `CONFIRMED` → `"confirmed"`, `CANCELLED` → `"cancelled"`, `NEEDS-ACTION` → `"needs-action"`, `COMPLETED` → `"completed"`, `IN-PROCESS` → `"in-process"`, `DRAFT` → `"draft"`, `FINAL` → `"final"`. Unrecognized status values MUST be translated to `"unknown"`.
 
 > r[model.import.icalendar.priority]
 > iCalendar priority values (1–9) MUST be translated to integers in the range 0–9. Priority 0 (undefined) maps to 0. Values 1–3 map to 1–3. Values 4–6 map to 4–6. Values 7–9 map to 7–9.
+
+> r[model.import.icalendar.rrule]
+> An iCalendar `RRULE` property MUST be translated to a recurrence rule record using the gnomon recurrence rule schema. If multiple `RRULE` properties exist, only the first is used.
+
+> r[model.import.icalendar.extension]
+> Extension properties (X-prefixed properties per RFC 5545) on VCALENDAR, VEVENT, and VTODO components MUST be preserved in the translated record. Property names MUST be lowercased and hyphens replaced with underscores. Property values MUST be translated to their natural Gnomon type (string, integer, boolean, datetime, date, or duration as appropriate).
 
 #### JSCalendar Translation
 

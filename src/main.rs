@@ -142,7 +142,9 @@ fn main() -> ExitCode {
             if has_errors {
                 ExitCode::FAILURE
             } else {
-                println!("{}", result.value.render(&db));
+                use std::io::Write;
+                let out = std::io::stdout();
+                let _ = writeln!(out.lock(), "{}", result.value.render(&db));
                 ExitCode::SUCCESS
             }
         }
@@ -276,3 +278,4 @@ fn offset_to_line_col(text: &str, offset: usize) -> (usize, usize) {
     }
     (line, col)
 }
+
