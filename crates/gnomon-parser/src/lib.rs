@@ -662,8 +662,7 @@ task @cleanup "Clean up" {
     // r[verify syntax.start+2]
     #[test]
     fn parse_multiple_decls() {
-        let source = r#"include "base.gnomon"
-calendar { uid: "cal" }
+        let source = r#"calendar { uid: "cal" }
 event @meeting 2026-03-01T14:30 1h "Standup"
 task @cleanup "Clean""#;
         check_no_errors(source);

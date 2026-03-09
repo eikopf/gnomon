@@ -275,6 +275,11 @@ impl Parser {
                 }
             } else {
                 self.parse_expr();
+                // Error-recover any trailing non-trivia tokens.
+                while !self.at_eof() {
+                    self.error_at_current("unexpected token after expression");
+                    self.error_recover();
+                }
             }
         }
 

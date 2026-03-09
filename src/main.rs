@@ -35,10 +35,17 @@ enum Command {
         file: PathBuf,
     },
     // r[impl cli.subcommand.eval]
-    /// Evaluate a .gnomon file and print its lowered document.
+    /// Evaluate a .gnomon file or expression and print its lowered document.
     Eval {
         /// Path to the file to evaluate.
-        file: PathBuf,
+        #[arg(conflicts_with = "expr")]
+        file: Option<PathBuf>,
+
+        // r[impl cli.subcommand.eval.expr]
+        // r[impl cli.subcommand.eval.expr.exclusive]
+        /// Evaluate an inline expression.
+        #[arg(long)]
+        expr: Option<String>,
     },
 }
 
@@ -93,18 +100,30 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
-        Command::Eval { file } => {
-            // r[impl cli.subcommand.eval.no-file]
-            let text = match std::fs::read_to_string(&file) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("error: could not read {}: {e}", file.display());
+        Command::Eval { file, expr } => {
+            let db = Database::default();
+
+            let source = match (&file, &expr) {
+                (Some(file), None) => {
+                    // r[impl cli.subcommand.eval.no-file]
+                    let text = match std::fs::read_to_string(file) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("error: could not read {}: {e}", file.display());
+                            return ExitCode::FAILURE;
+                        }
+                    };
+                    SourceFile::new(&db, file.clone(), text)
+                }
+                (None, Some(expr)) => {
+                    SourceFile::new(&db, PathBuf::from("<expr>"), expr.clone())
+                }
+                _ => {
+                    eprintln!("error: provide either a file path or --expr");
                     return ExitCode::FAILURE;
                 }
             };
 
-            let db = Database::default();
-            let source = SourceFile::new(&db, file.clone(), text);
             let result = evaluate(&db, source);
 
             // Collect parse + validation diagnostics.
@@ -120,11 +139,10 @@ fn main() -> ExitCode {
             // r[impl cli.subcommand.eval.output]
             let has_errors = print_diagnostics(&db, &diagnostics);
 
-            println!("{}", result.value.render(&db));
-
             if has_errors {
                 ExitCode::FAILURE
             } else {
+                println!("{}", result.value.render(&db));
                 ExitCode::SUCCESS
             }
         }

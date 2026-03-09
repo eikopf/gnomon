@@ -1442,16 +1442,22 @@ After evaluation, the program MUST recursively scan the root file's parent direc
 
 #### `eval`
 
-The `eval` subcommand is a subcommand of the root command; it takes a single file path as a parameter. When executed, `gnomon eval <file>` will parse, validate, and evaluate the file, producing the resulting Gnomon value.
+The `eval` subcommand is a subcommand of the root command; it takes either a file path or an inline expression as input. When executed, `gnomon eval <file>` or `gnomon eval --expr '<expression>'` will parse, validate, and evaluate the input, producing the resulting Gnomon value.
 
 r[cli.subcommand.eval]
 The program MUST provide an `eval` subcommand for the root command which takes a single parameter describing a file path.
+
+r[cli.subcommand.eval.expr]
+The `eval` subcommand MUST accept a `--expr` option whose value is a Gnomon expression string.
+
+r[cli.subcommand.eval.expr.exclusive]
+The `--expr` option and the file path argument MUST be mutually exclusive; exactly one MUST be provided.
 
 r[cli.subcommand.eval.no-file]
 If the file path argument to the `eval` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
 
 r[cli.subcommand.eval.output]
-If a file was successfully located, the program MUST write a textual representation of the evaluated value to STDOUT. Any diagnostics MUST be written to STDERR.
+The program MUST write a textual representation of the evaluated value to STDOUT. Any diagnostics MUST be written to STDERR.
 
 #### Reserved Subcommands
 
