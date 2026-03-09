@@ -2,47 +2,41 @@
 
 ## I. Entirely Missing from the Spec
 
-### ~~1. UUIDv5 Derivation~~ (resolved)
-
-Implemented. See Resolved section.
-
-### 2. Recurrence Rule Evaluation (partially addressed)
+### 1. Recurrence Rule Evaluation (partially addressed)
 
 The spec marks this as `TODO: describe the evaluation semantics of recurrence rules`. The evaluation semantics are well-defined by RFC 5545 / JSCalendar, so the question is not *what* they should be but *when and how* they are applied. Shape-checking validates recurrence rule records against their type definitions (`r[model.shape.*]`). What remains is the actual expansion of a rule into occurrences, and the treatment of `by_day` and similar fields as sets rather than lists.
 
-### ~~3. Foreign Format Imports~~ (resolved)
-
-Implemented. See Resolved section.
-
-### 4. Querying / Filtering (future)
+### 2. Querying / Filtering (future)
 
 The reserved subcommand `query` hints at this. A calendar language without the ability to ask "what's happening next week?" is incomplete. Not urgent, but the spec should sketch the design space.
+
+### 3. Spec Introduction
+
+The spec introduction is still `TODO: write prose introduction`. Not a functional gap, but a documentation one.
 
 ---
 
 ## II. Implementation Gaps
 
+### 4. URI Imports
+
+Import expressions accept URI literals syntactically, but evaluation emits `"URI imports are not yet supported"` and returns `undefined`. Only path-based imports (Gnomon, iCalendar, JSCalendar) are functional.
+
 ### 5. Multi-file Merge Semantics (functional, could evolve)
 
 The `merge` subcommand works: it evaluates each source file, flattens the resulting values into records, separates calendar properties from entries, checks uniqueness constraints (single calendar, unique names), and runs shape-checking. However, the merge pipeline is a fixed post-evaluation stage rather than something expressible in the language itself. With `import` and `let` now available, a user *could* compose files via a root file that imports and merges others using `//` and `++`, but the `merge` CLI subcommand still applies its own uniqueness and shape-checking logic. Whether merge should eventually become a library of Gnomon functions rather than a hardcoded pipeline step is an open design question.
-
-### ~~6. Orphaned `local` Keyword~~ (resolved)
-
-Removed. See Resolved section.
 
 ---
 
 ## Prioritized Recommendations
 
 **Near-term (concrete next steps):**
-1. ~~Implement UUIDv5 derivation for entries missing explicit `uid` (#1)~~ (done)
-2. Implement recurrence rule evaluation — expanding a rule into occurrences (#2)
-3. ~~Implement iCalendar/JSCalendar import (#3)~~ (done)
+1. Implement recurrence rule evaluation — expanding a rule into occurrences (#1)
+2. Implement URI imports (#4)
 
 **Longer-term (design work):**
-4. Design query system (#4)
-5. Consider making merge composable in-language (#5)
-6. ~~Clarify or remove `local` keyword (#6)~~ (done)
+3. Design query system (#2)
+4. Consider making merge composable in-language (#5)
 
 ---
 
@@ -70,3 +64,4 @@ The following issues from the original analysis have been fully addressed:
 - **Shape-checking** — specified via `r[model.shape.*]` and implemented in `eval/shape.rs`; validates calendar, event, task, and all nested record types; error-resilient, recursive, preserves open records; wired into merge pipeline
 - **Orphaned `local` keyword** — removed from `r[lexer.keyword.weak]`; the "local datetime" concept (`r[lexer.datetime.local]`) remains but needs no keyword since locality is the default (absence of `time_zone` field)
 - **Foreign format imports** — iCalendar (`.ics`) and JSCalendar (`.json`) imports implemented via `calico` and `serde_json` respectively; format inferred from file extension or specified with `as icalendar`/`as jscalendar`; `name` requirement relaxed to allow entries with `uid` but no `name` (`r[record.event.name+2]`, `r[record.task.name+2]`, `r[expr.import.format+2]`)
+- **UUIDv5 derivation** — implemented in `eval/merge.rs`; derives `UUIDv5(calendar_uid, name)` for entries without explicit `uid`
