@@ -360,6 +360,7 @@ dependencies = [
  "calico",
  "expect-test",
  "gnomon-parser",
+ "jscalendar",
  "rowan",
  "salsa",
  "serde_json",
@@ -479,6 +480,22 @@ checksum = "b49715b7073f385ba4bc528e5747d02e66cb39c6146efb66b781f131f0fb399c"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jscalendar"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16572b2acb5b275580d81bbb65de9b37f13122c35f4c2b9ff8ac6bb7e6446180"
+dependencies = [
+ "calendar-types",
+ "dizzy",
+ "rfc5545-types",
+ "serde_json",
+ "structible",
+ "strum",
+ "thiserror",
+ "winnow",
 ]
 
 [[package]]

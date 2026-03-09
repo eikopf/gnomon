@@ -1,11 +1,16 @@
 //! Translation of foreign calendar formats into Gnomon values.
 //!
-//! Supports iCalendar (RFC 5545) via `calico` and JSCalendar (RFC 8984) via `serde_json`.
+//! Supports iCalendar (RFC 5545) via `calico` and JSCalendar (RFC 8984) via `jscalendar`.
 
 use calico::model::component::{Calendar as ICalCalendar, CalendarComponent};
 use calico::model::primitive::{
     DateTimeOrDate, Duration, NominalDuration, Sign, SignedDuration, Status,
 };
+
+use jscalendar::json::TryFromJson;
+use jscalendar::model::object::{Event as JsEvent, Group as JsGroup, Task as JsTask, TaskOrEvent};
+use jscalendar::model::set::Priority as JsPriority;
+use jscalendar::model::time::Duration as JsDuration;
 
 use super::desugar::make_record;
 use super::interned::FieldName;
@@ -177,6 +182,7 @@ pub fn translate_icalendar<'db>(
 /// Translate a JSCalendar JSON string into a Gnomon value.
 ///
 /// A single JSCalendar object produces `Value::Record`; an array produces `Value::List`.
+/// Group objects are flattened into their entries.
 pub fn translate_jscalendar<'db>(
     db: &'db dyn crate::Db,
     content: &str,
@@ -187,84 +193,321 @@ pub fn translate_jscalendar<'db>(
 
     match &json {
         serde_json::Value::Array(arr) => {
-            let items: Vec<Blamed<'db, Value<'db>>> = arr
-                .iter()
-                .map(|v| Blamed {
-                    value: translate_json_value(db, v, blame),
-                    blame: blame.clone(),
-                })
-                .collect();
+            let mut items: Vec<Blamed<'db, Value<'db>>> = Vec::new();
+            for element in arr {
+                translate_jscal_top_level(db, element.clone(), blame, &mut items)?;
+            }
             Ok(Value::List(items))
         }
-        serde_json::Value::Object(_) => Ok(translate_json_object(db, &json, blame)),
+        serde_json::Value::Object(_) => {
+            let mut items: Vec<Blamed<'db, Value<'db>>> = Vec::new();
+            translate_jscal_top_level(db, json, blame, &mut items)?;
+            // Single object → unwrap from list.
+            if items.len() == 1 {
+                Ok(items.into_iter().next().unwrap().value)
+            } else {
+                Ok(Value::List(items))
+            }
+        }
         _ => Err("JSCalendar: expected a JSON object or array at top level".into()),
     }
 }
 
-/// Translate a JSON object into a Gnomon record, mapping JSCalendar field names
-/// to Gnomon field names where applicable.
-fn translate_json_object<'db>(
+/// Parse a single top-level JSON value as a JSCalendar object and append records.
+fn translate_jscal_top_level<'db>(
     db: &'db dyn crate::Db,
-    json: &serde_json::Value,
+    json: serde_json::Value,
     blame: &Blame<'db>,
-) -> Value<'db> {
-    let obj = match json.as_object() {
-        Some(o) => o,
-        None => return translate_json_value(db, json, blame),
-    };
-
-    let mut record = Record::new();
-
-    for (key, val) in obj {
-        let gnomon_key = map_jscal_field_name(key);
-        let gnomon_val = match gnomon_key {
-            // `@type` → `type`, lowercased
-            "type" => {
-                let type_str = val.as_str().unwrap_or("unknown");
-                match type_str {
-                    "Event" | "jsevent" => Value::String("event".into()),
-                    "Task" | "jstask" => Value::String("task".into()),
-                    _ => Value::String(type_str.to_lowercase()),
-                }
+    out: &mut Vec<Blamed<'db, Value<'db>>>,
+) -> Result<(), String> {
+    // Check if it's a Group first.
+    if let Some(obj) = json.as_object() {
+        if obj.get("@type").and_then(|v| v.as_str()) == Some("Group") {
+            let group = JsGroup::<serde_json::Value>::try_from_json(json)
+                .map_err(|e| format!("JSCalendar parse error: {e}"))?;
+            for entry in group.entries() {
+                let record = translate_task_or_event(db, entry, blame);
+                out.push(Blamed { value: Value::Record(record), blame: blame.clone() });
             }
-            // datetime strings → desugared records
-            "start" | "due" => match val.as_str() {
-                Some(s) => parse_jscal_datetime(db, s, blame).unwrap_or(Value::String(s.into())),
-                None => translate_json_value(db, val, blame),
-            },
-            // duration strings → desugared records
-            "duration" | "estimated_duration" => match val.as_str() {
-                Some(s) => parse_jscal_duration(db, s, blame).unwrap_or(Value::String(s.into())),
-                None => translate_json_value(db, val, blame),
-            },
-            // priority: JSCalendar uses 0-9 integers
-            "priority" => match val.as_u64() {
-                Some(n) => Value::Integer(n),
-                None => translate_json_value(db, val, blame),
-            },
-            // percent_complete: JSCalendar uses 0-100 integers
-            "percent_complete" => match val.as_u64() {
-                Some(n) => Value::Integer(n),
-                None => translate_json_value(db, val, blame),
-            },
-            // Default: recursively translate
-            _ => translate_json_value(db, val, blame),
-        };
+            return Ok(());
+        }
+    }
 
-        let field_name = FieldName::new(db, gnomon_key.to_string());
+    let toe = TaskOrEvent::<serde_json::Value>::try_from_json(json)
+        .map_err(|e| format!("JSCalendar parse error: {e}"))?;
+    let record = translate_task_or_event(db, &toe, blame);
+    out.push(Blamed { value: Value::Record(record), blame: blame.clone() });
+    Ok(())
+}
+
+/// Translate a parsed `TaskOrEvent` into a Gnomon record.
+fn translate_task_or_event<'db>(
+    db: &'db dyn crate::Db,
+    toe: &TaskOrEvent<serde_json::Value>,
+    blame: &Blame<'db>,
+) -> Record<'db> {
+    match toe {
+        TaskOrEvent::Event(event) => translate_js_event(db, event, blame),
+        TaskOrEvent::Task(task) => translate_js_task(db, task, blame),
+        _ => {
+            // Future-proof: unknown variant → empty record with type.
+            make_record(db, &[("type", Value::String("unknown".into()))], blame)
+        }
+    }
+}
+
+/// Translate a JSCalendar Event into a Gnomon record.
+fn translate_js_event<'db>(
+    db: &'db dyn crate::Db,
+    event: &JsEvent<serde_json::Value>,
+    blame: &Blame<'db>,
+) -> Record<'db> {
+    let mut fields: Vec<(&str, Value<'db>)> = Vec::new();
+    fields.push(("type", Value::String("event".into())));
+
+    // Required fields.
+    fields.push(("uid", Value::String(event.uid().as_str().to_string())));
+    fields.push(("start", translate_local_datetime(db, event.start(), blame)));
+
+    // Optional fields.
+    if let Some(title) = event.title() {
+        fields.push(("title", Value::String(title.clone())));
+    }
+    if let Some(desc) = event.description() {
+        fields.push(("description", Value::String(desc.clone())));
+    }
+    if let Some(dur) = event.duration() {
+        fields.push(("duration", translate_jscal_duration(db, dur, blame)));
+    }
+    if let Some(tz) = event.time_zone() {
+        fields.push(("time_zone", Value::String(tz.clone())));
+    }
+    if let Some(status) = event.status() {
+        fields.push(("status", Value::String(status.to_string())));
+    }
+    if let Some(priority) = event.priority() {
+        fields.push(("priority", Value::Integer(js_priority_to_u64(priority))));
+    }
+    if let Some(color) = event.color() {
+        fields.push(("color", Value::String(color.to_string())));
+    }
+    if let Some(locale) = event.locale() {
+        fields.push(("locale", Value::String(locale.to_string())));
+    }
+    if let Some(privacy) = event.privacy() {
+        fields.push(("privacy", Value::String(privacy.to_string())));
+    }
+    if let Some(fbs) = event.free_busy_status() {
+        fields.push(("free_busy_status", Value::String(fbs.to_string())));
+    }
+    if let Some(&swt) = event.show_without_time() {
+        fields.push(("show_without_time", Value::Bool(swt)));
+    }
+    if let Some(cats) = event.categories() {
+        let items: Vec<Blamed<'db, Value<'db>>> = cats
+            .iter()
+            .map(|s| Blamed { value: Value::String(s.clone()), blame: blame.clone() })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("categories", Value::List(items)));
+        }
+    }
+    if let Some(kw) = event.keywords() {
+        let items: Vec<Blamed<'db, Value<'db>>> = kw
+            .iter()
+            .map(|s| Blamed { value: Value::String(s.clone()), blame: blame.clone() })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("keywords", Value::List(items)));
+        }
+    }
+
+    let mut record = make_record(db, &fields, blame);
+
+    // Vendor (unknown) properties.
+    for (key, val) in event.vendor_property_iter() {
+        let field_name = FieldName::new(db, key.to_string());
         record.insert(
             field_name,
             Blamed {
-                value: gnomon_val,
+                value: translate_json_value(db, val, blame),
                 blame: blame.clone(),
             },
         );
     }
 
-    Value::Record(record)
+    record
 }
 
-/// Recursively translate a JSON value into a Gnomon value.
+/// Translate a JSCalendar Task into a Gnomon record.
+fn translate_js_task<'db>(
+    db: &'db dyn crate::Db,
+    task: &JsTask<serde_json::Value>,
+    blame: &Blame<'db>,
+) -> Record<'db> {
+    let mut fields: Vec<(&str, Value<'db>)> = Vec::new();
+    fields.push(("type", Value::String("task".into())));
+
+    // Required fields.
+    fields.push(("uid", Value::String(task.uid().as_str().to_string())));
+
+    // Optional fields.
+    if let Some(title) = task.title() {
+        fields.push(("title", Value::String(title.clone())));
+    }
+    if let Some(desc) = task.description() {
+        fields.push(("description", Value::String(desc.clone())));
+    }
+    if let Some(start) = task.start() {
+        fields.push(("start", translate_local_datetime(db, start, blame)));
+    }
+    if let Some(due) = task.due() {
+        fields.push(("due", translate_local_datetime(db, due, blame)));
+    }
+    if let Some(dur) = task.estimated_duration() {
+        fields.push(("estimated_duration", translate_jscal_duration(db, dur, blame)));
+    }
+    if let Some(pct) = task.percent_complete() {
+        fields.push(("percent_complete", Value::Integer(pct.get() as u64)));
+    }
+    if let Some(progress) = task.progress() {
+        fields.push(("progress", Value::String(progress.to_string())));
+    }
+    if let Some(tz) = task.time_zone() {
+        fields.push(("time_zone", Value::String(tz.clone())));
+    }
+    if let Some(priority) = task.priority() {
+        fields.push(("priority", Value::Integer(js_priority_to_u64(priority))));
+    }
+    if let Some(color) = task.color() {
+        fields.push(("color", Value::String(color.to_string())));
+    }
+    if let Some(locale) = task.locale() {
+        fields.push(("locale", Value::String(locale.to_string())));
+    }
+    if let Some(privacy) = task.privacy() {
+        fields.push(("privacy", Value::String(privacy.to_string())));
+    }
+    if let Some(fbs) = task.free_busy_status() {
+        fields.push(("free_busy_status", Value::String(fbs.to_string())));
+    }
+    if let Some(&swt) = task.show_without_time() {
+        fields.push(("show_without_time", Value::Bool(swt)));
+    }
+    if let Some(cats) = task.categories() {
+        let items: Vec<Blamed<'db, Value<'db>>> = cats
+            .iter()
+            .map(|s| Blamed { value: Value::String(s.clone()), blame: blame.clone() })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("categories", Value::List(items)));
+        }
+    }
+    if let Some(kw) = task.keywords() {
+        let items: Vec<Blamed<'db, Value<'db>>> = kw
+            .iter()
+            .map(|s| Blamed { value: Value::String(s.clone()), blame: blame.clone() })
+            .collect();
+        if !items.is_empty() {
+            fields.push(("keywords", Value::List(items)));
+        }
+    }
+
+    let mut record = make_record(db, &fields, blame);
+
+    // Vendor (unknown) properties.
+    for (key, val) in task.vendor_property_iter() {
+        let field_name = FieldName::new(db, key.to_string());
+        record.insert(
+            field_name,
+            Blamed {
+                value: translate_json_value(db, val, blame),
+                blame: blame.clone(),
+            },
+        );
+    }
+
+    record
+}
+
+/// Translate a `jscalendar` local datetime into a Gnomon datetime record.
+fn translate_local_datetime<'db>(
+    db: &'db dyn crate::Db,
+    dt: &jscalendar::model::time::DateTime<jscalendar::model::time::Local>,
+    blame: &Blame<'db>,
+) -> Value<'db> {
+    let date_fields = [
+        ("year", Value::Integer(dt.date.year().get() as u64)),
+        ("month", Value::Integer(dt.date.month().number().get() as u64)),
+        ("day", Value::Integer(dt.date.day() as u8 as u64)),
+    ];
+    let time_fields = [
+        ("hour", Value::Integer(dt.time.hour() as u8 as u64)),
+        ("minute", Value::Integer(dt.time.minute() as u8 as u64)),
+        ("second", Value::Integer(dt.time.second() as u8 as u64)),
+    ];
+    let date_rec = make_record(db, &date_fields, blame);
+    let time_rec = make_record(db, &time_fields, blame);
+    let dt_fields = [
+        ("date", Value::Record(date_rec)),
+        ("time", Value::Record(time_rec)),
+    ];
+    Value::Record(make_record(db, &dt_fields, blame))
+}
+
+/// Translate a `jscalendar` duration into a Gnomon duration record.
+fn translate_jscal_duration<'db>(
+    db: &'db dyn crate::Db,
+    dur: &JsDuration,
+    blame: &Blame<'db>,
+) -> Value<'db> {
+    match dur {
+        JsDuration::Nominal(nom) => {
+            let (hours, minutes, seconds) = match &nom.exact {
+                Some(e) => (e.hours as u64, e.minutes as u64, e.seconds as u64),
+                None => (0, 0, 0),
+            };
+            let fields = [
+                ("weeks", Value::Integer(nom.weeks as u64)),
+                ("days", Value::Integer(nom.days as u64)),
+                ("hours", Value::Integer(hours)),
+                ("minutes", Value::Integer(minutes)),
+                ("seconds", Value::Integer(seconds)),
+            ];
+            Value::Record(make_record(db, &fields, blame))
+        }
+        JsDuration::Exact(exact) => {
+            let fields = [
+                ("weeks", Value::Integer(0)),
+                ("days", Value::Integer(0)),
+                ("hours", Value::Integer(exact.hours as u64)),
+                ("minutes", Value::Integer(exact.minutes as u64)),
+                ("seconds", Value::Integer(exact.seconds as u64)),
+            ];
+            Value::Record(make_record(db, &fields, blame))
+        }
+    }
+}
+
+/// Convert a `jscalendar` Priority to a u64 (0-9).
+fn js_priority_to_u64(p: &JsPriority) -> u64 {
+    match p {
+        JsPriority::Zero => 0,
+        JsPriority::A1 => 1,
+        JsPriority::A2 => 2,
+        JsPriority::A3 => 3,
+        JsPriority::B1 => 4,
+        JsPriority::B2 => 5,
+        JsPriority::B3 => 6,
+        JsPriority::C1 => 7,
+        JsPriority::C2 => 8,
+        JsPriority::C3 => 9,
+    }
+}
+
+/// Recursively translate a `serde_json::Value` into a Gnomon value.
+///
+/// Used for vendor (unknown) properties on JSCalendar objects.
 fn translate_json_value<'db>(
     db: &'db dyn crate::Db,
     val: &serde_json::Value,
@@ -279,7 +522,7 @@ fn translate_json_value<'db>(
             } else if let Some(i) = n.as_i64() {
                 Value::SignedInteger(i)
             } else {
-                // Floats: store as string representation
+                // Floats: store as string representation.
                 Value::String(n.to_string())
             }
         }
@@ -294,42 +537,20 @@ fn translate_json_value<'db>(
                 .collect();
             Value::List(items)
         }
-        serde_json::Value::Object(_) => translate_json_object(db, val, blame),
-    }
-}
-
-/// Map JSCalendar field names to Gnomon field names.
-fn map_jscal_field_name(key: &str) -> &str {
-    match key {
-        "@type" => "type",
-        "uid" => "uid",
-        "title" => "title",
-        "description" => "description",
-        "start" => "start",
-        "duration" => "duration",
-        "due" => "due",
-        "estimatedDuration" => "estimated_duration",
-        "percentComplete" => "percent_complete",
-        "progress" => "progress",
-        "status" => "status",
-        "priority" => "priority",
-        "timeZone" => "time_zone",
-        "categories" => "categories",
-        "keywords" => "keywords",
-        "color" => "color",
-        "locale" => "locale",
-        "privacy" => "privacy",
-        "freeBusyStatus" => "free_busy_status",
-        "showWithoutTime" => "show_without_time",
-        "locations" => "locations",
-        "virtualLocations" => "virtual_locations",
-        "links" => "links",
-        "relatedTo" => "related_to",
-        "participants" => "participants",
-        "alerts" => "alerts",
-        "recurrenceRules" => "recur",
-        // Pass through unknown keys, converting camelCase to snake_case would be too lossy.
-        other => other,
+        serde_json::Value::Object(obj) => {
+            let mut record = Record::new();
+            for (key, v) in obj {
+                let field_name = FieldName::new(db, key.clone());
+                record.insert(
+                    field_name,
+                    Blamed {
+                        value: translate_json_value(db, v, blame),
+                        blame: blame.clone(),
+                    },
+                );
+            }
+            Value::Record(record)
+        }
     }
 }
 
@@ -516,124 +737,6 @@ fn priority_to_u64(p: &calico::model::primitive::Priority) -> u64 {
         Priority::C2 => 8,
         Priority::C3 => 9,
     }
-}
-
-
-// ── JSCalendar datetime/duration parsing ─────────────────────
-
-/// Parse a JSCalendar local-datetime string (e.g., "2024-01-15T09:00:00")
-/// into a Gnomon datetime record.
-fn parse_jscal_datetime<'db>(
-    db: &'db dyn crate::Db,
-    s: &str,
-    blame: &Blame<'db>,
-) -> Option<Value<'db>> {
-    // JSCalendar uses ISO 8601 local datetimes: YYYY-MM-DDTHH:MM:SS
-    let (date_str, time_str) = s.split_once('T')?;
-    let date_parts: Vec<&str> = date_str.splitn(3, '-').collect();
-    if date_parts.len() != 3 {
-        return None;
-    }
-    let year: u64 = date_parts[0].parse().ok()?;
-    let month: u64 = date_parts[1].parse().ok()?;
-    let day: u64 = date_parts[2].parse().ok()?;
-
-    let time_parts: Vec<&str> = time_str.splitn(3, ':').collect();
-    if time_parts.len() < 2 {
-        return None;
-    }
-    let hour: u64 = time_parts[0].parse().ok()?;
-    let minute: u64 = time_parts[1].parse().ok()?;
-    let second: u64 = if time_parts.len() > 2 {
-        time_parts[2].parse().ok()?
-    } else {
-        0
-    };
-
-    let date_fields = [
-        ("year", Value::Integer(year)),
-        ("month", Value::Integer(month)),
-        ("day", Value::Integer(day)),
-    ];
-    let time_fields = [
-        ("hour", Value::Integer(hour)),
-        ("minute", Value::Integer(minute)),
-        ("second", Value::Integer(second)),
-    ];
-    let date_rec = make_record(db, &date_fields, blame);
-    let time_rec = make_record(db, &time_fields, blame);
-    let fields = [
-        ("date", Value::Record(date_rec)),
-        ("time", Value::Record(time_rec)),
-    ];
-    Some(Value::Record(make_record(db, &fields, blame)))
-}
-
-/// Parse a JSCalendar duration string (e.g., "PT1H30M", "P1D") into a Gnomon duration record.
-fn parse_jscal_duration<'db>(
-    db: &'db dyn crate::Db,
-    s: &str,
-    blame: &Blame<'db>,
-) -> Option<Value<'db>> {
-    // JSCalendar uses ISO 8601 durations: P[nW] or P[nD][T[nH][nM][nS]]
-    let input = s.strip_prefix('P')?;
-
-    let mut weeks: u64 = 0;
-    let mut days: u64 = 0;
-    let mut hours: u64 = 0;
-    let mut minutes: u64 = 0;
-    let mut seconds: u64 = 0;
-
-    let (date_part, time_part) = match input.split_once('T') {
-        Some((d, t)) => (d, Some(t)),
-        None => (input, None),
-    };
-
-    // Parse date part.
-    if !date_part.is_empty() {
-        let mut num_buf = String::new();
-        for ch in date_part.chars() {
-            if ch.is_ascii_digit() {
-                num_buf.push(ch);
-            } else {
-                let n: u64 = num_buf.parse().ok()?;
-                num_buf.clear();
-                match ch {
-                    'W' => weeks = n,
-                    'D' => days = n,
-                    _ => return None,
-                }
-            }
-        }
-    }
-
-    // Parse time part.
-    if let Some(tp) = time_part {
-        let mut num_buf = String::new();
-        for ch in tp.chars() {
-            if ch.is_ascii_digit() {
-                num_buf.push(ch);
-            } else {
-                let n: u64 = num_buf.parse().ok()?;
-                num_buf.clear();
-                match ch {
-                    'H' => hours = n,
-                    'M' => minutes = n,
-                    'S' => seconds = n,
-                    _ => return None,
-                }
-            }
-        }
-    }
-
-    let fields = [
-        ("weeks", Value::Integer(weeks)),
-        ("days", Value::Integer(days)),
-        ("hours", Value::Integer(hours)),
-        ("minutes", Value::Integer(minutes)),
-        ("seconds", Value::Integer(seconds)),
-    ];
-    Some(Value::Record(make_record(db, &fields, blame)))
 }
 
 #[cfg(test)]
@@ -824,6 +927,7 @@ END:VCALENDAR\r\n";
         let json = r#"{
             "@type": "Event",
             "uid": "jscal-uid-1",
+            "updated": "2020-01-02T18:23:04Z",
             "title": "Lunch",
             "start": "2026-03-15T12:00:00",
             "duration": "PT1H"
@@ -867,6 +971,7 @@ END:VCALENDAR\r\n";
         let json = r#"{
             "@type": "Task",
             "uid": "task-1",
+            "updated": "2020-01-02T18:23:04Z",
             "title": "Do laundry",
             "due": "2026-03-20T18:00:00"
         }"#;
@@ -888,9 +993,11 @@ END:VCALENDAR\r\n";
         let json = r#"{
             "@type": "Event",
             "uid": "e1",
+            "updated": "2020-01-02T18:23:04Z",
             "title": "Test",
-            "customField": "custom value",
-            "nestedObj": { "a": 1, "b": true }
+            "start": "2026-01-01T00:00:00",
+            "example.com:customField": "custom value",
+            "example.com:nestedObj": { "a": 1, "b": true }
         }"#;
 
         let result = translate_jscalendar(&db, json, &blame).unwrap();
@@ -899,10 +1006,10 @@ END:VCALENDAR\r\n";
             _ => panic!("expected record"),
         };
         assert_eq!(
-            get_field(rec, &db, "customField"),
+            get_field(rec, &db, "example.com:customField"),
             Value::String("custom value".into())
         );
-        match get_field(rec, &db, "nestedObj") {
+        match get_field(rec, &db, "example.com:nestedObj") {
             Value::Record(nested) => {
                 assert_eq!(get_field(&nested, &db, "a"), Value::Integer(1));
                 assert_eq!(get_field(&nested, &db, "b"), Value::Bool(true));
@@ -916,8 +1023,8 @@ END:VCALENDAR\r\n";
         let db = Database::default();
         let blame = test_blame(&db);
         let json = r#"[
-            { "@type": "Event", "uid": "e1", "title": "A" },
-            { "@type": "Event", "uid": "e2", "title": "B" }
+            { "@type": "Event", "uid": "e1", "updated": "2020-01-02T18:23:04Z", "title": "A", "start": "2026-01-01T00:00:00" },
+            { "@type": "Event", "uid": "e2", "updated": "2020-01-02T18:23:04Z", "title": "B", "start": "2026-01-01T00:00:00" }
         ]"#;
 
         let result = translate_jscalendar(&db, json, &blame).unwrap();
@@ -933,32 +1040,5 @@ END:VCALENDAR\r\n";
         let blame = test_blame(&db);
         let result = translate_jscalendar(&db, "not json{", &blame);
         assert!(result.is_err());
-    }
-
-    // ── Duration parsing tests ───────────────────────────────
-
-    #[test]
-    fn jscal_duration_parsing() {
-        let db = Database::default();
-        let blame = test_blame(&db);
-
-        let val = parse_jscal_duration(&db, "P1W", &blame).unwrap();
-        match val {
-            Value::Record(r) => {
-                assert_eq!(get_field(&r, &db, "weeks"), Value::Integer(1));
-                assert_eq!(get_field(&r, &db, "days"), Value::Integer(0));
-            }
-            _ => panic!("expected record"),
-        }
-
-        let val = parse_jscal_duration(&db, "P2DT3H15M", &blame).unwrap();
-        match val {
-            Value::Record(r) => {
-                assert_eq!(get_field(&r, &db, "days"), Value::Integer(2));
-                assert_eq!(get_field(&r, &db, "hours"), Value::Integer(3));
-                assert_eq!(get_field(&r, &db, "minutes"), Value::Integer(15));
-            }
-            _ => panic!("expected record"),
-        }
     }
 }
