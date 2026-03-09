@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use uuid::Uuid;
+
 use super::interned::FieldName;
 use super::types::{Blamed, Calendar, Record, Value};
 use crate::input::SourceFile;
@@ -110,6 +112,10 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
         }
     }
 
+    // r[impl model.calendar.uid.derivation]
+    // Derive UUIDv5 UIDs for entries that omit an explicit uid.
+    derive_uids(db, &mut calendar, sources, &mut diagnostics, &mut has_errors);
+
     // Shape-check the merged calendar.
     let shape_diags = super::shape::check_calendar_shape(db, &calendar, sources);
     for diag in shape_diags {
@@ -121,6 +127,74 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
         calendar,
         diagnostics,
         has_errors,
+    }
+}
+
+/// Derive UUIDv5 UIDs for entries that omit an explicit `uid` field.
+///
+/// Uses the calendar's `uid` as the UUIDv5 namespace and the entry's `name`
+/// as the key. If the calendar uid is not a valid UUID, emits a diagnostic
+/// and skips derivation.
+fn derive_uids<'db>(
+    db: &'db dyn crate::Db,
+    calendar: &mut Calendar<'db>,
+    sources: &[SourceFile],
+    diagnostics: &mut Vec<Diagnostic>,
+    has_errors: &mut bool,
+) {
+    let uid_key = FieldName::new(db, "uid".to_string());
+    let name_key = FieldName::new(db, "name".to_string());
+
+    // Extract and parse the calendar uid as a UUID namespace.
+    let namespace = match calendar.properties.get(&uid_key) {
+        Some(blamed) => match &blamed.value {
+            Value::String(s) => match Uuid::parse_str(s) {
+                Ok(uuid) => uuid,
+                Err(_) => {
+                    let source = sources.first().copied().unwrap_or_else(|| {
+                        SourceFile::new(db, "".into(), String::new())
+                    });
+                    *has_errors = true;
+                    diagnostics.push(Diagnostic {
+                        source,
+                        range: rowan::TextRange::default(),
+                        severity: Severity::Error,
+                        message: format!(
+                            "calendar uid \"{}\" is not a valid UUID; cannot derive entry UIDs",
+                            s
+                        ),
+                    });
+                    return;
+                }
+            },
+            _ => return, // Non-string uid; shape-check will report this.
+        },
+        None => return, // Missing uid; shape-check will report this.
+    };
+
+    for entry in &mut calendar.entries {
+        // Skip entries that already have a uid.
+        if entry.value.get(&uid_key).is_some() {
+            continue;
+        }
+
+        // Extract the name to use as the UUIDv5 key.
+        let name_str = match entry.value.get(&name_key) {
+            Some(blamed) => match &blamed.value {
+                Value::Name(s) => s.clone(),
+                _ => continue, // Non-name value; shape-check will report this.
+            },
+            None => continue, // Missing name; shape-check will report this.
+        };
+
+        let derived = Uuid::new_v5(&namespace, name_str.as_bytes());
+        entry.value.insert(
+            uid_key.clone(),
+            Blamed {
+                value: Value::String(derived.to_string()),
+                blame: entry.blame.clone(),
+            },
+        );
     }
 }
 
@@ -454,7 +528,7 @@ mod tests {
         let sources = vec![make_source(
             &db,
             "a.gnomon",
-            r#"calendar { uid: "ok" }"#,
+            r#"calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }"#,
         )];
         let result = merge(&db, &sources);
         assert!(!result.has_errors);
@@ -771,7 +845,7 @@ mod tests {
                 &db,
                 "a.gnomon",
                 r#"
-                calendar { uid: "test" }
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
                 event @shared 2026-01-01T09:00 1h "Event"
                 "#,
             ),
@@ -854,6 +928,87 @@ mod tests {
                         },
                     ],
                 }"#]],
+        );
+    }
+
+    // ── UID derivation tests ─────────────────────────────────
+
+    #[test]
+    fn uid_derived_for_entry_without_uid() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event @meeting 2026-03-01T14:30 1h "Standup"
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        let uid_key = FieldName::new(&db, "uid".to_string());
+        let entry = &result.calendar.entries[0].value;
+        let uid = entry.get(&uid_key).expect("entry should have derived uid");
+        match &uid.value {
+            Value::String(s) => {
+                // Should be a valid UUID.
+                assert!(uuid::Uuid::parse_str(s).is_ok(), "derived uid is not a valid UUID: {s}");
+            }
+            other => panic!("expected string uid, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn uid_derivation_is_deterministic() {
+        let db = Database::default();
+        let source_text = r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event @meeting 2026-03-01T14:30 1h "Standup"
+        "#;
+        let sources1 = vec![make_source(&db, "a.gnomon", source_text)];
+        let sources2 = vec![make_source(&db, "b.gnomon", source_text)];
+        let result1 = merge(&db, &sources1);
+        let result2 = merge(&db, &sources2);
+        let uid_key = FieldName::new(&db, "uid".to_string());
+        let uid1 = &result1.calendar.entries[0].value.get(&uid_key).unwrap().value;
+        let uid2 = &result2.calendar.entries[0].value.get(&uid_key).unwrap().value;
+        assert_eq!(uid1, uid2);
+    }
+
+    #[test]
+    fn uid_not_overwritten_when_explicit() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event @meeting 2026-03-01T14:30 1h "Standup" { uid: "custom-uid" }
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        let uid_key = FieldName::new(&db, "uid".to_string());
+        let uid = &result.calendar.entries[0].value.get(&uid_key).unwrap().value;
+        assert_eq!(uid, &Value::String("custom-uid".into()));
+    }
+
+    #[test]
+    fn uid_derivation_skipped_for_non_uuid_calendar_uid() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "not-a-uuid" }
+            event @meeting 2026-03-01T14:30 1h "Standup"
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        assert!(result.has_errors);
+        assert!(
+            result.diagnostics.iter().any(|d| d.message.contains("not a valid UUID")),
+            "expected UUID error, got: {:?}",
+            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
 

@@ -2,9 +2,9 @@
 
 ## I. Entirely Missing from the Spec
 
-### 1. UUIDv5 Derivation (specified, not yet implemented)
+### ~~1. UUIDv5 Derivation~~ (resolved)
 
-The spec defines `r[model.calendar.uid.derivation]`: entries without an explicit `uid` should derive one as `UUIDv5(calendar_uid, name)`. The `uid` field on the calendar is enforced via shape-checking, and the derivation rule is specified, but the actual UUIDv5 computation has not been implemented yet.
+Implemented. See Resolved section.
 
 ### 2. Recurrence Rule Evaluation (partially addressed)
 
@@ -35,7 +35,7 @@ The `merge` subcommand works: it evaluates each source file, flattens the result
 ## Prioritized Recommendations
 
 **Near-term (concrete next steps):**
-1. Implement UUIDv5 derivation for entries missing explicit `uid` (#1)
+1. ~~Implement UUIDv5 derivation for entries missing explicit `uid` (#1)~~ (done)
 2. Implement recurrence rule evaluation — expanding a rule into occurrences (#2)
 3. Implement iCalendar/JSCalendar import (#3)
 
@@ -64,7 +64,7 @@ The following issues from the original analysis have been fully addressed:
 - **`check`/`eval`/`merge` CLI subcommands** — specified and `check` unreserved
 - **"Local datetime" undefined** — defined via `r[lexer.datetime.local]`
 - **Gnomon data model** — specified via `r[model.*]` requirements; implementation aligned (unified `entries` list, `type` field insertion during lowering)
-- **Calendar declaration fields and UUIDv5** — specified via `r[model.calendar.uid]` and `r[model.calendar.uid.derivation]`; `uid` enforced via shape-checking; UUIDv5 derivation pending
+- **Calendar declaration fields and UUIDv5** — specified via `r[model.calendar.uid]` and `r[model.calendar.uid.derivation]`; `uid` enforced via shape-checking; UUIDv5 derivation implemented in `eval/merge.rs` (derives `UUIDv5(calendar_uid, name)` for entries without explicit `uid`; calendar uid must be a valid UUID)
 - **Include resolution semantics** — superseded by `import` expressions (`r[expr.import.*]`, `r[model.import.*]`)
 - **Binding semantics** — superseded by `let` bindings (`r[expr.let.*]`, `r[syntax.file.let]`)
 - **Shape-checking** — specified via `r[model.shape.*]` and implemented in `eval/shape.rs`; validates calendar, event, task, and all nested record types; error-resilient, recursive, preserves open records; wired into merge pipeline

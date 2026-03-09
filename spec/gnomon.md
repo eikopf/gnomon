@@ -729,10 +729,10 @@ Records representing events MUST have a field named `name` whose value is a name
 r[record.event.start]
 Records representing events MUST have a field named `start` whose value is a local datetime.
 
-The optional `uid` field on events is always assigned a value, which will default to the name of the event if it is omitted.
+The `uid` field on events is always assigned a value. If omitted, it is derived per `r[model.calendar.uid.derivation]`.
 
-r[record.event.uid]
-Records representing events MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
+r[record.event.uid+2]
+Records representing events MUST have a field named `uid` whose value is a string. If the field is omitted in the source data, a UID is derived during merge.
 
 Events may also have the following optional fields:
 
@@ -752,10 +752,10 @@ Tasks represent action items, assignments, TODO items, or other similar objects.
 r[record.task.name]
 Records representing tasks MUST have a field named `name` whose value is a name.
 
-The optional `uid` field on tasks is always assigned a value, which will default to the name of the task if it is omitted.
+The `uid` field on tasks is always assigned a value. If omitted, it is derived per `r[model.calendar.uid.derivation]`.
 
-r[record.task.uid]
-Records representing tasks MUST have a field named `uid` whose value is either a string or a name. If the field is omitted in the source data, it MUST have the same value as the `name` field.
+r[record.task.uid+2]
+Records representing tasks MUST have a field named `uid` whose value is a string. If the field is omitted in the source data, a UID is derived during merge.
 
 Tasks may also have the following optional fields:
 

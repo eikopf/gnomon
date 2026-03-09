@@ -40,8 +40,6 @@ enum ExpectedType {
     Integer,
     Bool,
     Name,
-    /// String or Name (uid on entries).
-    StringOrName,
     /// String or Record (description).
     StringOrRecord,
     /// A record conforming to a named shape.
@@ -97,7 +95,7 @@ const CALENDAR_FIELDS: [FieldDef; 1] = [FieldDef {
 
 // r[impl record.event.name]
 // r[impl record.event.start]
-// r[impl record.event.uid]
+// r[impl record.event.uid+2]
 // r[impl record.event.duration]
 // r[impl record.event.status]
 // r[impl record.event.end-time-zone]
@@ -114,8 +112,8 @@ const EVENT_FIELDS: [FieldDef; 6] = [
     },
     FieldDef {
         name: "uid",
-        required: false,
-        expected: ExpectedType::StringOrName,
+        required: true,
+        expected: ExpectedType::String,
     },
     FieldDef {
         name: "duration",
@@ -137,7 +135,7 @@ const EVENT_FIELDS: [FieldDef; 6] = [
 // ── Task-specific fields ───────────────────────────────────
 
 // r[impl record.task.name]
-// r[impl record.task.uid]
+// r[impl record.task.uid+2]
 // r[impl record.task.due]
 // r[impl record.task.start]
 // r[impl record.task.estimated-duration]
@@ -151,8 +149,8 @@ const TASK_FIELDS: [FieldDef; 7] = [
     },
     FieldDef {
         name: "uid",
-        required: false,
-        expected: ExpectedType::StringOrName,
+        required: true,
+        expected: ExpectedType::String,
     },
     FieldDef {
         name: "due",
@@ -745,17 +743,6 @@ fn check_value_type<'db>(
                 diagnostics.push(type_error(source, context, field_name, "name", value));
             }
         }
-        ExpectedType::StringOrName => {
-            if !matches!(value, Value::String(_) | Value::Name(_)) {
-                diagnostics.push(type_error(
-                    source,
-                    context,
-                    field_name,
-                    "string or name",
-                    value,
-                ));
-            }
-        }
         ExpectedType::StringOrRecord => {
             if !matches!(value, Value::String(_) | Value::Record(_)) {
                 diagnostics.push(type_error(
@@ -1254,7 +1241,7 @@ mod tests {
             &[(
                 "a.gnomon",
                 r#"
-                calendar { uid: "test", custom_field: "hello" }
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479", custom_field: "hello" }
                 event @foo 2026-03-01T09:00 1h "Foo" { x_custom: 42 }
                 "#,
             )],
@@ -1323,7 +1310,7 @@ mod tests {
             &[(
                 "a.gnomon",
                 r#"
-                calendar { uid: "test" }
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
                 event @meeting 2026-03-01T14:30 1h "Standup"
                 task @review "Code review"
                 "#,
@@ -1343,7 +1330,7 @@ mod tests {
             &[(
                 "a.gnomon",
                 r##"
-                calendar { uid: "test" }
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
                 event @meeting 2026-03-01T14:30 1h "Standup" {
                     priority: 5,
                     privacy: "public",
@@ -1372,7 +1359,7 @@ mod tests {
             &[(
                 "a.gnomon",
                 r#"
-                calendar { uid: "test" }
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
                 task @review "Code review" { progress: "in-process", percent_complete: 50 }
                 "#,
             )],
