@@ -123,6 +123,9 @@ pub fn merge<'db>(db: &'db dyn crate::Db, sources: &[SourceFile]) -> MergeResult
         diagnostics.push(diag);
     }
 
+    // Expand recurrence rules into materialized occurrences.
+    super::rrule::expand_entry_recurrences(db, &mut calendar, sources, &mut diagnostics, &mut has_errors);
+
     MergeResult {
         calendar,
         diagnostics,
@@ -1027,5 +1030,120 @@ mod tests {
             .filter(|d| d.message.contains("duplicate calendar"))
             .count();
         assert_eq!(dup_count, 2);
+    }
+
+    // ── Recurrence expansion tests ──────────────────────────
+
+    #[test]
+    fn entry_with_recur_gets_occurrences() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event { name: @daily, start: 2026-01-01T00:00, recur: { frequency: #daily, termination: 2026-01-05T00:00 } }
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        let occ_key = FieldName::new(&db, "occurrences".to_string());
+        let entry = &result.calendar.entries[0].value;
+        let occ = entry.get(&occ_key).expect("should have occurrences field");
+        match &occ.value {
+            Value::List(items) => {
+                assert_eq!(items.len(), 5, "expected 5 daily occurrences Jan 1-5");
+            }
+            other => panic!("expected List for occurrences, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entry_without_recur_unchanged() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event @meeting 2026-03-01T14:30 1h "Standup"
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        let occ_key = FieldName::new(&db, "occurrences".to_string());
+        let entry = &result.calendar.entries[0].value;
+        assert!(entry.get(&occ_key).is_none(), "should not have occurrences");
+    }
+
+    #[test]
+    fn entry_with_recur_but_no_start_produces_error() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event { name: @nostart, recur: { frequency: #daily, termination: 5 } }
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        assert!(result.has_errors);
+        assert!(
+            result.diagnostics.iter().any(|d| d.message.contains("recurrence requires")),
+            "expected recurrence-requires-start error, got: {:?}",
+            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn infinite_rule_capped_with_warning() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event { name: @inf, start: 2026-01-01T00:00, recur: { frequency: #daily } }
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        // Should have a warning, not an error.
+        assert!(
+            result.diagnostics.iter().any(|d| d.severity == Severity::Warning && d.message.contains("infinite recurrence")),
+            "expected infinite recurrence warning, got: {:?}",
+            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+        let occ_key = FieldName::new(&db, "occurrences".to_string());
+        let entry = &result.calendar.entries[0].value;
+        match &entry.get(&occ_key).unwrap().value {
+            Value::List(items) => {
+                assert_eq!(items.len(), 1000, "infinite rule should be capped at 1000");
+            }
+            other => panic!("expected List, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn weekly_recurrence_expanded() {
+        let db = Database::default();
+        let sources = vec![make_source(
+            &db,
+            "a.gnomon",
+            // 2026-01-05 is a Monday. Until 2026-02-01 should give 4 Mondays: Jan 5, 12, 19, 26.
+            r#"
+            calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+            event { name: @weekly, start: 2026-01-05T09:00, recur: { frequency: #weekly, by_day: [{ day: #monday }], termination: 2026-02-01T00:00 } }
+            "#,
+        )];
+        let result = merge(&db, &sources);
+        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        let occ_key = FieldName::new(&db, "occurrences".to_string());
+        let entry = &result.calendar.entries[0].value;
+        match &entry.get(&occ_key).unwrap().value {
+            Value::List(items) => {
+                assert_eq!(items.len(), 4, "expected 4 Mondays: Jan 5, 12, 19, 26");
+            }
+            other => panic!("expected List, got: {other:?}"),
+        }
     }
 }

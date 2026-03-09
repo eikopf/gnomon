@@ -5,6 +5,7 @@ pub mod literals;
 pub mod lower;
 pub mod merge;
 pub mod render;
+pub mod rrule;
 pub mod shape;
 pub mod types;
 
