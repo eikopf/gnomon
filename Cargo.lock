@@ -357,15 +357,23 @@ dependencies = [
 name = "gnomon-db"
 version = "0.1.0"
 dependencies = [
- "calico",
  "expect-test",
+ "gnomon-import",
  "gnomon-parser",
- "jscalendar",
  "rowan",
  "salsa",
- "serde_json",
  "tempfile",
  "uuid",
+]
+
+[[package]]
+name = "gnomon-import"
+version = "0.1.0"
+dependencies = [
+ "calico",
+ "expect-test",
+ "jscalendar",
+ "serde_json",
 ]
 
 [[package]]
