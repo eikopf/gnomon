@@ -813,5 +813,186 @@ mod tests {
                 result.diagnostics,
             );
         }
+
+        // ── URI imports ───────────────────────────────────────────
+
+        /// Spin up a tiny HTTP server on localhost that serves `body` with the
+        /// given `content_type` at any path, returning the socket address.
+        fn serve_once(body: &str, content_type: &str) -> std::net::SocketAddr {
+            use std::net::TcpListener;
+
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body,
+            );
+            std::thread::spawn(move || {
+                // Accept one connection, write the response, close.
+                let (mut stream, _) = listener.accept().unwrap();
+                std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
+            });
+            addr
+        }
+
+        #[test]
+        fn import_uri_icalendar() {
+            let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\
+                        BEGIN:VEVENT\r\nUID:uri-ev1\r\nSUMMARY:URI Event\r\n\
+                        DTSTART:20260315T120000\r\nDURATION:PT1H\r\n\
+                        END:VEVENT\r\nEND:VCALENDAR\r\n";
+            let addr = serve_once(ics, "text/calendar");
+
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(
+                &main_path,
+                format!("import <http://{addr}/cal.ics> as icalendar"),
+            )
+            .unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            match &result.value {
+                Value::List(items) => {
+                    assert_eq!(items.len(), 1);
+                    match &items[0].value {
+                        Value::Record(r) => {
+                            assert_eq!(get_field(r, &db, "uid"), Value::String("uri-ev1".into()));
+                            assert_eq!(get_field(r, &db, "title"), Value::String("URI Event".into()));
+                        }
+                        _ => panic!("expected record"),
+                    }
+                }
+                _ => panic!("expected list"),
+            }
+        }
+
+        #[test]
+        fn import_uri_jscalendar() {
+            let json = r#"{ "@type": "Event", "uid": "uri-js1", "title": "URI JS", "start": "2026-03-15T10:00:00", "duration": "PT2H" }"#;
+            let addr = serve_once(json, "application/json");
+
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(
+                &main_path,
+                format!("import <http://{addr}/event.json> as jscalendar"),
+            )
+            .unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "uid"), Value::String("uri-js1".into()));
+            assert_eq!(get_field(r, &db, "title"), Value::String("URI JS".into()));
+        }
+
+        #[test]
+        fn import_uri_gnomon() {
+            let gnomon_src = "{ x: 42 }";
+            let addr = serve_once(gnomon_src, "text/plain");
+
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(
+                &main_path,
+                format!("import <http://{addr}/data.gn> as gnomon"),
+            )
+            .unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "x"), Value::Integer(42));
+        }
+
+        #[test]
+        fn import_uri_inferred_from_extension() {
+            let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\
+                        BEGIN:VEVENT\r\nUID:ext-infer\r\nSUMMARY:Ext Infer\r\n\
+                        DTSTART:20260101T090000\r\nDURATION:PT30M\r\n\
+                        END:VEVENT\r\nEND:VCALENDAR\r\n";
+            let addr = serve_once(ics, "application/octet-stream");
+
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            // URL path ends in .ics — format should be inferred.
+            std::fs::write(
+                &main_path,
+                format!("import <http://{addr}/cal.ics>"),
+            )
+            .unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            match &result.value {
+                Value::List(items) => {
+                    assert_eq!(items.len(), 1);
+                    match &items[0].value {
+                        Value::Record(r) => {
+                            assert_eq!(get_field(r, &db, "uid"), Value::String("ext-infer".into()));
+                        }
+                        _ => panic!("expected record"),
+                    }
+                }
+                _ => panic!("expected list"),
+            }
+        }
+
+        #[test]
+        fn import_uri_network_error() {
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            // Use a port that is (almost certainly) not listening.
+            std::fs::write(&main_path, "import <http://127.0.0.1:1/>").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(
+                result.diagnostics.iter().any(|d| d.message.contains("URI import failed")),
+                "expected network error, got: {:?}",
+                result.diagnostics,
+            );
+        }
+
+        #[test]
+        fn import_uri_inferred_from_content_type() {
+            let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\
+                        BEGIN:VEVENT\r\nUID:ct-infer\r\nSUMMARY:CT Infer\r\n\
+                        DTSTART:20260101T090000\r\nDURATION:PT30M\r\n\
+                        END:VEVENT\r\nEND:VCALENDAR\r\n";
+            // URL has no recognized extension; Content-Type is text/calendar.
+            let addr = serve_once(ics, "text/calendar");
+
+            let dir = tempfile::tempdir().unwrap();
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(
+                &main_path,
+                format!("import <http://{addr}/feed>"),
+            )
+            .unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            match &result.value {
+                Value::List(items) => {
+                    assert_eq!(items.len(), 1);
+                    match &items[0].value {
+                        Value::Record(r) => {
+                            assert_eq!(get_field(r, &db, "uid"), Value::String("ct-infer".into()));
+                        }
+                        _ => panic!("expected record"),
+                    }
+                }
+                _ => panic!("expected list"),
+            }
+        }
     }
 }

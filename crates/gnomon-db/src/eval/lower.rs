@@ -575,16 +575,12 @@ impl<'db> LowerCtx<'db> {
             ImportFormat::Infer
         };
 
+        let is_uri = source_token.kind() == SyntaxKind::URI_LITERAL;
+
         let path_str = match source_token.kind() {
             SyntaxKind::STRING_LITERAL => literals::eval_string(source_token.text()),
             SyntaxKind::PATH_LITERAL => source_token.text().to_string(),
-            SyntaxKind::URI_LITERAL => {
-                self.emit_diagnostic(
-                    source_token.text_range(),
-                    "URI imports are not yet supported".into(),
-                );
-                return Value::Undefined;
-            }
+            SyntaxKind::URI_LITERAL => literals::eval_uri(source_token.text()),
             _ => return Value::Undefined,
         };
 
@@ -596,9 +592,81 @@ impl<'db> LowerCtx<'db> {
                 } else if path_str.ends_with(".json") {
                     ImportFormat::JSCalendar
                 } else {
+                    ImportFormat::Infer
+                }
+            }
+            f => f,
+        };
+
+        if is_uri {
+            self.lower_import_uri(&path_str, format, source_token.text_range())
+        } else {
+            self.lower_import_path(&path_str, format, source_token.text_range())
+        }
+    }
+
+    fn lower_import_uri(
+        &mut self,
+        url: &str,
+        format: ImportFormat,
+        source_range: rowan::TextRange,
+    ) -> Value<'db> {
+        // Fetch content via HTTP(S).
+        let response = match ureq::get(url).call() {
+            Ok(resp) => resp,
+            Err(e) => {
+                self.emit_diagnostic(
+                    source_range,
+                    format!("URI import failed: {e}"),
+                );
+                return Value::Undefined;
+            }
+        };
+
+        // If format is still Infer, try Content-Type header.
+        let format = match format {
+            ImportFormat::Infer => {
+                let ct = response
+                    .headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+                if ct.starts_with("text/calendar") {
+                    ImportFormat::ICalendar
+                } else if ct.starts_with("application/json")
+                    || ct.starts_with("application/jscalendar+json")
+                {
+                    ImportFormat::JSCalendar
+                } else {
                     ImportFormat::Gnomon
                 }
             }
+            f => f,
+        };
+
+        let content = match response.into_body().read_to_string() {
+            Ok(s) => s,
+            Err(e) => {
+                self.emit_diagnostic(
+                    source_range,
+                    format!("URI import: failed to read response body: {e}"),
+                );
+                return Value::Undefined;
+            }
+        };
+
+        self.dispatch_import_content(format, content, PathBuf::from(url), source_range)
+    }
+
+    fn lower_import_path(
+        &mut self,
+        path_str: &str,
+        format: ImportFormat,
+        source_range: rowan::TextRange,
+    ) -> Value<'db> {
+        // Default Infer to Gnomon for local paths (extension check already ran).
+        let format = match format {
+            ImportFormat::Infer => ImportFormat::Gnomon,
             f => f,
         };
 
@@ -610,7 +678,7 @@ impl<'db> LowerCtx<'db> {
             .parent()
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
-        let target_path = base_dir.join(&path_str);
+        let target_path = base_dir.join(path_str);
 
         // Normalize the path for cycle detection (canonicalize if possible,
         // otherwise use the joined path as-is).
@@ -619,7 +687,7 @@ impl<'db> LowerCtx<'db> {
         // r[impl expr.import.cycle]
         if self.import_stack.contains(&target_path) {
             self.emit_diagnostic(
-                source_token.text_range(),
+                source_range,
                 format!("circular import detected: {}", target_path.display()),
             );
             return Value::Undefined;
@@ -630,26 +698,33 @@ impl<'db> LowerCtx<'db> {
             Ok(c) => c,
             Err(e) => {
                 self.emit_diagnostic(
-                    source_token.text_range(),
+                    source_range,
                     format!("cannot read import `{}`: {e}", target_path.display()),
                 );
                 return Value::Undefined;
             }
         };
 
+        self.dispatch_import_content(format, content, target_path, source_range)
+    }
+
+    fn dispatch_import_content(
+        &mut self,
+        format: ImportFormat,
+        content: String,
+        source_path: PathBuf,
+        source_range: rowan::TextRange,
+    ) -> Value<'db> {
         match format {
             ImportFormat::Gnomon => {
-                // Create SourceFile input and evaluate.
-                let target_source = SourceFile::new(self.db, target_path.clone(), content);
+                let target_source = SourceFile::new(self.db, source_path.clone(), content);
                 let mut new_stack = self.import_stack.clone();
-                new_stack.push(target_path);
+                new_stack.push(source_path);
 
                 let result =
                     super::evaluate_with_import_stack(self.db, target_source, new_stack);
 
-                // Collect diagnostics from the imported file.
                 self.diagnostics.extend(result.diagnostics);
-
                 result.value
             }
             ImportFormat::ICalendar => {
@@ -658,7 +733,7 @@ impl<'db> LowerCtx<'db> {
                 match super::import::translate_icalendar(self.db, &content, &blame) {
                     Ok(value) => value,
                     Err(msg) => {
-                        self.emit_diagnostic(source_token.text_range(), msg);
+                        self.emit_diagnostic(source_range, msg);
                         Value::Undefined
                     }
                 }
@@ -669,7 +744,7 @@ impl<'db> LowerCtx<'db> {
                 match super::import::translate_jscalendar(self.db, &content, &blame) {
                     Ok(value) => value,
                     Err(msg) => {
-                        self.emit_diagnostic(source_token.text_range(), msg);
+                        self.emit_diagnostic(source_range, msg);
                         Value::Undefined
                     }
                 }
