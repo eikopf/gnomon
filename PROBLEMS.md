@@ -14,11 +14,7 @@ The spec introduction is still `TODO: write prose introduction`. Not a functiona
 
 ## II. Implementation Gaps
 
-### 3. URI Imports
-
-Import expressions accept URI literals syntactically, but evaluation emits `"URI imports are not yet supported"` and returns `undefined`. Only path-based imports (Gnomon, iCalendar, JSCalendar) are functional.
-
-### 4. Multi-file Merge Semantics (functional, could evolve)
+### 3. Multi-file Merge Semantics (functional, could evolve)
 
 The `merge` subcommand works: it evaluates each source file, flattens the resulting values into records, separates calendar properties from entries, checks uniqueness constraints (single calendar, unique names), and runs shape-checking. However, the merge pipeline is a fixed post-evaluation stage rather than something expressible in the language itself. With `import` and `let` now available, a user *could* compose files via a root file that imports and merges others using `//` and `++`, but the `merge` CLI subcommand still applies its own uniqueness and shape-checking logic. Whether merge should eventually become a library of Gnomon functions rather than a hardcoded pipeline step is an open design question.
 
@@ -26,12 +22,9 @@ The `merge` subcommand works: it evaluates each source file, flattens the result
 
 ## Prioritized Recommendations
 
-**Near-term (concrete next steps):**
-1. Implement URI imports (#3)
-
-**Longer-term (design work):**
-2. Design query system (#1)
-3. Consider making merge composable in-language (#4)
+**Near-term (design work):**
+1. Design query system (#1)
+2. Consider making merge composable in-language (#3)
 
 ---
 
@@ -61,3 +54,4 @@ The following issues from the original analysis have been fully addressed:
 - **Foreign format imports** — iCalendar (`.ics`) and JSCalendar (`.json`) imports implemented via `calico` and `serde_json` respectively; format inferred from file extension or specified with `as icalendar`/`as jscalendar`; `name` requirement relaxed to allow entries with `uid` but no `name` (`r[record.event.name+2]`, `r[record.task.name+2]`, `r[expr.import.format+2]`)
 - **UUIDv5 derivation** — implemented in `eval/merge.rs`; derives `UUIDv5(calendar_uid, name)` for entries without explicit `uid`
 - **Recurrence rule evaluation** — `eval/rrule.rs` converts `recur` record fields into `gnomon_rrule::RecurrenceRule`, expands occurrences via the `gnomon-rrule` crate, and stores materialized datetime records in an `occurrences` list on each entry; infinite rules capped at 1000 with a warning; wired into the merge pipeline after shape-checking
+- **URI imports** — `import <https://...>` now fetches content via HTTP(S) using `ureq`; format inferred from `as` keyword, URL path extension, or `Content-Type` header; error diagnostics on network/HTTP failures
