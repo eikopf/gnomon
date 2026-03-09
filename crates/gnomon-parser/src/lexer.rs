@@ -22,7 +22,7 @@ enum LogosToken {
     #[regex(r";[^\n]*", allow_greedy = true)]
     Comment,
 
-    // r[impl lexer.punctuation]
+    // r[impl lexer.punctuation+2]
     // ── Punctuation ──────────────────────────────────────────────
     #[token("{")]
     LBrace,
@@ -120,7 +120,7 @@ enum LogosToken {
     PathLiteral,
 
     // r[impl lexer.ident]
-    // r[impl lexer.keyword.weak]
+    // r[impl lexer.keyword.weak+3]
     #[regex(r"[a-zA-Z_][a-zA-Z0-9_-]*")]
     Ident,
 }
@@ -314,7 +314,7 @@ mod tests {
 
     // ── Weak keywords lex as IDENT ───────────────────────────────
 
-    // r[verify lexer.keyword.weak]
+    // r[verify lexer.keyword.weak+3]
     #[test]
     fn weak_keywords_are_idents() {
         for kw in [
@@ -355,7 +355,7 @@ mod tests {
 
     // ── Punctuation ──────────────────────────────────────────────
 
-    // r[verify lexer.punctuation]
+    // r[verify lexer.punctuation+2]
     #[test]
     fn punctuation() {
         let toks = kinds("{}[]():,=!.+/");

@@ -333,6 +333,7 @@ fn datetime_to_record<'db>(
 /// For each entry with a `recur` field that is a Record, this function:
 /// 1. Extracts the `start` datetime and `recur` rule record
 /// 2. Converts them to gnomon-rrule types
+// r[impl record.rrule.eval.expansion]
 /// 3. Expands occurrences
 /// 4. Stores the result as an `occurrences` list field on the entry
 pub fn expand_entry_recurrences<'db>(
@@ -356,6 +357,7 @@ pub fn expand_entry_recurrences<'db>(
 
         let source = entry.blame.decl.source(db);
 
+        // r[impl record.rrule.eval.start-required]
         // Extract start datetime.
         let start_record = match entry.value.get(&start_key) {
             Some(blamed) => match &blamed.value {

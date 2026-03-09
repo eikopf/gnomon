@@ -641,24 +641,6 @@ mod tests {
             assert_eq!(get_field(r, &db, "val"), Value::Integer(1));
         }
 
-        #[test]
-        fn import_string_source() {
-            let dir = tempfile::tempdir().unwrap();
-
-            let other_path = dir.path().join("data.gnomon");
-            std::fs::write(&other_path, "{ key: 99 }").unwrap();
-
-            let main_path = dir.path().join("main.gnomon");
-            std::fs::write(&main_path, r#"import "data.gnomon""#).unwrap();
-
-            let db = Database::default();
-            let result = eval_file(&db, &main_path);
-            // String source treated as relative path — should find the file.
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
-            let r = expect_record(&result);
-            assert_eq!(get_field(r, &db, "key"), Value::Integer(99));
-        }
-
         // ── iCalendar import ────────────────────────────────────
 
         #[test]

@@ -24,7 +24,7 @@ pub fn validate_syntax(root: &SyntaxNode) -> Vec<SyntaxError> {
     for element in root.descendants_with_tokens() {
         if let Some(token) = element.as_token() {
             match token.kind() {
-                // r[lexer.integer.max]
+                // r[impl lexer.integer.max]
                 SyntaxKind::INTEGER_LITERAL => {
                     check_integer(token.text(), token.text_range(), &mut errors);
                 }
@@ -36,7 +36,7 @@ pub fn validate_syntax(root: &SyntaxNode) -> Vec<SyntaxError> {
                 SyntaxKind::STRING_LITERAL => {
                     check_string_no_multiline(token.text(), token.text_range(), &mut errors);
                 }
-                // r[lexer.duration.part.multiplicity]
+                // r[impl lexer.duration.part.multiplicity]
                 SyntaxKind::DURATION_LITERAL => {
                     check_duration_units(token.text(), token.text_range(), &mut errors);
                 }
@@ -269,7 +269,7 @@ fn check_second_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxE
 
 // ── AST-level checks ───────────────────────────────────────────────
 
-// r[expr.record.keys]
+// r[impl expr.record.keys]
 fn check_duplicate_keys(record: &RecordExpr, errors: &mut Vec<SyntaxError>) {
     let mut seen = HashSet::new();
     for field in record.fields() {

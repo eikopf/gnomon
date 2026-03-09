@@ -64,7 +64,8 @@ A whitespace character is any character with the `Pattern_White_Space` Unicode p
 r[lexer.whitespace]
 Any character with the `Pattern_White_Space` Unicode property MUST be treated as whitespace.
 
-Whitespace does not have any semantic significance, and replacing any whitespace string with any other whitespace string does not change the meaning of a Gnomon program.
+r[lexer.whitespace.insignificant]
+Replacing any whitespace string with any other whitespace string MUST NOT change the meaning of a Gnomon program.
 
 ### Punctuation
 
@@ -221,6 +222,7 @@ A date literal represents an ISO 8601/RFC 3339 date.
 r[lexer.date.valid]
 A date literal MUST represent a valid Gregorian calendar date. February 29 is valid only in leap years.
 
+r[lexer.time.leap-second]
 Implementations MUST NOT reject a second value of 60 (leap second) based on whether a leap second actually occurred at the given time, as this is expensive to verify.
 
 Date literals desugar into records with three integer fields named `year`, `month`, and `day`.
@@ -510,12 +512,12 @@ A list is a contiguous sequence of zero or more values.
 
 An import expression loads and evaluates a source file, producing a Gnomon value. The source may be a Gnomon file, an iCalendar file, a JSCalendar file, or any other supported format. The format is normally inferred from the file extension or content, but may be specified explicitly using the `as` keyword.
 
-> r[expr.import.syntax]
+> r[expr.import.syntax+2]
 > The grammar for import expressions is as follows:
 >
 > ```ebnf
 > import expr = "import", import source, [ "as", format ] ;
-> import source = path literal | uri literal | string literal ;
+> import source = path literal | uri literal ;
 > format = "gnomon" | "icalendar" | "jscalendar" ;
 > ```
 
@@ -524,6 +526,9 @@ An `import` expression MUST evaluate the referenced source and produce the resul
 
 r[expr.import.format+2]
 If the `as` keyword is present, the implementation MUST interpret the source in the specified format. If the `as` keyword is absent, the implementation MUST infer the format from the file extension: `.ics` maps to `icalendar`, `.json` maps to `jscalendar`, and all other extensions are treated as `gnomon`.
+
+r[expr.import.format.uri]
+For URI imports where the `as` keyword is absent and the URL path does not have a recognized extension, the implementation MUST infer the format from the HTTP `Content-Type` response header: `text/calendar` maps to `icalendar`, `application/json` and `application/jscalendar+json` map to `jscalendar`, and all other content types are treated as `gnomon`.
 
 r[expr.import.eager]
 Import expressions MUST be evaluated eagerly.
@@ -860,7 +865,28 @@ If the terminator of an `every` expression is given, its value (the datetime or 
 
 #### Evaluation
 
-TODO: describe the evaluation semantics of recurrence rules
+A recurrence rule defines an ordered sequence of local datetimes (occurrences) derived from a starting datetime and the rule's parameters. The expansion follows the RFC 5545 RRULE algorithm with the JSCalendar `skip` extension.
+
+r[record.rrule.eval.expansion]
+Expanding a recurrence rule MUST produce a sequence of local datetimes by applying the following pipeline for each recurrence period, starting from `dtstart`:
+
+1. Seed the period by advancing `dtstart` by `interval` periods at the rule's `frequency`.
+2. Apply each BY\* rule in order: `by_month`, `by_week_no`, `by_year_day`, `by_month_day`, `by_day`, `by_hour`, `by_minute`, `by_second`. Each BY\* rule either expands the candidate set (generates additional candidates) or limits it (filters candidates), depending on the frequency, per RFC 5545 Section 3.3.10.
+3. Sort and deduplicate the candidates within the period.
+4. Apply `by_set_position` to select specific positions from the sorted set.
+5. Yield the resulting datetimes.
+
+r[record.rrule.eval.dtstart]
+The first occurrence in any recurrence expansion MUST be `dtstart` itself, regardless of whether it matches the BY\* filters.
+
+r[record.rrule.eval.termination]
+If `termination` is a count (unsigned integer), expansion MUST stop after that many occurrences have been yielded. If `termination` is a datetime, expansion MUST stop after yielding all occurrences up to and including that datetime. If `termination` is absent or `undefined`, the rule defines an infinite sequence.
+
+r[record.rrule.eval.infinite]
+Infinite recurrence rules (those without a `termination` value) are valid. Implementations MUST support them by evaluating only the occurrences relevant to the operation being performed (e.g., within a queried time range).
+
+r[record.rrule.eval.start-required]
+Expanding a recurrence rule requires a `start` field on the enclosing entry. It is an error if `start` is absent or is not a datetime record.
 
 r[record.rrule.eval.empty]
 An error SHOULD be produced if a recurrence rule is empty.
@@ -1083,7 +1109,15 @@ The `uid` field is the sole mandatory field on a calendar. It serves as the name
 > r[model.calendar.uid.derivation]
 > When an event or task omits a `uid` field, a UID MUST be derived as `UUIDv5(calendar_uid, name)`, where `calendar_uid` is the value of the `uid` field on the enclosing calendar and `name` is the string representation of the object's `name` field.
 
+> r[model.calendar.uid.derivation.non-uuid]
+> If the calendar's `uid` value is not a valid UUID, UID derivation MUST be skipped and a warning diagnostic MUST be produced. The calendar and its entries remain valid; only the automatic derivation is suppressed.
+
+The `uid` field follows RFC 5545 in accepting any string. However, implementations SHOULD produce a warning when a `uid` value in Gnomon source code is not a valid UUID, as non-UUID identifiers limit interoperability and prevent UID derivation.
+
 A calendar may have additional optional metadata fields such as `title`, `description`, `time_zone`, `color`, or other properties. These are not enumerated exhaustively; as with all Gnomon records, calendars are open.
+
+> r[model.calendar.singular]
+> A calendar project MUST contain exactly one `calendar` declaration. It is an error if no `calendar` declaration is found. It is an error if more than one `calendar` declaration is found.
 
 ### Calendar Entries
 
@@ -1120,6 +1154,119 @@ An `import` expression evaluates a referenced source file and produces a Gnomon 
 
 > r[model.import.transparent]
 > Import expressions are transparent: after evaluation, the result is an ordinary Gnomon value with no trace of its origin. There is no distinct "import" value in the data model.
+
+### Foreign Format Translation
+
+When an import source is in a foreign format, it MUST be translated into the Gnomon data model according to the rules in this section. Fields not listed below are not translated and are silently discarded.
+
+#### iCalendar Translation
+
+> r[model.import.icalendar.components]
+> An iCalendar import MUST translate `VEVENT` components into event records and `VTODO` components into task records. `VJOURNAL`, `VFREEBUSY`, `VTIMEZONE`, and all other component types MUST be silently skipped.
+
+> r[model.import.icalendar.event]
+> A `VEVENT` component MUST be translated to a record with the following field mapping:
+>
+> | iCalendar Property | Gnomon Field | Type |
+> |--------------------|-------------|------|
+> | (implicit) | `type` | `"event"` |
+> | `UID` | `uid` | string |
+> | `SUMMARY` | `title` | string |
+> | `DESCRIPTION` | `description` | string |
+> | `DTSTART` | `start` | datetime or date record |
+> | `DTSTART` TZID parameter | `time_zone` | string |
+> | `DURATION` | `duration` | duration record |
+> | `STATUS` | `status` | string (see status mapping) |
+> | `PRIORITY` | `priority` | integer 0–9 (see priority mapping) |
+> | `LOCATION` | `location` | string |
+> | `COLOR` | `color` | string |
+> | `CATEGORIES` | `categories` | list of strings |
+
+> r[model.import.icalendar.event.duration-fallback]
+> If a `VEVENT` has `DTSTART` and `DTEND` but no `DURATION`, the duration MUST be computed as the difference between `DTEND` and `DTSTART`.
+
+> r[model.import.icalendar.task]
+> A `VTODO` component MUST be translated to a record with the following field mapping:
+>
+> | iCalendar Property | Gnomon Field | Type |
+> |--------------------|-------------|------|
+> | (implicit) | `type` | `"task"` |
+> | `UID` | `uid` | string |
+> | `SUMMARY` | `title` | string |
+> | `DESCRIPTION` | `description` | string |
+> | `DUE` | `due` | datetime or date record |
+> | `DTSTART` | `start` | datetime or date record |
+> | `DTSTART` TZID parameter | `time_zone` | string |
+> | `DURATION` | `estimated_duration` | duration record |
+> | `PERCENT-COMPLETE` | `percent_complete` | integer |
+> | `STATUS` | `status` | string (see status mapping) |
+> | `PRIORITY` | `priority` | integer 0–9 (see priority mapping) |
+> | `LOCATION` | `location` | string |
+> | `COLOR` | `color` | string |
+> | `CATEGORIES` | `categories` | list of strings |
+
+> r[model.import.icalendar.status]
+> iCalendar status values MUST be translated to lowercase strings: `TENTATIVE` → `"tentative"`, `CONFIRMED` → `"confirmed"`, `CANCELLED` → `"cancelled"`, `NEEDS-ACTION` → `"needs-action"`, `COMPLETED` → `"completed"`, `IN-PROCESS` → `"in-process"`, `DRAFT` → `"draft"`, `FINAL` → `"final"`. Unrecognized status values MUST be translated to `"unknown"`.
+
+> r[model.import.icalendar.priority]
+> iCalendar priority values (1–9) MUST be translated to integers in the range 0–9. Priority 0 (undefined) maps to 0. Values 1–3 map to 1–3. Values 4–6 map to 4–6. Values 7–9 map to 7–9.
+
+#### JSCalendar Translation
+
+> r[model.import.jscalendar.types]
+> A JSCalendar import MUST translate `Event` objects into event records and `Task` objects into task records. `Group` objects MUST be flattened: each entry in the group is translated individually.
+
+> r[model.import.jscalendar.event]
+> A JSCalendar `Event` MUST be translated to a record with the following field mapping:
+>
+> | JSCalendar Property | Gnomon Field | Type |
+> |---------------------|-------------|------|
+> | (implicit) | `type` | `"event"` |
+> | `uid` | `uid` | string |
+> | `title` | `title` | string |
+> | `description` | `description` | string |
+> | `start` | `start` | datetime record |
+> | `duration` | `duration` | duration record |
+> | `timeZone` | `time_zone` | string |
+> | `status` | `status` | string |
+> | `priority` | `priority` | integer 0–9 |
+> | `color` | `color` | string |
+> | `locale` | `locale` | string |
+> | `privacy` | `privacy` | string |
+> | `freeBusyStatus` | `free_busy_status` | string |
+> | `showWithoutTime` | `show_without_time` | boolean |
+> | `categories` | `categories` | list of strings |
+> | `keywords` | `keywords` | list of strings |
+
+> r[model.import.jscalendar.task]
+> A JSCalendar `Task` MUST be translated to a record with the following field mapping:
+>
+> | JSCalendar Property | Gnomon Field | Type |
+> |---------------------|-------------|------|
+> | (implicit) | `type` | `"task"` |
+> | `uid` | `uid` | string |
+> | `title` | `title` | string |
+> | `description` | `description` | string |
+> | `start` | `start` | datetime record |
+> | `due` | `due` | datetime record |
+> | `estimatedDuration` | `estimated_duration` | duration record |
+> | `percentComplete` | `percent_complete` | integer |
+> | `progress` | `progress` | string |
+> | `timeZone` | `time_zone` | string |
+> | `priority` | `priority` | integer 0–9 |
+> | `color` | `color` | string |
+> | `locale` | `locale` | string |
+> | `privacy` | `privacy` | string |
+> | `freeBusyStatus` | `free_busy_status` | string |
+> | `showWithoutTime` | `show_without_time` | boolean |
+> | `categories` | `categories` | list of strings |
+> | `keywords` | `keywords` | list of strings |
+
+> r[model.import.jscalendar.vendor]
+> Vendor-specific properties (property names not defined by RFC 9553) on JSCalendar objects MUST be preserved in the translated record. JSON values MUST be translated recursively: objects to records, arrays to lists, strings to strings, numbers to integers or signed integers, booleans to booleans, and null to `undefined`.
+
+> r[model.import.jscalendar.priority]
+> JSCalendar priority values MUST be translated to integers in the range 0–9, using the same mapping as iCalendar priorities.
 
 ### Shape-checking
 

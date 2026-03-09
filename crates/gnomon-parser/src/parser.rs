@@ -229,7 +229,7 @@ impl Parser {
         (self.builder.finish(), self.errors)
     }
 
-    // r[impl syntax.start]
+    // r[impl syntax.start+2]
     fn parse_source_file(&mut self) {
         self.start_node_before_trivia(SyntaxKind::SOURCE_FILE);
 

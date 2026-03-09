@@ -44,6 +44,7 @@ pub fn validate_calendar<'db>(
         diagnostics.push(diag);
     }
 
+    // r[impl model.calendar.singular]
     // Track calendar declarations for uniqueness.
     let mut calendar_count = 0usize;
     let mut first_calendar_source: Option<SourceFile> = None;
@@ -54,6 +55,7 @@ pub fn validate_calendar<'db>(
     let name_key = FieldName::new(db, "name".to_string());
     let type_key = FieldName::new(db, "type".to_string());
 
+    // r[impl model.calendar.entries]
     // Flatten value into records.
     let records = flatten_to_records(db, root_source, value);
 
@@ -135,6 +137,7 @@ pub fn validate_calendar<'db>(
     }
 }
 
+// r[impl model.calendar.uid.derivation.non-uuid]
 /// Derive UUIDv5 UIDs for entries that omit an explicit `uid` field.
 ///
 /// Uses the calendar's `uid` as the UUIDv5 namespace and the entry's `name`
@@ -200,6 +203,7 @@ fn derive_uids<'db>(
     }
 }
 
+// r[impl model.name.unique]
 fn check_name_collision<'db>(
     db: &'db dyn crate::Db,
     record: &super::types::Record<'db>,

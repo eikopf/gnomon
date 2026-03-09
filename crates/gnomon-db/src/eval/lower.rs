@@ -61,6 +61,8 @@ impl<'db> LowerCtx<'db> {
     /// Lower a source file into a Value.
     ///
     /// File structure: optional `let` bindings, then either declarations or an expression body.
+    // r[impl syntax.file.let]
+    // r[impl syntax.file.body]
     pub fn lower_source_file(&mut self, file: &ast::SourceFile) -> Value<'db> {
         // 1. Process file-level let bindings (pushed into env).
         for binding in file.let_bindings() {
@@ -111,6 +113,7 @@ impl<'db> LowerCtx<'db> {
     /// Lower a declaration to a Value.
     fn lower_decl_to_value(&mut self, decl: &ast::Decl, index: usize) -> Value<'db> {
         match decl {
+            // r[impl decl.calendar.desugar]
             ast::Decl::CalendarDecl(cal) => {
                 let decl_id = self.make_decl_id(index, DeclKind::Calendar);
                 match cal.body() {
@@ -121,6 +124,7 @@ impl<'db> LowerCtx<'db> {
                 }
             }
             // r[impl model.entry.type.infer]
+            // r[impl decl.event.desugar]
             ast::Decl::EventDecl(ev) => {
                 let decl_id = self.make_decl_id(index, DeclKind::Event);
                 let mut record = self.lower_event(ev, decl_id);
@@ -134,6 +138,7 @@ impl<'db> LowerCtx<'db> {
                 Value::Record(record)
             }
             // r[impl model.entry.type.infer]
+            // r[impl decl.task.desugar]
             ast::Decl::TaskDecl(task) => {
                 let decl_id = self.make_decl_id(index, DeclKind::Task);
                 let mut record = self.lower_task(task, decl_id);
@@ -153,6 +158,7 @@ impl<'db> LowerCtx<'db> {
         let base_path = FieldPath::root();
 
         if ev.name().is_some() {
+            // r[impl decl.short-event.desugar]
             // Short form: event @name datetime [duration] ["title"] [{ body }]
             let mut record = Record::new();
 
@@ -213,6 +219,7 @@ impl<'db> LowerCtx<'db> {
         let base_path = FieldPath::root();
 
         if task.name().is_some() {
+            // r[impl decl.short-task.desugar]
             let mut record = Record::new();
 
             if let Some(name_token) = task.name() {
@@ -311,6 +318,7 @@ impl<'db> LowerCtx<'db> {
                     None => Value::Undefined,
                 }
             }
+            // r[impl expr.literal.identifier]
             ast::Expr::IdentExpr(ident) => {
                 if let Some(name_tok) = ident.name() {
                     let name = name_tok.text();
@@ -329,6 +337,8 @@ impl<'db> LowerCtx<'db> {
                     Value::Undefined
                 }
             }
+            // r[impl expr.let.scope]
+            // r[impl expr.let.sequential]
             ast::Expr::LetExpr(let_expr) => {
                 let name = let_expr.name().map(|t| t.text().to_string()).unwrap_or_default();
                 let bound_value = match let_expr.bound_expr() {
@@ -354,6 +364,7 @@ impl<'db> LowerCtx<'db> {
                 };
                 let op = bin.op().map(|t| t.kind());
                 match op {
+                    // r[impl expr.op.concat]
                     Some(SyntaxKind::PLUS_PLUS) => {
                         // List concatenation
                         match (lhs, rhs) {
@@ -376,6 +387,7 @@ impl<'db> LowerCtx<'db> {
                             }
                         }
                     }
+                    // r[impl expr.op.merge]
                     Some(SyntaxKind::SLASH_SLASH) => {
                         // Record merge (right wins)
                         match (lhs, rhs) {
@@ -400,6 +412,7 @@ impl<'db> LowerCtx<'db> {
                             }
                         }
                     }
+                    // r[impl expr.op.eq]
                     Some(SyntaxKind::EQ_EQ) => {
                         Value::Bool(values_equal(&lhs, &rhs))
                     }
@@ -409,6 +422,7 @@ impl<'db> LowerCtx<'db> {
                     _ => Value::Undefined,
                 }
             }
+            // r[impl expr.op.field]
             ast::Expr::FieldAccessExpr(fa) => {
                 let target = match fa.target() {
                     Some(e) => self.lower_top_expr(&e, decl_id, path),
@@ -434,6 +448,7 @@ impl<'db> LowerCtx<'db> {
                     }
                 }
             }
+            // r[impl expr.op.index]
             ast::Expr::IndexExpr(idx) => {
                 let target = match idx.target() {
                     Some(e) => self.lower_top_expr(&e, decl_id, path),
@@ -554,6 +569,7 @@ impl<'db> LowerCtx<'db> {
     // ── Import ───────────────────────────────────────────────────
 
     // r[impl expr.import.eval]
+    // r[impl expr.import.eager]
     fn lower_import(&mut self, import: &ast::ImportExpr) -> Value<'db> {
         let source_token = match import.source() {
             Some(t) => t,
@@ -582,7 +598,6 @@ impl<'db> LowerCtx<'db> {
         let is_uri = source_token.kind() == SyntaxKind::URI_LITERAL;
 
         let path_str = match source_token.kind() {
-            SyntaxKind::STRING_LITERAL => literals::eval_string(source_token.text()),
             SyntaxKind::PATH_LITERAL => source_token.text().to_string(),
             SyntaxKind::URI_LITERAL => literals::eval_uri(source_token.text()),
             _ => return Value::Undefined,

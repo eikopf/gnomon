@@ -34,6 +34,7 @@ enum Command {
         /// Path to the root .gnomon file.
         file: PathBuf,
     },
+    // r[impl cli.subcommand.eval]
     /// Evaluate a .gnomon file and print its lowered document.
     Eval {
         /// Path to the file to evaluate.
@@ -93,6 +94,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Command::Eval { file } => {
+            // r[impl cli.subcommand.eval.no-file]
             let text = match std::fs::read_to_string(&file) {
                 Ok(s) => s,
                 Err(e) => {
@@ -115,6 +117,7 @@ fn main() -> ExitCode {
             diagnostics.extend(result.diagnostics);
             diagnostics.sort_by_key(|d| d.range.start());
 
+            // r[impl cli.subcommand.eval.output]
             let has_errors = print_diagnostics(&db, &diagnostics);
 
             println!("{}", result.value.render(&db));
