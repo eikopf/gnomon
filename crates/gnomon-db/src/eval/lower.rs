@@ -10,6 +10,14 @@ use super::types::{Blame, Blamed, Record, Value};
 use crate::input::SourceFile;
 use crate::queries::Diagnostic;
 
+#[derive(Debug, Clone, Copy)]
+enum ImportFormat {
+    Gnomon,
+    ICalendar,
+    JSCalendar,
+    Infer,
+}
+
 pub struct LowerCtx<'db> {
     db: &'db dyn crate::Db,
     source: SourceFile,
@@ -548,16 +556,24 @@ impl<'db> LowerCtx<'db> {
             None => return Value::Undefined,
         };
 
-        // Check format specifier — only gnomon supported for now.
-        if let Some(fmt_tok) = import.format() {
-            if fmt_tok.kind() != SyntaxKind::GNOMON_KW {
-                self.emit_diagnostic(
-                    fmt_tok.text_range(),
-                    format!("import format `{}` is not yet supported", fmt_tok.text()),
-                );
-                return Value::Undefined;
+        // r[impl expr.import.format+2]
+        // Determine the import format: explicit keyword or inferred from extension.
+        let format = if let Some(fmt_tok) = import.format() {
+            match fmt_tok.kind() {
+                SyntaxKind::GNOMON_KW => ImportFormat::Gnomon,
+                SyntaxKind::ICALENDAR_KW => ImportFormat::ICalendar,
+                SyntaxKind::JSCALENDAR_KW => ImportFormat::JSCalendar,
+                _ => {
+                    self.emit_diagnostic(
+                        fmt_tok.text_range(),
+                        format!("unknown import format `{}`", fmt_tok.text()),
+                    );
+                    return Value::Undefined;
+                }
             }
-        }
+        } else {
+            ImportFormat::Infer
+        };
 
         let path_str = match source_token.kind() {
             SyntaxKind::STRING_LITERAL => literals::eval_string(source_token.text()),
@@ -570,6 +586,20 @@ impl<'db> LowerCtx<'db> {
                 return Value::Undefined;
             }
             _ => return Value::Undefined,
+        };
+
+        // Infer format from extension if not specified.
+        let format = match format {
+            ImportFormat::Infer => {
+                if path_str.ends_with(".ics") {
+                    ImportFormat::ICalendar
+                } else if path_str.ends_with(".json") {
+                    ImportFormat::JSCalendar
+                } else {
+                    ImportFormat::Gnomon
+                }
+            }
+            f => f,
         };
 
         // r[impl lexer.path.relative]
@@ -607,17 +637,45 @@ impl<'db> LowerCtx<'db> {
             }
         };
 
-        // Create SourceFile input and evaluate.
-        let target_source = SourceFile::new(self.db, target_path.clone(), content);
-        let mut new_stack = self.import_stack.clone();
-        new_stack.push(target_path);
+        match format {
+            ImportFormat::Gnomon => {
+                // Create SourceFile input and evaluate.
+                let target_source = SourceFile::new(self.db, target_path.clone(), content);
+                let mut new_stack = self.import_stack.clone();
+                new_stack.push(target_path);
 
-        let result = super::evaluate_with_import_stack(self.db, target_source, new_stack);
+                let result =
+                    super::evaluate_with_import_stack(self.db, target_source, new_stack);
 
-        // Collect diagnostics from the imported file.
-        self.diagnostics.extend(result.diagnostics);
+                // Collect diagnostics from the imported file.
+                self.diagnostics.extend(result.diagnostics);
 
-        result.value
+                result.value
+            }
+            ImportFormat::ICalendar => {
+                let decl_id = self.make_decl_id(0, DeclKind::Expr);
+                let blame = self.make_blame(decl_id, &FieldPath::root());
+                match super::import::translate_icalendar(self.db, &content, &blame) {
+                    Ok(value) => value,
+                    Err(msg) => {
+                        self.emit_diagnostic(source_token.text_range(), msg);
+                        Value::Undefined
+                    }
+                }
+            }
+            ImportFormat::JSCalendar => {
+                let decl_id = self.make_decl_id(0, DeclKind::Expr);
+                let blame = self.make_blame(decl_id, &FieldPath::root());
+                match super::import::translate_jscalendar(self.db, &content, &blame) {
+                    Ok(value) => value,
+                    Err(msg) => {
+                        self.emit_diagnostic(source_token.text_range(), msg);
+                        Value::Undefined
+                    }
+                }
+            }
+            ImportFormat::Infer => unreachable!(),
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────

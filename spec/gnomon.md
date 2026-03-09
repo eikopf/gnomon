@@ -522,8 +522,8 @@ An import expression loads and evaluates a source file, producing a Gnomon value
 r[expr.import.eval]
 An `import` expression MUST evaluate the referenced source and produce the resulting Gnomon value. For Gnomon sources, this is the result of evaluating the file. For foreign formats, this is the translation of the foreign data into the Gnomon data model.
 
-r[expr.import.format]
-If the `as` keyword is present, the implementation MUST interpret the source in the specified format. If the `as` keyword is absent, the implementation MUST infer the format from the file extension or content.
+r[expr.import.format+2]
+If the `as` keyword is present, the implementation MUST interpret the source in the specified format. If the `as` keyword is absent, the implementation MUST infer the format from the file extension: `.ics` maps to `icalendar`, `.json` maps to `jscalendar`, and all other extensions are treated as `gnomon`.
 
 r[expr.import.eager]
 Import expressions MUST be evaluated eagerly.
@@ -720,10 +720,10 @@ If the `trigger` record has an `at` field, its value MUST be a local datetime re
 
 ### Events
 
-Events represent scheduled amounts of time on a calendar; they are required to start at a certain point in time and usually have a non-zero duration. They have two mandatory fields, `name` and `start`; these have as values a name and a local datetime respectively.
+Events represent scheduled amounts of time on a calendar; they are required to start at a certain point in time and usually have a non-zero duration. Every event must be identifiable by either a `name` or a `uid`.
 
-r[record.event.name]
-Records representing events MUST have a field named `name` whose value is a name.
+r[record.event.name+2]
+Records representing events MUST have a field named `name` whose value is a name, unless the record has a `uid` field.
 
 r[record.event.start]
 Records representing events MUST have a field named `start` whose value is a local datetime.
@@ -746,10 +746,10 @@ If present, the `end_time_zone` field on an event MUST have a string value that 
 
 ### Tasks
 
-Tasks represent action items, assignments, TODO items, or other similar objects. They can be given a specific relationship to time, but by default nothing is required except a `name` field whose value is a name.
+Tasks represent action items, assignments, TODO items, or other similar objects. They can be given a specific relationship to time, but every task must be identifiable by either a `name` or a `uid`.
 
-r[record.task.name]
-Records representing tasks MUST have a field named `name` whose value is a name.
+r[record.task.name+2]
+Records representing tasks MUST have a field named `name` whose value is a name, unless the record has a `uid` field.
 
 The `uid` field on tasks is always assigned a value. If omitted, it is derived per `r[model.calendar.uid.derivation]`.
 

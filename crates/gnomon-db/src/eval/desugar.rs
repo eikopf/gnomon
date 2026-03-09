@@ -177,7 +177,7 @@ pub fn desugar_every<'db>(
 }
 
 /// Build a `Record` from a slice of `(field_name_str, value)` pairs.
-fn make_record<'db>(
+pub(super) fn make_record<'db>(
     db: &'db dyn crate::Db,
     fields: &[(&str, Value<'db>)],
     blame: &Blame<'db>,

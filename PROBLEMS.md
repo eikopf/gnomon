@@ -10,9 +10,9 @@ Implemented. See Resolved section.
 
 The spec marks this as `TODO: describe the evaluation semantics of recurrence rules`. The evaluation semantics are well-defined by RFC 5545 / JSCalendar, so the question is not *what* they should be but *when and how* they are applied. Shape-checking validates recurrence rule records against their type definitions (`r[model.shape.*]`). What remains is the actual expansion of a rule into occurrences, and the treatment of `by_day` and similar fields as sets rather than lists.
 
-### 3. Foreign Format Imports (specified, not yet implemented)
+### ~~3. Foreign Format Imports~~ (resolved)
 
-The spec defines `import` expressions with `as icalendar` and `as jscalendar` format specifiers (`r[expr.import.format]`). Only Gnomon-to-Gnomon imports are implemented. Importing iCalendar (`.ics`) or JSCalendar (`.json`) files — translating foreign data into the Gnomon data model — is not yet supported. URI-based imports are also unimplemented.
+Implemented. See Resolved section.
 
 ### 4. Querying / Filtering (future)
 
@@ -37,7 +37,7 @@ Removed. See Resolved section.
 **Near-term (concrete next steps):**
 1. ~~Implement UUIDv5 derivation for entries missing explicit `uid` (#1)~~ (done)
 2. Implement recurrence rule evaluation — expanding a rule into occurrences (#2)
-3. Implement iCalendar/JSCalendar import (#3)
+3. ~~Implement iCalendar/JSCalendar import (#3)~~ (done)
 
 **Longer-term (design work):**
 4. Design query system (#4)
@@ -69,3 +69,4 @@ The following issues from the original analysis have been fully addressed:
 - **Binding semantics** — superseded by `let` bindings (`r[expr.let.*]`, `r[syntax.file.let]`)
 - **Shape-checking** — specified via `r[model.shape.*]` and implemented in `eval/shape.rs`; validates calendar, event, task, and all nested record types; error-resilient, recursive, preserves open records; wired into merge pipeline
 - **Orphaned `local` keyword** — removed from `r[lexer.keyword.weak]`; the "local datetime" concept (`r[lexer.datetime.local]`) remains but needs no keyword since locality is the default (absence of `time_zone` field)
+- **Foreign format imports** — iCalendar (`.ics`) and JSCalendar (`.json`) imports implemented via `calico` and `serde_json` respectively; format inferred from file extension or specified with `as icalendar`/`as jscalendar`; `name` requirement relaxed to allow entries with `uid` but no `name` (`r[record.event.name+2]`, `r[record.task.name+2]`, `r[expr.import.format+2]`)

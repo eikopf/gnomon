@@ -93,7 +93,7 @@ const CALENDAR_FIELDS: [FieldDef; 1] = [FieldDef {
 
 // ── Event-specific fields ──────────────────────────────────
 
-// r[impl record.event.name]
+// r[impl record.event.name+2]
 // r[impl record.event.start]
 // r[impl record.event.uid+2]
 // r[impl record.event.duration]
@@ -102,7 +102,7 @@ const CALENDAR_FIELDS: [FieldDef; 1] = [FieldDef {
 const EVENT_FIELDS: [FieldDef; 6] = [
     FieldDef {
         name: "name",
-        required: true,
+        required: false,
         expected: ExpectedType::Name,
     },
     FieldDef {
@@ -134,7 +134,7 @@ const EVENT_FIELDS: [FieldDef; 6] = [
 
 // ── Task-specific fields ───────────────────────────────────
 
-// r[impl record.task.name]
+// r[impl record.task.name+2]
 // r[impl record.task.uid+2]
 // r[impl record.task.due]
 // r[impl record.task.start]
@@ -144,7 +144,7 @@ const EVENT_FIELDS: [FieldDef; 6] = [
 const TASK_FIELDS: [FieldDef; 7] = [
     FieldDef {
         name: "name",
-        required: true,
+        required: false,
         expected: ExpectedType::Name,
     },
     FieldDef {
@@ -607,6 +607,8 @@ pub fn check_calendar_shape<'db>(
 
     // Check each entry.
     let type_key = FieldName::new(db, "type".to_string());
+    let name_key = FieldName::new(db, "name".to_string());
+    let uid_key = FieldName::new(db, "uid".to_string());
     for entry in &calendar.entries {
         let source = entry.blame.decl.source(db);
         let entry_type = entry.value.get(&type_key).map(|v| &v.value);
@@ -622,6 +624,15 @@ pub fn check_calendar_shape<'db>(
                     "event",
                     &mut diagnostics,
                 );
+                // r[impl record.event.name+2]
+                if entry.value.get(&name_key).is_none() && entry.value.get(&uid_key).is_none() {
+                    diagnostics.push(Diagnostic {
+                        source,
+                        range: rowan::TextRange::default(),
+                        severity: Severity::Error,
+                        message: "event: must have either `name` or `uid`".into(),
+                    });
+                }
             }
             Some(Value::String(t)) if t == "task" => {
                 check_fields(db, &entry.value, &TASK_FIELDS, source, "task", &mut diagnostics);
@@ -633,6 +644,15 @@ pub fn check_calendar_shape<'db>(
                     "task",
                     &mut diagnostics,
                 );
+                // r[impl record.task.name+2]
+                if entry.value.get(&name_key).is_none() && entry.value.get(&uid_key).is_none() {
+                    diagnostics.push(Diagnostic {
+                        source,
+                        range: rowan::TextRange::default(),
+                        severity: Severity::Error,
+                        message: "task: must have either `name` or `uid`".into(),
+                    });
+                }
             }
             Some(Value::String(t)) => {
                 diagnostics.push(Diagnostic {
@@ -1082,7 +1102,7 @@ mod tests {
     }
 
     #[test]
-    fn event_missing_name() {
+    fn event_missing_name_and_uid() {
         let db = Database::default();
         let diags = shape_diags(
             &db,
@@ -1095,8 +1115,8 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("event: missing required field `name`")),
-            "expected name error, got: {diags:?}"
+            diags.iter().any(|d| d.contains("must have either `name` or `uid`")),
+            "expected name-or-uid error, got: {diags:?}"
         );
     }
 
@@ -1120,7 +1140,7 @@ mod tests {
     }
 
     #[test]
-    fn task_missing_name() {
+    fn task_missing_name_and_uid() {
         let db = Database::default();
         let diags = shape_diags(
             &db,
@@ -1133,8 +1153,8 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("task: missing required field `name`")),
-            "expected name error, got: {diags:?}"
+            diags.iter().any(|d| d.contains("must have either `name` or `uid`")),
+            "expected name-or-uid error, got: {diags:?}"
         );
     }
 
@@ -1290,12 +1310,12 @@ mod tests {
                 "#,
             )],
         );
-        // Should report: calendar missing uid, event missing name, event missing start
-        let has_uid = diags.iter().any(|d| d.contains("missing required field `uid`"));
-        let has_name = diags.iter().any(|d| d.contains("missing required field `name`"));
+        // Should report: calendar missing uid, event missing start, event missing name-or-uid
+        let has_cal_uid = diags.iter().any(|d| d.contains("calendar: missing required field `uid`"));
         let has_start = diags.iter().any(|d| d.contains("missing required field `start`"));
+        let has_name_or_uid = diags.iter().any(|d| d.contains("must have either `name` or `uid`"));
         assert!(
-            has_uid && has_name && has_start,
+            has_cal_uid && has_start && has_name_or_uid,
             "expected all three violations, got: {diags:?}"
         );
     }
@@ -1319,6 +1339,44 @@ mod tests {
         assert!(
             diags.is_empty(),
             "expected no diagnostics for valid input, got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn event_with_uid_but_no_name_is_valid() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+                event { uid: "imported-uid", start: 2026-03-01T09:00, title: "From iCal" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.is_empty(),
+            "expected no diagnostics for event with uid but no name, got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn task_with_uid_but_no_name_is_valid() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+                task { uid: "imported-uid", title: "From JSCal" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.is_empty(),
+            "expected no diagnostics for task with uid but no name, got: {diags:?}"
         );
     }
 

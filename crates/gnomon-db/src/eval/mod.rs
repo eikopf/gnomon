@@ -1,4 +1,5 @@
 pub mod desugar;
+pub mod import;
 pub mod interned;
 pub mod literals;
 pub mod lower;
@@ -649,6 +650,167 @@ mod tests {
             assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "key"), Value::Integer(99));
+        }
+
+        // ── iCalendar import ────────────────────────────────────
+
+        #[test]
+        fn import_icalendar_explicit_format() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let ics_path = dir.path().join("cal.ics");
+            std::fs::write(
+                &ics_path,
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\
+                 BEGIN:VEVENT\r\nUID:ev1\r\nSUMMARY:Lunch\r\n\
+                 DTSTART:20260315T120000\r\nDURATION:PT1H\r\n\
+                 END:VEVENT\r\nEND:VCALENDAR\r\n",
+            )
+            .unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./cal.ics as icalendar").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            match &result.value {
+                Value::List(items) => {
+                    assert_eq!(items.len(), 1);
+                    match &items[0].value {
+                        Value::Record(r) => {
+                            assert_eq!(get_field(r, &db, "type"), Value::String("event".into()));
+                            assert_eq!(get_field(r, &db, "uid"), Value::String("ev1".into()));
+                            assert_eq!(get_field(r, &db, "title"), Value::String("Lunch".into()));
+                        }
+                        _ => panic!("expected record"),
+                    }
+                }
+                _ => panic!("expected list"),
+            }
+        }
+
+        #[test]
+        fn import_icalendar_inferred_from_extension() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let ics_path = dir.path().join("cal.ics");
+            std::fs::write(
+                &ics_path,
+                "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\
+                 BEGIN:VEVENT\r\nUID:ev-infer\r\nSUMMARY:Inferred\r\n\
+                 DTSTART:20260101T090000\r\nDURATION:PT30M\r\n\
+                 END:VEVENT\r\nEND:VCALENDAR\r\n",
+            )
+            .unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            // No `as icalendar` — should infer from .ics extension.
+            std::fs::write(&main_path, "import ./cal.ics").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            match &result.value {
+                Value::List(items) => {
+                    assert_eq!(items.len(), 1);
+                    match &items[0].value {
+                        Value::Record(r) => {
+                            assert_eq!(get_field(r, &db, "uid"), Value::String("ev-infer".into()));
+                        }
+                        _ => panic!("expected record"),
+                    }
+                }
+                _ => panic!("expected list"),
+            }
+        }
+
+        // ── JSCalendar import ───────────────────────────────────
+
+        #[test]
+        fn import_jscalendar_explicit_format() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let json_path = dir.path().join("event.json");
+            std::fs::write(
+                &json_path,
+                r#"{ "@type": "Event", "uid": "js1", "title": "JS Event", "start": "2026-03-15T10:00:00", "duration": "PT2H" }"#,
+            )
+            .unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./event.json as jscalendar").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "type"), Value::String("event".into()));
+            assert_eq!(get_field(r, &db, "uid"), Value::String("js1".into()));
+            assert_eq!(get_field(r, &db, "title"), Value::String("JS Event".into()));
+            assert!(has_field(r, &db, "start"));
+            assert!(has_field(r, &db, "duration"));
+        }
+
+        #[test]
+        fn import_jscalendar_inferred_from_extension() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let json_path = dir.path().join("task.json");
+            std::fs::write(
+                &json_path,
+                r#"{ "@type": "Task", "uid": "t-infer", "title": "Inferred Task" }"#,
+            )
+            .unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            // No `as jscalendar` — should infer from .json extension.
+            std::fs::write(&main_path, "import ./task.json").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            let r = expect_record(&result);
+            assert_eq!(get_field(r, &db, "type"), Value::String("task".into()));
+            assert_eq!(get_field(r, &db, "uid"), Value::String("t-infer".into()));
+        }
+
+        #[test]
+        fn import_icalendar_malformed() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let ics_path = dir.path().join("bad.ics");
+            std::fs::write(&ics_path, "this is not valid icalendar").unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./bad.ics as icalendar").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(
+                result.diagnostics.iter().any(|d| d.message.contains("iCalendar parse error")),
+                "expected parse error, got: {:?}",
+                result.diagnostics,
+            );
+        }
+
+        #[test]
+        fn import_jscalendar_malformed() {
+            let dir = tempfile::tempdir().unwrap();
+
+            let json_path = dir.path().join("bad.json");
+            std::fs::write(&json_path, "not json{").unwrap();
+
+            let main_path = dir.path().join("main.gnomon");
+            std::fs::write(&main_path, "import ./bad.json as jscalendar").unwrap();
+
+            let db = Database::default();
+            let result = eval_file(&db, &main_path);
+            assert!(
+                result.diagnostics.iter().any(|d| d.message.contains("JSCalendar JSON parse error")),
+                "expected parse error, got: {:?}",
+                result.diagnostics,
+            );
         }
     }
 }

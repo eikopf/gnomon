@@ -8,6 +8,8 @@ gnomon-parser = { path = "../gnomon-parser" }
 salsa = "0.26"
 rowan = "0.16"
 uuid = { version = "1", features = ["v5"] }
+calico = "0.4"
+serde_json = "1"
 
 [dev-dependencies]
 expect-test = "1"
