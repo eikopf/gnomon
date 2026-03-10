@@ -126,7 +126,7 @@ fn check_duration_units(text: &str, range: rowan::TextRange, errors: &mut Vec<Sy
     }
 }
 
-// r[verify lexer.date.valid]
+// r[impl lexer.date.valid]
 fn check_date(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
     // Format: YYYY-MM-DD
     let parts: Vec<&str> = text.split('-').collect();
@@ -154,7 +154,7 @@ fn check_date(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>
     }
 }
 
-// r[verify lexer.month-day.valid]
+// r[impl lexer.month-day.valid]
 fn check_month_day(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
     // Format: MM-DD
     let parts: Vec<&str> = text.split('-').collect();
@@ -256,6 +256,7 @@ fn check_minute_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxE
     }
 }
 
+// r[impl lexer.time.leap-second]
 fn check_second_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
     if let Ok(sec) = s.parse::<u32>() {
         if sec > 60 {

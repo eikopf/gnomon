@@ -85,6 +85,7 @@ fn shape_fields(shape: Shape) -> &'static [FieldDef] {
 // ── Calendar fields ────────────────────────────────────────
 
 // r[impl model.calendar.uid]
+// r[impl field.uid.type]
 const CALENDAR_FIELDS: [FieldDef; 1] = [FieldDef {
     name: "uid",
     required: true,
@@ -189,6 +190,8 @@ const TASK_FIELDS: [FieldDef; 7] = [
 
 // r[impl field.title.type]
 // r[impl field.description.type]
+// r[impl field.description.type.string]
+// r[impl field.description.type.record]
 // r[impl field.time-zone.type]
 // r[impl field.priority.type]
 // r[impl field.privacy.type]
@@ -602,6 +605,7 @@ pub fn check_calendar_shape<'db>(
         &mut diagnostics,
     );
 
+    // r[impl model.entry.type]
     // Check each entry.
     let type_key = FieldName::new(db, "type".to_string());
     let name_key = FieldName::new(db, "name".to_string());

@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
+// r[impl lexer.input-format.utf-8]
 #[salsa::input]
 pub struct SourceFile {
     #[returns(ref)]

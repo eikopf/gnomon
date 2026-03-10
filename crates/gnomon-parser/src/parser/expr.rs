@@ -168,6 +168,7 @@ impl Parser {
     }
 
     /// Parse an import expression: `import source [as format]`
+    // r[impl expr.import.syntax+2]
     fn parse_import_expr(&mut self) {
         self.start_node(SyntaxKind::IMPORT_EXPR);
         self.bump_remap(SyntaxKind::IMPORT_KW);
@@ -190,6 +191,7 @@ impl Parser {
     }
 
     /// Parse a let expression: `let ident = expr in expr`
+    // r[impl expr.let.syntax]
     fn parse_let_expr(&mut self) {
         self.start_node(SyntaxKind::LET_EXPR);
         self.bump_remap(SyntaxKind::LET_KW);

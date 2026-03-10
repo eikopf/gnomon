@@ -38,11 +38,13 @@ pub fn eval_signed_integer(text: &str) -> Option<i64> {
 }
 
 /// Strip angle brackets from a URI literal: `<scheme:body>` → `scheme:body`.
+// r[impl lexer.uri.desugar]
 pub fn eval_uri(text: &str) -> String {
     text[1..text.len() - 1].to_string()
 }
 
 /// Strip the `#` prefix from an atom literal: `#confirmed` → `confirmed`.
+// r[impl lexer.atom.desugar]
 pub fn eval_atom(text: &str) -> String {
     text[1..].to_string()
 }
@@ -63,6 +65,7 @@ pub fn parse_date_components(text: &str) -> Option<(u64, u64, u64)> {
 }
 
 /// Parsed time components (hour, minute, second). Seconds default to 0 if absent.
+// r[impl lexer.time.default-second]
 pub fn parse_time_components(text: &str) -> Option<(u64, u64, u64)> {
     // Format: HH:MM or HH:MM:SS
     let mut parts = text.splitn(3, ':');
@@ -89,6 +92,7 @@ pub struct DurationParts {
 /// Parse a duration literal into its component parts.
 ///
 /// Format: `[+|-]<int>w<int>d<int>h<int>m<int>s` (each unit optional, at least one present).
+// r[impl lexer.duration.part.default]
 pub fn parse_duration_components(text: &str) -> Option<DurationParts> {
     let (positive, rest) = match text.as_bytes().first()? {
         b'+' => (true, &text[1..]),

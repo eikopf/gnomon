@@ -624,6 +624,7 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    // r[impl expr.import.format.uri]
     fn lower_import_uri(
         &mut self,
         url: &str,
@@ -690,6 +691,7 @@ impl<'db> LowerCtx<'db> {
         };
 
         // r[impl lexer.path.relative]
+        // r[impl model.import.resolution]
         // Resolve relative to the directory containing the importing file.
         let base_dir = self
             .source
@@ -727,6 +729,7 @@ impl<'db> LowerCtx<'db> {
         self.dispatch_import_content(format, content, target_path, source_range)
     }
 
+    // r[impl model.import.transparent]
     fn dispatch_import_content(
         &mut self,
         format: ImportFormat,

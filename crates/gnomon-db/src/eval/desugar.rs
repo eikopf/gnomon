@@ -7,6 +7,7 @@ use super::literals;
 use super::types::{Blame, Blamed, Record, Value};
 
 /// Desugar a date literal (`YYYY-MM-DD`) into `{ year, month, day }`.
+// r[impl lexer.date.desugar]
 pub fn desugar_date<'db>(
     db: &'db dyn crate::Db,
     text: &str,
@@ -22,6 +23,7 @@ pub fn desugar_date<'db>(
 }
 
 /// Desugar a month-day literal (`MM-DD`) into `{ month, day }`.
+// r[impl lexer.month-day.desugar]
 pub fn desugar_month_day<'db>(
     db: &'db dyn crate::Db,
     text: &str,
@@ -39,6 +41,7 @@ pub fn desugar_month_day<'db>(
 }
 
 /// Desugar a time literal (`HH:MM` or `HH:MM:SS`) into `{ hour, minute, second }`.
+// r[impl lexer.time.desugar]
 pub fn desugar_time<'db>(
     db: &'db dyn crate::Db,
     text: &str,
@@ -54,6 +57,7 @@ pub fn desugar_time<'db>(
 }
 
 /// Desugar a datetime literal (`YYYY-MM-DDTHH:MM:SS`) into `{ date: {..}, time: {..} }`.
+// r[impl lexer.datetime.desugar]
 pub fn desugar_datetime<'db>(
     db: &'db dyn crate::Db,
     text: &str,
@@ -80,6 +84,8 @@ pub fn desugar_date_and_time<'db>(
 }
 
 /// Desugar a duration literal into `{ weeks, days, hours, minutes, seconds }`.
+// r[impl lexer.duration.desugar]
+// r[impl lexer.duration.sign]
 pub fn desugar_duration<'db>(
     db: &'db dyn crate::Db,
     text: &str,
@@ -111,6 +117,7 @@ pub fn desugar_duration<'db>(
 }
 
 /// Desugar an `every` expression into a recurrence rule record.
+// r[impl record.rrule.every.desugar.equivalence]
 pub fn desugar_every<'db>(
     db: &'db dyn crate::Db,
     every: &gnomon_parser::ast::EveryExpr,
@@ -118,9 +125,11 @@ pub fn desugar_every<'db>(
 ) -> Option<Value<'db>> {
     let mut fields: Vec<(&str, Value<'db>)> = Vec::new();
 
+    // r[impl record.rrule.every.desugar.subject.day]
     // Determine frequency and additional fields from the subject.
     if every.day_kw().is_some() {
         fields.push(("frequency", Value::String("daily".into())));
+    // r[impl record.rrule.every.desugar.subject.year-on-month-day]
     } else if every.year_kw().is_some() {
         fields.push(("frequency", Value::String("yearly".into())));
         if let Some(md_token) = every.month_day() {
@@ -155,6 +164,7 @@ pub fn desugar_every<'db>(
         return None;
     }
 
+    // r[impl record.rrule.every.desugar.terminator+2]
     // Terminator -> termination field.
     if every.until_kw().is_some() {
         let termination = if let Some(dt_token) = every.until_datetime() {

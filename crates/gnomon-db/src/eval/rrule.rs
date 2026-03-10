@@ -141,6 +141,7 @@ fn record_to_rule(
         _ => return Err("invalid 'week_start' field: expected string".into()),
     };
 
+    // r[impl record.rrule.eval.termination]
     let termination = match get_field(db, record, "termination") {
         Some(Value::Integer(n)) => gnomon_rrule::Termination::Count(n),
         Some(Value::Record(r)) => {

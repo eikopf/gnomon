@@ -28,6 +28,7 @@ impl<'a> OccurrenceIter<'a> {
     }
 }
 
+// r[impl record.rrule.eval.empty]
 impl Iterator for OccurrenceIter<'_> {
     type Item = DateTime;
 
@@ -36,6 +37,7 @@ impl Iterator for OccurrenceIter<'_> {
             return None;
         }
 
+        // r[impl record.rrule.eval.dtstart]
         // DTSTART is always the first occurrence (RFC 5545)
         if !self.started {
             self.started = true;

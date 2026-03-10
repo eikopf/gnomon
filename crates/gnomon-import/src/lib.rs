@@ -46,6 +46,7 @@ fn make_record(fields: &[(&str, ImportValue)]) -> ImportRecord {
 
 // ── iCalendar ────────────────────────────────────────────────
 
+// r[impl model.import.icalendar.components]
 /// Translate an iCalendar string into a calendar record.
 ///
 /// The result is a single record with `type: "calendar"`, VCALENDAR-level
@@ -80,6 +81,7 @@ pub fn translate_icalendar(content: &str) -> Result<ImportValue, String> {
     Ok(ImportValue::List(result))
 }
 
+// r[impl model.import.icalendar.calendar]
 /// Translate VCALENDAR-level properties into a calendar record.
 fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
@@ -144,6 +146,7 @@ fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
     record
 }
 
+// r[impl model.import.icalendar.event]
 /// Translate a VEVENT component into an event record.
 fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
@@ -176,6 +179,7 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
         if let Some(val) = translate_signed_duration(&dur.value) {
             fields.push(("duration", val));
         }
+    // r[impl model.import.icalendar.event.duration-fallback]
     } else if let (Some(dtstart), Some(dtend)) = (event.dtstart(), event.dtend()) {
         if let Some(val) = compute_duration_from_endpoints(&dtstart.value, &dtend.value) {
             fields.push(("duration", val));
@@ -357,6 +361,7 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
     record
 }
 
+// r[impl model.import.icalendar.task]
 /// Translate a VTODO component into a task record.
 fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
@@ -693,6 +698,7 @@ fn translate_request_status(rs: &RequestStatus) -> ImportValue {
     ImportValue::String(s)
 }
 
+// r[impl model.import.icalendar.rrule]
 /// Translate an RRULE property to a recurrence rule record.
 fn translate_rrule(rrule: &RRule) -> ImportValue {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
@@ -1068,6 +1074,8 @@ impl HasXProperties for calico::model::component::Todo {
     }
 }
 
+// r[impl model.import.icalendar.extension]
+// r[impl model.import.preserve]
 /// Append x-property fields to a record.
 fn append_x_properties<T: HasXProperties>(component: &T, record: &mut ImportRecord) {
     for (key, value) in component.x_property_pairs() {
@@ -1078,6 +1086,7 @@ fn append_x_properties<T: HasXProperties>(component: &T, record: &mut ImportReco
 
 // ── JSCalendar ───────────────────────────────────────────────
 
+// r[impl model.import.jscalendar.types]
 /// Translate a JSCalendar JSON string into an import value.
 ///
 /// A single JSCalendar object produces `ImportValue::Record`; an array produces `ImportValue::List`.
@@ -1145,6 +1154,7 @@ fn translate_task_or_event(toe: &TaskOrEvent<serde_json::Value>) -> ImportRecord
     }
 }
 
+// r[impl model.import.jscalendar.event]
 /// Translate a JSCalendar Event into an import record.
 fn translate_js_event(event: &JsEvent<serde_json::Value>) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
@@ -1209,6 +1219,7 @@ fn translate_js_event(event: &JsEvent<serde_json::Value>) -> ImportRecord {
 
     let mut record = make_record(&fields);
 
+    // r[impl model.import.jscalendar.vendor]
     // Vendor (unknown) properties.
     for (key, val) in event.vendor_property_iter() {
         record.insert(key.to_string(), translate_json_value(val));
@@ -1217,6 +1228,7 @@ fn translate_js_event(event: &JsEvent<serde_json::Value>) -> ImportRecord {
     record
 }
 
+// r[impl model.import.jscalendar.task]
 /// Translate a JSCalendar Task into an import record.
 fn translate_js_task(task: &JsTask<serde_json::Value>) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
@@ -1357,6 +1369,7 @@ fn translate_jscal_duration(dur: &JsDuration) -> ImportValue {
     }
 }
 
+// r[impl model.import.jscalendar.priority]
 /// Convert a `jscalendar` Priority to a u64 (0-9).
 fn js_priority_to_u64(p: &JsPriority) -> u64 {
     match p {
@@ -1560,6 +1573,7 @@ fn datetime_to_total_seconds<M>(dt: &DateTime<M>) -> u64 {
     days * 86400 + time_secs
 }
 
+// r[impl model.import.icalendar.status]
 /// Translate a calico Status to an import string value.
 fn translate_status(status: &Status) -> ImportValue {
     let s = match status {
@@ -1576,6 +1590,7 @@ fn translate_status(status: &Status) -> ImportValue {
     ImportValue::String(s.into())
 }
 
+// r[impl model.import.icalendar.priority]
 /// Convert a calico Priority to a u64 (0-9).
 fn priority_to_u64(p: &calico::model::primitive::Priority) -> u64 {
     use calico::model::primitive::Priority;

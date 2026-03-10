@@ -63,6 +63,7 @@ enum LogosToken {
     //    time, duration > signed-int > integer) ───────────────────
 
     // r[impl lexer.datetime]
+    // r[impl lexer.datetime.local]
     #[regex(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?")]
     DatetimeLiteral,
 
@@ -96,6 +97,7 @@ enum LogosToken {
     IntegerLiteral,
 
     // r[impl lexer.uri]
+    // r[impl lexer.uri.no-multiline]
     #[regex(r"<[a-zA-Z][a-zA-Z0-9+.\-]*:[^>\n]*>")]
     UriLiteral,
 
@@ -116,6 +118,7 @@ enum LogosToken {
     Undefined,
 
     // r[impl lexer.path]
+    // r[impl lexer.path.slash]
     #[regex(r"(\.\.|\.)/[a-zA-Z0-9_\-./]*|[a-zA-Z_][a-zA-Z0-9_\-.]*(/[a-zA-Z0-9_\-./]*)+")]
     PathLiteral,
 

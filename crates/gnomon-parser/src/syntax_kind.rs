@@ -111,6 +111,7 @@ pub enum SyntaxKind {
 }
 
 impl SyntaxKind {
+    // r[impl lexer.whitespace.insignificant]
     pub fn is_trivia(self) -> bool {
         matches!(self, SyntaxKind::WHITESPACE | SyntaxKind::COMMENT)
     }

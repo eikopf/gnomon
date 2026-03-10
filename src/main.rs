@@ -6,8 +6,13 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, parse, validate_calendar};
 
 // r[impl cli.root]
+// r[impl cli.syntax]
 // r[impl cli.option.help]
 // r[impl cli.option.help.short]
+// r[impl cli.option.help.xor]
+// r[impl cli.option.help.behavior.root]
+// r[impl cli.option.help.behavior.subcommand]
+// r[impl cli.option.order]
 #[derive(Parser)]
 #[command(
     name = "gnomon",
@@ -20,6 +25,9 @@ struct Cli {
 }
 
 // r[impl cli.subcommand.help]
+// r[impl cli.subcommand.help.root]
+// r[impl cli.subcommand.help.penultimate]
+// r[impl cli.subcommand.order]
 #[derive(Subcommand)]
 enum Command {
     // r[impl cli.subcommand.parse]
@@ -53,6 +61,7 @@ fn main() -> ExitCode {
     // r[impl cli.option.version]
     // r[impl cli.option.version.short]
     // r[impl cli.option.version.behavior]
+    // r[impl cli.option.version.xor]
     let matches = Cli::command()
         .version(env!("CARGO_PKG_VERSION"))
         .disable_version_flag(true)
