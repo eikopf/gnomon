@@ -84,6 +84,7 @@ pub struct ByMonth {
     pub leap: bool,
 }
 
+// r[impl record.rrule.eval.skip.default]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Skip {
     #[default]

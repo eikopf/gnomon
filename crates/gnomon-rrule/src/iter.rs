@@ -75,6 +75,7 @@ impl Iterator for OccurrenceIter<'_> {
             self.buffer_pos = 0;
             self.period_index += 1;
 
+            // r[impl record.rrule.eval.retry]
             // If expansion returned nothing, we've likely overflowed
             if self.buffer.is_empty() {
                 // Try a few more periods before giving up (sparse rules may skip periods)
@@ -299,6 +300,7 @@ mod tests {
         ]);
     }
 
+    // r[verify record.rrule.eval.negative.weekday]
     #[test]
     fn monthly_last_friday() {
         let rule = RecurrenceRule {
@@ -408,6 +410,8 @@ mod tests {
         assert_eq!(infinite.count(), None);
     }
 
+    // r[verify record.rrule.eval.skip.default]
+    // r[verify record.rrule.eval.retry]
     #[test]
     fn monthly_31st_skip_omit() {
         // Every month on the 31st, skip=omit → months without 31 days are skipped
@@ -486,6 +490,7 @@ mod tests {
         assert_eq!(dates[4], dt(2025, 1, 2, 0, 0, 0));
     }
 
+    // r[verify record.rrule.eval.by-set-pos]
     #[test]
     fn by_set_pos_last_weekday_of_month() {
         // Last weekday (Mon-Fri) of each month

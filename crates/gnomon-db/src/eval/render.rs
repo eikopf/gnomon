@@ -35,6 +35,12 @@ fn write_indent(w: &mut dyn fmt::Write, n: usize) -> fmt::Result {
     Ok(())
 }
 
+// r[impl cli.subcommand.eval.output.string]
+// r[impl cli.subcommand.eval.output.integer]
+// r[impl cli.subcommand.eval.output.bool]
+// r[impl cli.subcommand.eval.output.undefined]
+// r[impl cli.subcommand.eval.output.name]
+// r[impl cli.subcommand.eval.output.list]
 fn write_value<'db>(
     w: &mut dyn fmt::Write,
     value: &Value<'db>,
@@ -63,6 +69,7 @@ fn write_value<'db>(
     }
 }
 
+// r[impl cli.subcommand.eval.output.record]
 fn write_record<'db>(
     w: &mut dyn fmt::Write,
     record: &Record<'db>,
@@ -220,6 +227,8 @@ mod tests {
         check("calendar {}", expect![[r#"{}"#]]);
     }
 
+    // r[verify cli.subcommand.eval.output.string]
+    // r[verify cli.subcommand.eval.output.record]
     #[test]
     fn calendar_with_fields() {
         check(
@@ -232,6 +241,8 @@ mod tests {
         );
     }
 
+    // r[verify cli.subcommand.eval.output.name]
+    // r[verify cli.subcommand.eval.output.integer]
     #[test]
     fn event_short_form() {
         check(
@@ -264,6 +275,7 @@ mod tests {
         );
     }
 
+    // r[verify cli.subcommand.eval.output.list]
     #[test]
     fn list_values() {
         check(
@@ -300,6 +312,7 @@ mod tests {
         );
     }
 
+    // r[verify cli.subcommand.eval.output.bool]
     #[test]
     fn boolean_and_integer_values() {
         check(
@@ -308,6 +321,18 @@ mod tests {
                 {
                     priority: 5,
                     show_without_time: true,
+                }"#]],
+        );
+    }
+
+    // r[verify cli.subcommand.eval.output.undefined]
+    #[test]
+    fn undefined_value() {
+        check(
+            "calendar { optional: undefined }",
+            expect![[r#"
+                {
+                    optional: undefined,
                 }"#]],
         );
     }

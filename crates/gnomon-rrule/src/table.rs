@@ -33,6 +33,9 @@ pub struct ByDayContext {
 ///
 /// Returns the action (Expand, Limit, or NA) for a given BY* rule at a given frequency.
 /// BYDAY has conditional behavior depending on which other BY* rules are present.
+// r[impl record.rrule.eval.table]
+// r[impl record.rrule.eval.table.by-day-yearly]
+// r[impl record.rrule.eval.table.by-day-monthly]
 pub fn action(rule: ByRule, freq: Frequency, ctx: &ByDayContext) -> Action {
     use Action::*;
     use ByRule::*;
@@ -124,6 +127,7 @@ mod tests {
         }
     }
 
+    // r[verify record.rrule.eval.table]
     #[test]
     fn by_month_actions() {
         assert_eq!(action(ByRule::ByMonth, Yearly, &no_ctx()), Expand);
@@ -171,6 +175,7 @@ mod tests {
         assert_eq!(action(ByRule::ByDay, Hourly, &no_ctx()), Limit);
     }
 
+    // r[verify record.rrule.eval.table.by-day-monthly]
     #[test]
     fn by_day_monthly_conditional() {
         // Without BYMONTHDAY → Expand
@@ -180,6 +185,7 @@ mod tests {
         assert_eq!(action(ByRule::ByDay, Monthly, &ctx), Limit);
     }
 
+    // r[verify record.rrule.eval.table.by-day-yearly]
     #[test]
     fn by_day_yearly_conditional() {
         // No other BY* → Expand (within entire year)

@@ -85,6 +85,7 @@ fn apply_by_month(
     }
 }
 
+// r[impl record.rrule.eval.by-week-no]
 fn apply_by_week_no(
     candidates: &[DateTime],
     by_week_no: &[i8],
@@ -197,6 +198,8 @@ fn apply_by_month_day(
     }
 }
 
+// r[impl record.rrule.eval.by-day.monthly-expand]
+// r[impl record.rrule.eval.by-day.yearly-expand]
 fn apply_by_day(
     candidates: &[DateTime],
     by_day: &[NDay],
@@ -406,6 +409,7 @@ fn apply_by_second(
     }
 }
 
+// r[impl record.rrule.eval.by-set-pos]
 fn apply_by_set_pos(candidates: &[DateTime], by_set_pos: &[i32]) -> Vec<DateTime> {
     if by_set_pos.is_empty() {
         return candidates.to_vec();
@@ -484,6 +488,7 @@ mod tests {
         assert_eq!(c, vec![dt(2024, 1, 1, 10, 0, 0), dt(2024, 1, 15, 10, 0, 0)]);
     }
 
+    // r[verify record.rrule.eval.by-day.monthly-expand]
     #[test]
     fn expand_monthly_by_day_expand() {
         let r = RecurrenceRule {
@@ -513,6 +518,7 @@ mod tests {
         assert_eq!(c, vec![dt(2024, 1, 12, 10, 0, 0)]);
     }
 
+    // r[verify record.rrule.eval.negative.month-day]
     #[test]
     fn expand_monthly_last_day() {
         let r = RecurrenceRule {
@@ -525,6 +531,7 @@ mod tests {
         assert_eq!(expand_period(&r, start, 1), vec![dt(2024, 2, 29, 10, 0, 0)]);
     }
 
+    // r[verify record.rrule.eval.by-day.yearly-expand]
     #[test]
     fn expand_yearly_by_month_by_day() {
         let r = RecurrenceRule {
@@ -553,6 +560,7 @@ mod tests {
         assert_eq!(c, vec![dt(2024, 3, 15, 10, 0, 0), dt(2024, 6, 15, 10, 0, 0)]);
     }
 
+    // r[verify record.rrule.eval.by-set-pos]
     #[test]
     fn by_set_pos_first_and_last() {
         let r = RecurrenceRule {
@@ -590,6 +598,7 @@ mod tests {
         assert_eq!(c, vec![dt(2024, 1, 1, 9, 0, 0), dt(2024, 1, 1, 9, 30, 0)]);
     }
 
+    // r[verify record.rrule.eval.negative.year-day]
     #[test]
     fn expand_yearly_by_year_day() {
         let r = RecurrenceRule {

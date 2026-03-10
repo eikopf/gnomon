@@ -4,6 +4,7 @@ use crate::types::{Date, DateTime, Frequency, Skip, Weekday};
 
 /// Resolve a negative year-day to positive (1-based).
 /// `days_in_year` is 365 or 366.
+// r[impl record.rrule.eval.negative.year-day]
 pub fn resolve_year_day(day: i16, days_in_year: i16) -> Option<i16> {
     if day > 0 && day <= days_in_year {
         Some(day)
@@ -17,6 +18,7 @@ pub fn resolve_year_day(day: i16, days_in_year: i16) -> Option<i16> {
 
 /// Resolve a negative month-day to positive (1-based).
 /// `days_in_month` is 28..=31.
+// r[impl record.rrule.eval.negative.month-day]
 pub fn resolve_month_day(day: i8, days_in_month: i8) -> Option<i8> {
     if day > 0 && day <= days_in_month {
         Some(day)
@@ -30,6 +32,11 @@ pub fn resolve_month_day(day: i8, days_in_month: i8) -> Option<i8> {
 
 /// Advance from dtstart by `interval * period_index` periods at the given frequency.
 /// Uses absolute computation to avoid month-clamping drift.
+// r[impl record.rrule.eval.advance.yearly]
+// r[impl record.rrule.eval.advance.monthly]
+// r[impl record.rrule.eval.advance.weekly]
+// r[impl record.rrule.eval.advance.daily]
+// r[impl record.rrule.eval.advance.sub-daily]
 pub fn advance_period(
     dtstart: DateTime,
     freq: Frequency,
@@ -83,6 +90,9 @@ fn add_seconds(dt: DateTime, seconds: i64) -> Option<DateTime> {
 
 /// Apply skip strategy for an invalid date (e.g., Jan 31 → Feb).
 /// Returns None for Skip::Omit when the date is invalid.
+// r[impl record.rrule.eval.skip.omit]
+// r[impl record.rrule.eval.skip.forward]
+// r[impl record.rrule.eval.skip.backward]
 pub fn apply_skip(year: i16, month: i8, day: i8, skip: Skip) -> Option<Date> {
     if let Ok(d) = Date::new(year, month, day) {
         return Some(d);
@@ -118,6 +128,7 @@ pub fn days_in_year(year: i16) -> i16 {
 
 /// Find the nth occurrence of a weekday in a given month.
 /// `nth` is 1-based positive or negative. Positive counts from start, negative from end.
+// r[impl record.rrule.eval.negative.weekday]
 pub fn nth_weekday_in_month(year: i16, month: i8, nth: i8, weekday: Weekday) -> Option<Date> {
     let jwd = weekday.to_jiff();
     if nth > 0 {
@@ -200,6 +211,8 @@ pub fn nth_weekday_in_year(year: i16, nth: i8, weekday: Weekday) -> Option<Date>
 
 /// Return all dates in a given ISO week number for a year.
 /// `week_no` is 1-based (or negative from end). `week_start` determines which day starts the week.
+// r[impl record.rrule.eval.by-week-no]
+// r[impl record.rrule.eval.iso-week]
 pub fn dates_in_iso_week(year: i16, week_no: i8, week_start: Weekday) -> Vec<Date> {
     let total_weeks = iso_weeks_in_year(year, week_start);
     let resolved = if week_no > 0 {
@@ -276,6 +289,7 @@ mod tests {
         assert_eq!(resolve_year_day(366, 366), Some(366));
     }
 
+    // r[verify record.rrule.eval.negative.year-day]
     #[test]
     fn resolve_year_day_negative() {
         assert_eq!(resolve_year_day(-1, 365), Some(365));
@@ -284,6 +298,7 @@ mod tests {
         assert_eq!(resolve_year_day(-366, 366), Some(1));
     }
 
+    // r[verify record.rrule.eval.negative.month-day]
     #[test]
     fn resolve_month_day_tests() {
         assert_eq!(resolve_month_day(1, 31), Some(1));
@@ -294,6 +309,7 @@ mod tests {
         assert_eq!(resolve_month_day(-29, 28), None);
     }
 
+    // r[verify record.rrule.eval.advance.yearly]
     #[test]
     fn advance_period_yearly() {
         let dt = DateTime::new(2024, 1, 31, 10, 0, 0, 0).unwrap();
@@ -301,6 +317,7 @@ mod tests {
         assert_eq!(next, DateTime::new(2025, 1, 31, 10, 0, 0, 0).unwrap());
     }
 
+    // r[verify record.rrule.eval.advance.monthly]
     #[test]
     fn advance_period_monthly_clamp() {
         let dt = DateTime::new(2024, 1, 31, 10, 0, 0, 0).unwrap();
@@ -308,6 +325,7 @@ mod tests {
         assert_eq!(next, DateTime::new(2024, 2, 29, 10, 0, 0, 0).unwrap());
     }
 
+    // r[verify record.rrule.eval.advance.daily]
     #[test]
     fn advance_period_daily() {
         let dt = DateTime::new(2024, 12, 30, 0, 0, 0, 0).unwrap();
@@ -315,6 +333,7 @@ mod tests {
         assert_eq!(next, DateTime::new(2025, 1, 2, 0, 0, 0, 0).unwrap());
     }
 
+    // r[verify record.rrule.eval.advance.weekly]
     #[test]
     fn advance_period_weekly() {
         let dt = DateTime::new(2024, 1, 1, 0, 0, 0, 0).unwrap();
@@ -322,6 +341,7 @@ mod tests {
         assert_eq!(next, DateTime::new(2024, 1, 15, 0, 0, 0, 0).unwrap());
     }
 
+    // r[verify record.rrule.eval.advance.sub-daily]
     #[test]
     fn advance_period_hourly() {
         let dt = DateTime::new(2024, 1, 1, 23, 0, 0, 0).unwrap();
@@ -335,17 +355,20 @@ mod tests {
         assert_eq!(d, Date::new(2024, 3, 15).unwrap());
     }
 
+    // r[verify record.rrule.eval.skip.omit]
     #[test]
     fn apply_skip_omit_invalid() {
         assert_eq!(apply_skip(2024, 2, 30, Skip::Omit), None);
     }
 
+    // r[verify record.rrule.eval.skip.forward]
     #[test]
     fn apply_skip_forward() {
         let d = apply_skip(2024, 2, 30, Skip::Forward).unwrap();
         assert_eq!(d, Date::new(2024, 3, 1).unwrap());
     }
 
+    // r[verify record.rrule.eval.skip.backward]
     #[test]
     fn apply_skip_backward() {
         let d = apply_skip(2024, 2, 30, Skip::Backward).unwrap();
@@ -379,6 +402,7 @@ mod tests {
         assert_eq!(d, Date::new(2024, 1, 9).unwrap());
     }
 
+    // r[verify record.rrule.eval.negative.weekday]
     #[test]
     fn nth_weekday_in_month_negative() {
         let d = nth_weekday_in_month(2024, 1, -1, Weekday::Friday).unwrap();
@@ -403,6 +427,8 @@ mod tests {
         assert_eq!(mondays.len(), 53); // 2024 starts on Monday
     }
 
+    // r[verify record.rrule.eval.by-week-no]
+    // r[verify record.rrule.eval.iso-week]
     #[test]
     fn dates_in_iso_week_basic() {
         // ISO week 1 of 2024 (Monday start): Jan 1 is Monday
