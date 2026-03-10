@@ -229,6 +229,24 @@ fn eval_missing_file() {
 
 // ── Help/version exclusivity ────────────────────────────────
 
+// r[verify cli.option.help.xor]
+#[test]
+fn help_with_version_is_error() {
+    gnomon()
+        .args(["--help", "--version"])
+        .assert()
+        .failure();
+}
+
+// r[verify cli.option.version.xor]
+#[test]
+fn version_with_help_is_error() {
+    gnomon()
+        .args(["--version", "--help"])
+        .assert()
+        .failure();
+}
+
 // r[verify cli.option.help.behavior.subcommand]
 #[test]
 fn help_flag_on_subcommand() {

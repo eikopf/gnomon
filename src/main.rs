@@ -11,16 +11,16 @@ use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, ev
 // r[impl cli.option.help.short]
 // r[impl cli.option.help.behavior.root]
 // r[impl cli.option.help.behavior.subcommand]
+// r[impl cli.option.help.xor]
 // r[impl cli.option.order]
 #[derive(Parser)]
 #[command(
     name = "gnomon",
-    about = "A plaintext calendaring language",
-    arg_required_else_help = true
+    about = "A plaintext calendaring language"
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 // r[impl cli.subcommand.help]
@@ -61,21 +61,60 @@ fn main() -> ExitCode {
     // r[impl cli.option.version]
     // r[impl cli.option.version.short]
     // r[impl cli.option.version.behavior]
-    let matches = Cli::command()
-        .version(env!("CARGO_PKG_VERSION"))
+    // r[impl cli.option.version.xor]
+    let mut cmd = Cli::command()
+        .disable_help_flag(true)
         .disable_version_flag(true)
         .arg(
             clap::Arg::new("version")
                 .short('v')
                 .long("version")
-                .action(clap::ArgAction::Version)
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("help")
                 .help("Print version"),
         )
-        .get_matches();
+        .arg(
+            clap::Arg::new("help")
+                .short('h')
+                .long("help")
+                .action(clap::ArgAction::SetTrue)
+                .conflicts_with("version")
+                .help("Print help"),
+        );
+
+    // Re-add --help to subcommands with the standard early-exit behavior.
+    // (disable_help_flag propagates to subcommands, so we must restore it.)
+    for sub in cmd.get_subcommands_mut() {
+        *sub = sub.clone().arg(
+            clap::Arg::new("help")
+                .short('h')
+                .long("help")
+                .action(clap::ArgAction::Help)
+                .help("Print help"),
+        );
+    }
+
+    let matches = cmd.clone().get_matches();
+
+    if matches.get_flag("version") {
+        println!("gnomon {}", env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
+    if matches.get_flag("help") {
+        cmd.print_help().unwrap();
+        println!();
+        return ExitCode::SUCCESS;
+    }
 
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
-    match cli.command {
+    let Some(command) = cli.command else {
+        let _ = cmd.write_help(&mut std::io::stderr());
+        eprintln!();
+        return ExitCode::FAILURE;
+    };
+
+    match command {
         Command::Parse { file } => {
             // r[impl cli.subcommand.parse.no-file]
             // r[impl lexer.input-format.malformed]
@@ -320,6 +359,8 @@ mod cli_coverage {
     // r[verify cli.subcommand.order]
     // r[verify cli.subcommand.help.root]
     // r[verify cli.subcommand.help.penultimate]
+    // r[verify cli.option.help.xor]
+    // r[verify cli.option.version.xor]
     // r[verify lexer.input-format.malformed]
     // r[verify lexer.input-format.utf-8]
     // See tests/cli.rs for the actual integration tests.
