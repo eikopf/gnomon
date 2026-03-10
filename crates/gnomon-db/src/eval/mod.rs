@@ -591,12 +591,11 @@ mod tests {
     #[test]
     fn concat_binds_tighter_than_comparison() {
         let db = Database::default();
-        // [1] ++ [2] == [3] should parse as ([1] ++ [2]) == [3] and produce Bool
-        // (not a type error from trying to compare, then concat the result)
-        let result = eval(&db, "[1] ++ [2] == [3]");
+        // [1] ++ [2] == [1, 2] should parse as ([1] ++ [2]) == [1, 2] → true
+        let result = eval(&db, "[1] ++ [2] == [1, 2]");
         match &result.value {
-            Value::Bool(b) => assert!(!*b), // [1, 2] != [3]
-            other => panic!("expected Bool, got: {other:?}"),
+            Value::Bool(b) => assert!(*b),
+            other => panic!("expected Bool(true), got: {other:?}"),
         }
     }
 

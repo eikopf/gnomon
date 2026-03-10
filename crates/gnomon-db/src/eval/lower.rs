@@ -837,9 +837,33 @@ impl<'db> LowerCtx<'db> {
     }
 }
 
-/// Structural equality for values (used by == and !=).
+/// Structural equality for values (used by `==` and `!=`).
+///
+/// Compares values by their content, ignoring blame metadata on nested
+/// `Blamed` wrappers so that e.g. `[1] ++ [2] == [1, 2]` is `true`.
 fn values_equal(a: &Value, b: &Value) -> bool {
-    a == b
+    match (a, b) {
+        (Value::String(a), Value::String(b)) => a == b,
+        (Value::Integer(a), Value::Integer(b)) => a == b,
+        (Value::SignedInteger(a), Value::SignedInteger(b)) => a == b,
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        (Value::Undefined, Value::Undefined) => true,
+        (Value::Name(a), Value::Name(b)) => a == b,
+        (Value::Path(a), Value::Path(b)) => a == b,
+        (Value::List(a), Value::List(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(x, y)| values_equal(&x.value, &y.value))
+        }
+        (Value::Record(a), Value::Record(b)) => {
+            a.0.len() == b.0.len()
+                && a.0.iter().zip(b.0.iter()).all(|((ka, va), (kb, vb))| {
+                    ka == kb && values_equal(&va.value, &vb.value)
+                })
+        }
+        _ => false,
+    }
 }
 
 fn value_type_name(v: &Value) -> &'static str {
