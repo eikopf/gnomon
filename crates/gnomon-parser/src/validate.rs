@@ -341,6 +341,7 @@ mod tests {
 
     // ── Integer overflow ─────────────────────────────────────────
 
+    // r[verify lexer.integer.max]
     #[test]
     fn integer_overflow() {
         let errs = validate("calendar { count: 99999999999999999999999 }");
@@ -356,6 +357,7 @@ mod tests {
 
     // ── Signed integer overflow ──────────────────────────────────
 
+    // r[verify lexer.signed-integer.range]
     #[test]
     fn signed_integer_overflow() {
         let errs = validate("calendar { offset: -99999999999999999999999 }");
@@ -371,6 +373,7 @@ mod tests {
 
     // ── String multiline ─────────────────────────────────────────
 
+    // r[verify lexer.string.no-multiline]
     #[test]
     fn string_multiline() {
         let errs = validate("calendar { uid: \"line1\nline2\" }");
@@ -386,6 +389,7 @@ mod tests {
 
     // ── Duration unit multiplicity ───────────────────────────────
 
+    // r[verify lexer.duration.part.multiplicity]
     #[test]
     fn duration_duplicate_unit() {
         let errs = validate("event @e 2026-01-01T00:00 1h2h \"x\"");
@@ -493,6 +497,7 @@ mod tests {
 
     // ── Duplicate record keys ────────────────────────────────────
 
+    // r[verify expr.record.keys]
     #[test]
     fn duplicate_keys() {
         let errs = validate("calendar { uid: \"a\", uid: \"b\" }");

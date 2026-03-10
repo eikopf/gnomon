@@ -307,6 +307,7 @@ mod tests {
         result.diagnostics.iter().map(|d| d.message.clone()).collect()
     }
 
+    // r[verify model.calendar.entries]
     #[test]
     fn single_file_with_calendar_and_event() {
         let db = Database::default();
@@ -351,6 +352,7 @@ mod tests {
         );
     }
 
+    // r[verify model.calendar.entries]
     #[test]
     fn calendar_with_multiple_entries() {
         let db = Database::default();
@@ -420,6 +422,7 @@ mod tests {
         );
     }
 
+    // r[verify model.calendar.singular]
     #[test]
     fn no_calendar_declaration_error() {
         let db = Database::default();
@@ -430,6 +433,7 @@ mod tests {
         assert!(diags.iter().any(|d| d.contains("no calendar declaration")));
     }
 
+    // r[verify model.calendar.singular]
     #[test]
     fn duplicate_calendar_error() {
         let db = Database::default();
@@ -445,6 +449,7 @@ mod tests {
             .any(|d| d.contains("duplicate calendar declaration")));
     }
 
+    // r[verify model.name.unique]
     #[test]
     fn name_collision() {
         let db = Database::default();
@@ -461,6 +466,7 @@ mod tests {
             .any(|d| d.contains("name @meeting already defined")));
     }
 
+    // r[verify model.name.unique]
     #[test]
     fn name_collision_different_kinds() {
         let db = Database::default();
@@ -766,6 +772,8 @@ mod tests {
 
     // ── UID derivation tests ─────────────────────────────────
 
+    // r[verify model.calendar.uid]
+    // r[verify model.calendar.uid.derivation]
     #[test]
     fn uid_derived_for_entry_without_uid() {
         let db = Database::default();
@@ -790,6 +798,7 @@ mod tests {
         }
     }
 
+    // r[verify model.calendar.uid.derivation]
     #[test]
     fn uid_derivation_is_deterministic() {
         let db = Database::default();
@@ -807,6 +816,7 @@ mod tests {
         assert_eq!(uid1, uid2);
     }
 
+    // r[verify record.event.uid+2]
     #[test]
     fn uid_not_overwritten_when_explicit() {
         let db = Database::default();
@@ -824,6 +834,7 @@ mod tests {
         assert_eq!(uid, &Value::String("custom-uid".into()));
     }
 
+    // r[verify model.calendar.uid.derivation.non-uuid]
     #[test]
     fn uid_derivation_skipped_for_non_uuid_calendar_uid() {
         let db = Database::default();
@@ -867,6 +878,8 @@ mod tests {
 
     // ── Recurrence expansion tests ──────────────────────────
 
+    // r[verify record.rrule.eval.expansion]
+    // r[verify record.rrule.syntax]
     #[test]
     fn entry_with_valid_recur_validates_cleanly() {
         let db = Database::default();
@@ -903,6 +916,7 @@ mod tests {
         assert!(entry.get(&occ_key).is_none(), "should not have occurrences");
     }
 
+    // r[verify record.rrule.eval.start-required]
     #[test]
     fn entry_with_recur_but_no_start_produces_error() {
         let db = Database::default();
@@ -923,6 +937,7 @@ mod tests {
         );
     }
 
+    // r[verify record.rrule.eval.infinite]
     #[test]
     fn infinite_rule_validates_cleanly() {
         let db = Database::default();
@@ -943,6 +958,7 @@ mod tests {
         );
     }
 
+    // r[verify record.rrule.n-day]
     #[test]
     fn weekly_recurrence_validates_cleanly() {
         let db = Database::default();

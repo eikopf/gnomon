@@ -1086,6 +1086,8 @@ mod tests {
 
     // ── Missing mandatory fields ────────────────────────────
 
+    // r[verify model.shape.required]
+    // r[verify model.calendar.uid]
     #[test]
     fn calendar_missing_uid() {
         let db = Database::default();
@@ -1096,6 +1098,8 @@ mod tests {
         );
     }
 
+    // r[verify model.shape.required]
+    // r[verify record.event.name+2]
     #[test]
     fn event_missing_name_and_uid() {
         let db = Database::default();
@@ -1115,6 +1119,8 @@ mod tests {
         );
     }
 
+    // r[verify model.shape.required]
+    // r[verify record.event.start]
     #[test]
     fn event_missing_start() {
         let db = Database::default();
@@ -1134,6 +1140,8 @@ mod tests {
         );
     }
 
+    // r[verify model.shape.required]
+    // r[verify record.task.name+2]
     #[test]
     fn task_missing_name_and_uid() {
         let db = Database::default();
@@ -1155,6 +1163,8 @@ mod tests {
 
     // ── Type mismatches ─────────────────────────────────────
 
+    // r[verify model.shape.type]
+    // r[verify field.priority.type]
     #[test]
     fn event_priority_wrong_type() {
         let db = Database::default();
@@ -1174,6 +1184,7 @@ mod tests {
         );
     }
 
+    // r[verify field.priority.type]
     #[test]
     fn event_priority_out_of_range() {
         let db = Database::default();
@@ -1193,6 +1204,7 @@ mod tests {
         );
     }
 
+    // r[verify model.shape.type]
     #[test]
     fn calendar_uid_wrong_type() {
         let db = Database::default();
@@ -1208,6 +1220,8 @@ mod tests {
 
     // ── Enum violations ─────────────────────────────────────
 
+    // r[verify model.shape.enum]
+    // r[verify record.event.status]
     #[test]
     fn event_status_invalid() {
         let db = Database::default();
@@ -1227,6 +1241,8 @@ mod tests {
         );
     }
 
+    // r[verify model.shape.enum]
+    // r[verify field.privacy.type]
     #[test]
     fn event_privacy_invalid() {
         let db = Database::default();
@@ -1248,6 +1264,7 @@ mod tests {
 
     // ── Open records ────────────────────────────────────────
 
+    // r[verify model.shape.open]
     #[test]
     fn unknown_fields_no_diagnostics() {
         let db = Database::default();
@@ -1269,6 +1286,9 @@ mod tests {
 
     // ── Recursive checking ──────────────────────────────────
 
+    // r[verify model.shape.recursive]
+    // r[verify record.virtual-location.syntax]
+    // r[verify record.virtual-location.uri]
     #[test]
     fn nested_virtual_location_missing_uri() {
         let db = Database::default();
@@ -1292,6 +1312,7 @@ mod tests {
 
     // ── Multiple violations ─────────────────────────────────
 
+    // r[verify model.shape.diagnostic]
     #[test]
     fn multiple_violations_all_reported() {
         let db = Database::default();
@@ -1317,6 +1338,7 @@ mod tests {
 
     // ── Valid records ───────────────────────────────────────
 
+    // r[verify field.recur.type]
     #[test]
     fn valid_calendar_no_diagnostics() {
         let db = Database::default();
@@ -1337,6 +1359,8 @@ mod tests {
         );
     }
 
+    // r[verify record.event.name+2]
+    // r[verify record.event.uid+2]
     #[test]
     fn event_with_uid_but_no_name_is_valid() {
         let db = Database::default();
@@ -1356,6 +1380,8 @@ mod tests {
         );
     }
 
+    // r[verify record.task.name+2]
+    // r[verify record.task.uid+2]
     #[test]
     fn task_with_uid_but_no_name_is_valid() {
         let db = Database::default();
@@ -1375,6 +1401,16 @@ mod tests {
         );
     }
 
+    // r[verify field.title.type]
+    // r[verify field.priority.type]
+    // r[verify field.privacy.type]
+    // r[verify field.free-busy-status.type]
+    // r[verify field.show-without-time.type]
+    // r[verify field.color.type]
+    // r[verify field.keywords.type]
+    // r[verify field.categories.type]
+    // r[verify field.locale.type]
+    // r[verify field.time-zone.type]
     #[test]
     fn valid_event_with_all_common_fields() {
         let db = Database::default();
@@ -1404,6 +1440,8 @@ mod tests {
         );
     }
 
+    // r[verify record.task.progress]
+    // r[verify record.task.percent-complete]
     #[test]
     fn task_with_progress_valid() {
         let db = Database::default();
@@ -1423,6 +1461,8 @@ mod tests {
         );
     }
 
+    // r[verify record.task.progress]
+    // r[verify model.shape.enum]
     #[test]
     fn task_progress_invalid_enum() {
         let db = Database::default();
@@ -1442,6 +1482,7 @@ mod tests {
         );
     }
 
+    // r[verify record.task.percent-complete]
     #[test]
     fn task_percent_complete_out_of_range() {
         let db = Database::default();
@@ -1463,6 +1504,7 @@ mod tests {
 
     // ── Shape-checking wired into validation ────────────────
 
+    // r[verify model.shape.diagnostic]
     #[test]
     fn shape_errors_appear_in_check_diagnostics() {
         let db = Database::default();

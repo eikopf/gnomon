@@ -447,6 +447,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.syntax]
     fn simple_daily_rule_conversion() {
         let db = Database::default();
         let blame = test_blame(&db);
@@ -462,6 +463,8 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.n-day]
+    // r[verify record.rrule.weekday]
     fn weekly_rule_with_by_day() {
         let db = Database::default();
         let blame = test_blame(&db);
@@ -488,6 +491,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.eval.termination]
     fn rule_with_count_termination() {
         let db = Database::default();
         let blame = test_blame(&db);
@@ -502,6 +506,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.eval.termination]
     fn rule_with_until_termination() {
         let db = Database::default();
         let blame = test_blame(&db);
@@ -524,6 +529,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.syntax]
     fn invalid_frequency_error() {
         let db = Database::default();
         let blame = test_blame(&db);

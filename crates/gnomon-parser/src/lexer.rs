@@ -398,18 +398,23 @@ mod tests {
 
     // ── Path literals ─────────────────────────────────────────────
 
+    // r[verify lexer.path]
+    // r[verify lexer.path.relative]
     #[test]
     fn path_relative_dot() {
         let toks = kinds("./foo.gnomon");
         assert_eq!(toks, vec![(SyntaxKind::PATH_LITERAL, "./foo.gnomon")]);
     }
 
+    // r[verify lexer.path]
+    // r[verify lexer.path.relative]
     #[test]
     fn path_relative_dotdot() {
         let toks = kinds("../bar/baz");
         assert_eq!(toks, vec![(SyntaxKind::PATH_LITERAL, "../bar/baz")]);
     }
 
+    // r[verify lexer.path]
     #[test]
     fn path_named() {
         let toks = kinds("lib/core.gnomon");

@@ -380,6 +380,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.every.desugar.subject.day]
     fn every_day_desugar() {
         let db = Database::default();
         let blame = test_blame(&db);
@@ -412,6 +413,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.every.desugar.subject.weekday+2]
     fn every_weekday_desugar() {
         let db = Database::default();
         let blame = test_blame(&db);
@@ -462,6 +464,7 @@ mod tests {
     }
 
     #[test]
+    // r[verify record.rrule.every.desugar.subject.year-on-month-day]
     fn every_year_on_month_day_desugar() {
         let db = Database::default();
         let blame = test_blame(&db);

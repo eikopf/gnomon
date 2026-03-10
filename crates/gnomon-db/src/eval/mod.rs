@@ -133,6 +133,7 @@ mod tests {
 
     // ── Calendar ─────────────────────────────────────────────────
 
+    // r[verify decl.calendar.desugar]
     #[test]
     fn empty_calendar() {
         let db = Database::default();
@@ -141,6 +142,7 @@ mod tests {
         assert!(r.0.is_empty());
     }
 
+    // r[verify decl.calendar.desugar]
     #[test]
     fn calendar_with_string_field() {
         let db = Database::default();
@@ -151,6 +153,8 @@ mod tests {
 
     // ── Event (prefix form) ──────────────────────────────────────
 
+    // r[verify decl.event.desugar]
+    // r[verify model.entry.type.infer]
     #[test]
     fn event_prefix_form() {
         let db = Database::default();
@@ -176,6 +180,8 @@ mod tests {
 
     // ── Event (short form) ───────────────────────────────────────
 
+    // r[verify decl.short-event.desugar]
+    // r[verify record.event.duration]
     #[test]
     fn event_short_form() {
         let db = Database::default();
@@ -193,6 +199,7 @@ mod tests {
         assert!(matches!(get_field(r, &db, "duration"), Value::Record(_)));
     }
 
+    // r[verify decl.short-event.desugar]
     #[test]
     fn event_short_form_with_body() {
         let db = Database::default();
@@ -205,6 +212,8 @@ mod tests {
         assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
     }
 
+    // r[verify decl.short-event.desugar]
+    // r[verify record.event.start]
     #[test]
     fn event_short_form_date_plus_time() {
         let db = Database::default();
@@ -224,6 +233,8 @@ mod tests {
 
     // ── Task ─────────────────────────────────────────────────────
 
+    // r[verify decl.task.desugar]
+    // r[verify model.entry.type.infer]
     #[test]
     fn task_prefix_form() {
         let db = Database::default();
@@ -235,6 +246,8 @@ mod tests {
         assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
     }
 
+    // r[verify decl.short-task.desugar]
+    // r[verify record.task.due]
     #[test]
     fn task_short_form() {
         let db = Database::default();
@@ -251,6 +264,7 @@ mod tests {
         assert!(matches!(get_field(r, &db, "due"), Value::Record(_)));
     }
 
+    // r[verify decl.short-task.desugar]
     #[test]
     fn task_short_form_no_datetime() {
         let db = Database::default();
@@ -436,6 +450,7 @@ mod tests {
 
     // ── New expression forms ─────────────────────────────────────
 
+    // r[verify expr.let.scope]
     #[test]
     fn let_expression() {
         let db = Database::default();
@@ -444,6 +459,7 @@ mod tests {
         assert_eq!(get_field(r, &db, "count"), Value::Integer(42));
     }
 
+    // r[verify expr.literal.identifier]
     #[test]
     fn identifier_expression() {
         let db = Database::default();
@@ -458,6 +474,7 @@ mod tests {
         assert_eq!(result.value, Value::Integer(42));
     }
 
+    // r[verify expr.op.concat]
     #[test]
     fn binary_concat_lists() {
         let db = Database::default();
@@ -473,6 +490,7 @@ mod tests {
         }
     }
 
+    // r[verify expr.op.merge]
     #[test]
     fn binary_merge_records() {
         let db = Database::default();
@@ -482,6 +500,7 @@ mod tests {
         assert_eq!(get_field(r, &db, "b"), Value::Integer(2));
     }
 
+    // r[verify expr.op.eq]
     #[test]
     fn binary_equality() {
         let db = Database::default();
@@ -495,6 +514,7 @@ mod tests {
         assert_eq!(result.value, Value::Bool(false));
     }
 
+    // r[verify expr.op.field]
     #[test]
     fn field_access() {
         let db = Database::default();
@@ -502,6 +522,7 @@ mod tests {
         assert_eq!(result.value, Value::Integer(42));
     }
 
+    // r[verify expr.op.index]
     #[test]
     fn index_access() {
         let db = Database::default();
@@ -509,6 +530,8 @@ mod tests {
         assert_eq!(result.value, Value::Integer(20));
     }
 
+    // r[verify syntax.file.let]
+    // r[verify syntax.file.body]
     #[test]
     fn file_level_let_binding() {
         let db = Database::default();
@@ -524,6 +547,9 @@ mod tests {
         assert_eq!(get_field(r, &db, "name"), Value::Name("e".into()));
     }
 
+    // r[verify syntax.file.let]
+    // r[verify syntax.file.body]
+    // r[verify expr.let.sequential]
     #[test]
     fn file_level_let_used_in_expr_body() {
         let db = Database::default();
@@ -561,6 +587,8 @@ mod tests {
             super::super::evaluate(db, sf)
         }
 
+        // r[verify expr.import.eval]
+        // r[verify expr.import.eager]
         #[test]
         fn import_gnomon_file() {
             let dir = tempfile::tempdir().unwrap();
@@ -582,6 +610,7 @@ mod tests {
             assert_eq!(get_field(r, &db, "x"), Value::Integer(42));
         }
 
+        // r[verify expr.import.cycle]
         #[test]
         fn import_circular_detected() {
             let dir = tempfile::tempdir().unwrap();
@@ -641,6 +670,7 @@ mod tests {
             assert_eq!(get_field(r, &db, "name"), Value::String("custom".into()));
         }
 
+        // r[verify expr.import.format+2]
         #[test]
         fn import_with_as_gnomon() {
             let dir = tempfile::tempdir().unwrap();
@@ -660,6 +690,7 @@ mod tests {
 
         // ── iCalendar import ────────────────────────────────────
 
+        // r[verify expr.import.format+2]
         #[test]
         fn import_icalendar_explicit_format() {
             let dir = tempfile::tempdir().unwrap();
@@ -697,6 +728,7 @@ mod tests {
             }
         }
 
+        // r[verify expr.import.format+2]
         #[test]
         fn import_icalendar_inferred_from_extension() {
             let dir = tempfile::tempdir().unwrap();
@@ -735,6 +767,7 @@ mod tests {
 
         // ── JSCalendar import ───────────────────────────────────
 
+        // r[verify expr.import.format+2]
         #[test]
         fn import_jscalendar_explicit_format() {
             let dir = tempfile::tempdir().unwrap();
@@ -760,6 +793,7 @@ mod tests {
             assert!(has_field(r, &db, "duration"));
         }
 
+        // r[verify expr.import.format+2]
         #[test]
         fn import_jscalendar_inferred_from_extension() {
             let dir = tempfile::tempdir().unwrap();
