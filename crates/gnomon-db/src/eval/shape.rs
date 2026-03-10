@@ -1517,4 +1517,434 @@ mod tests {
             "expected uid error in check diagnostics, got: {diags:?}"
         );
     }
+
+    // ── Common entry field type violations ───────────────────
+
+    // r[verify field.description.type]
+    #[test]
+    fn description_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { description: 42 }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("description")),
+            "expected description type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.locations.type]
+    #[test]
+    fn locations_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { locations: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("locations")),
+            "expected locations type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.virtual-locations.type]
+    #[test]
+    fn virtual_locations_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { virtual_locations: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("virtual_locations")),
+            "expected virtual_locations type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.links.type]
+    #[test]
+    fn links_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { links: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("links")),
+            "expected links type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.related-to.type]
+    #[test]
+    fn related_to_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { related_to: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("related_to")),
+            "expected related_to type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.participants.type]
+    #[test]
+    fn participants_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { participants: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("participants")),
+            "expected participants type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.alerts.type]
+    #[test]
+    fn alerts_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { alerts: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("alerts")),
+            "expected alerts type error, got: {diags:?}"
+        );
+    }
+
+    // ── Sub-record structure tests ──────────────────────────
+
+    // r[verify record.alert.syntax]
+    // r[verify record.alert.trigger]
+    #[test]
+    fn alert_missing_trigger() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    alerts: [ { action: "display" } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("trigger")),
+            "expected trigger required error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.link.syntax]
+    // r[verify record.link.href]
+    #[test]
+    fn link_missing_href() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    links: [ { title: "Example" } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("href")),
+            "expected href required error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.link.display]
+    #[test]
+    fn link_display_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    links: [ { href: "https://example.com", display: 42 } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("display")),
+            "expected display type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.location.syntax]
+    #[test]
+    fn location_valid() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    locations: [ { name: "HQ", coordinates: "40.7,-74.0" } ]
+                }
+                "#,
+            )],
+        );
+        assert!(diags.is_empty(), "expected no errors, got: {diags:?}");
+    }
+
+    // r[verify record.relation.syntax]
+    // r[verify record.relation.uid]
+    #[test]
+    fn relation_missing_uid() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    related_to: [ { relation: ["next"] } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("uid")),
+            "expected uid required error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.relation.relation]
+    #[test]
+    fn relation_relation_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    related_to: [ { uid: "other", relation: 42 } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("relation")),
+            "expected relation type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.participant.syntax]
+    // r[verify record.participant.roles]
+    #[test]
+    fn participant_roles_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    participants: [ { name: "Alice", roles: 42 } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("roles")),
+            "expected roles type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.virtual-location.features]
+    #[test]
+    fn virtual_location_features_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    virtual_locations: [ { uri: "https://meet.example.com", features: 42 } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("features")),
+            "expected features type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.rrule.leap-month]
+    #[test]
+    fn leap_month_valid() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "f47ac10b-58cc-4372-a567-0e02b2c3d479" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    recur: {
+                        frequency: "yearly",
+                        by_month: [ { month: 3, leap: false } ]
+                    }
+                }
+                "#,
+            )],
+        );
+        assert!(diags.is_empty(), "expected no errors, got: {diags:?}");
+    }
+
+    // r[verify record.rrule.leap-month]
+    #[test]
+    fn leap_month_missing_fields() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    recur: {
+                        frequency: "yearly",
+                        by_month: [ { month: 3 } ]
+                    }
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("leap")),
+            "expected leap required error, got: {diags:?}"
+        );
+    }
+
+    // ── Event/Task specific field tests ─────────────────────
+
+    // r[verify record.event.end-time-zone]
+    #[test]
+    fn event_end_time_zone_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { end_time_zone: 42 }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("end_time_zone")),
+            "expected end_time_zone type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.task.start]
+    #[test]
+    fn task_start_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                task @t "Review" { start: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("start")),
+            "expected start type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.task.estimated-duration]
+    #[test]
+    fn task_estimated_duration_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                task @t "Review" { estimated_duration: "bad" }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("estimated_duration")),
+            "expected estimated_duration type error, got: {diags:?}"
+        );
+    }
 }

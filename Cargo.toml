@@ -10,3 +10,8 @@ edition = "2024"
 clap = { version = "4", features = ["derive"] }
 gnomon-db = { path = "crates/gnomon-db" }
 gnomon-parser = { path = "crates/gnomon-parser" }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

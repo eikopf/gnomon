@@ -908,4 +908,22 @@ task @cleanup "Clean""#;
         let parse = parse(source);
         assert!(parse.ok());
     }
+
+    // ── Expression syntax ────────────────────────────────────────
+
+    // r[verify expr.syntax+2]
+    #[test]
+    fn expression_syntax_complex() {
+        // Exercises let, record, list, field access, index, identifiers
+        check_no_errors(
+            r#"
+            let x = { a: 1, b: [10, 20] }
+            calendar {
+                uid: "test",
+                field_a: x.a,
+                field_b: x.b[0]
+            }
+            "#,
+        );
+    }
 }
