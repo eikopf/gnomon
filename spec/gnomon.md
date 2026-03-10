@@ -891,6 +891,102 @@ Expanding a recurrence rule requires a `start` field on the enclosing entry. It 
 r[record.rrule.eval.empty]
 An error SHOULD be produced if a recurrence rule is empty.
 
+##### Period Advancement
+
+Period advancement computes the seed datetime for a given period by adding `interval × period_index` units at the rule's frequency to `dtstart`.
+
+r[record.rrule.eval.advance.yearly]
+Yearly advancement MUST add `interval` years to `dtstart`. If the resulting month has fewer days than `dtstart`'s day, the day MUST be clamped to the last day of the month.
+
+r[record.rrule.eval.advance.monthly]
+Monthly advancement MUST add `interval` months to `dtstart` using absolute month arithmetic. If the resulting month has fewer days than `dtstart`'s day, the day MUST be clamped to the last day of the month.
+
+r[record.rrule.eval.advance.weekly]
+Weekly advancement MUST add `interval × 7` days to `dtstart`.
+
+r[record.rrule.eval.advance.daily]
+Daily advancement MUST add `interval` days to `dtstart`.
+
+r[record.rrule.eval.advance.sub-daily]
+Hourly, minutely, and secondly advancement MUST add the corresponding number of seconds (`interval × 3600`, `interval × 60`, or `interval`) to `dtstart`.
+
+##### Expand/Limit Table
+
+Each BY\* rule acts as either an expand (generate additional candidates) or a limit (filter candidates) depending on the rule's frequency. Some combinations are not applicable (N/A) and MUST be ignored.
+
+> r[record.rrule.eval.table]
+> The action for each BY\* rule at each frequency MUST be as follows:
+>
+> | BY\* Rule | YEARLY | MONTHLY | WEEKLY | DAILY | HOURLY | MINUTELY | SECONDLY |
+> |-----------|--------|---------|--------|-------|--------|----------|----------|
+> | `by_month` | Expand | Limit | Limit | Limit | Limit | Limit | Limit |
+> | `by_week_no` | Expand | N/A | N/A | N/A | N/A | N/A | N/A |
+> | `by_year_day` | Expand | N/A | N/A | Limit | Limit | Limit | Limit |
+> | `by_month_day` | Expand | Expand | N/A | Limit | Limit | Limit | Limit |
+> | `by_day` | \* | \*\* | Expand | Limit | Limit | Limit | Limit |
+> | `by_hour` | Expand | Expand | Expand | Expand | Limit | Limit | Limit |
+> | `by_minute` | Expand | Expand | Expand | Expand | Expand | Limit | Limit |
+> | `by_second` | Expand | Expand | Expand | Expand | Expand | Expand | Limit |
+
+r[record.rrule.eval.table.by-day-yearly]
+For YEARLY frequency, `by_day` MUST act as Limit if `by_year_day` or `by_month_day` is present. Otherwise it MUST act as Expand.
+
+r[record.rrule.eval.table.by-day-monthly]
+For MONTHLY frequency, `by_day` MUST act as Limit if `by_month_day` is present. Otherwise it MUST act as Expand.
+
+##### Negative Indexing
+
+r[record.rrule.eval.negative.month-day]
+A negative `by_month_day` value MUST count backward from the end of the month: `-1` is the last day, `-2` is the second-to-last day, and so on.
+
+r[record.rrule.eval.negative.year-day]
+A negative `by_year_day` value MUST count backward from the end of the year: `-1` is the last day (December 31 or December 30 in a 365-day year), `-2` is the second-to-last day, and so on.
+
+r[record.rrule.eval.negative.weekday]
+A negative `nth` on a `by_day` entry MUST count backward from the end of the applicable scope (month or year): `-1` is the last occurrence of that weekday, `-2` is the second-to-last, and so on.
+
+##### Skip Strategies
+
+When a BY\* expansion produces an invalid date (e.g., February 30), the `skip` field on the recurrence rule determines how to handle it. This follows the JSCalendar `skip` extension.
+
+r[record.rrule.eval.skip.omit]
+If `skip` is `omit`, invalid dates produced by expansion MUST be silently discarded.
+
+r[record.rrule.eval.skip.forward]
+If `skip` is `forward`, an invalid date MUST be replaced with the first day of the next month.
+
+r[record.rrule.eval.skip.backward]
+If `skip` is `backward`, an invalid date MUST be replaced with the last valid day of the same month.
+
+r[record.rrule.eval.skip.default]
+If `skip` is not specified, the default MUST be `omit`.
+
+##### BYSETPOS
+
+r[record.rrule.eval.by-set-pos]
+`by_set_position` MUST select candidates by 1-based position from the sorted candidate set for each period. Positive values count from the start; negative values count from the end (`-1` is the last candidate). Zero values MUST be ignored.
+
+##### BYWEEKNO and ISO Week Computation
+
+r[record.rrule.eval.by-week-no]
+`by_week_no` MUST be applied only at YEARLY frequency. Each value selects all dates within the corresponding ISO week of the year. Negative values count backward from the last week of the year.
+
+r[record.rrule.eval.iso-week]
+ISO week numbering MUST respect the `week_start` field on the recurrence rule. Week 1 is the first week containing at least 4 days of the new year. A year has 52 or 53 weeks depending on the weekday of January 1 and December 31.
+
+##### BYDAY Expansion Scope
+
+r[record.rrule.eval.by-day.monthly-expand]
+When `by_day` expands at MONTHLY frequency, each entry without an `nth` MUST generate all occurrences of that weekday in the month. Each entry with an `nth` MUST generate the nth occurrence of that weekday in the month.
+
+r[record.rrule.eval.by-day.yearly-expand]
+When `by_day` expands at YEARLY frequency, the scope depends on other BY\* rules present: if `by_month` is present, expansion MUST be within each selected month; if `by_week_no` is present, expansion MUST be within each selected week; otherwise, expansion MUST be within the entire year.
+
+##### Empty Period Retry
+
+r[record.rrule.eval.retry]
+If a recurrence period produces no candidates after expansion, the implementation MUST advance to subsequent periods. If 1000 consecutive periods produce no candidates, the implementation MUST stop iteration.
+
 ## Common Record Fields
 
 The type constraints in this section apply to events and tasks unless otherwise specified. Gnomon records are open — any field may appear on any record. This section defines type restrictions for known fields on known record types, not an exhaustive list of permitted fields.
@@ -1528,6 +1624,29 @@ If the file path argument to the `eval` subcommand cannot be resolved to a file 
 
 r[cli.subcommand.eval.output]
 The program MUST write a textual representation of the evaluated value to STDOUT. Any diagnostics MUST be written to STDERR.
+
+The textual representation of a value is defined as follows:
+
+r[cli.subcommand.eval.output.string]
+A string value MUST be rendered as its contents surrounded by double quotes, with `"`, `\`, newline, and tab characters escaped as `\"`, `\\`, `\n`, and `\t` respectively.
+
+r[cli.subcommand.eval.output.integer]
+An integer value MUST be rendered as its decimal representation.
+
+r[cli.subcommand.eval.output.bool]
+A boolean value MUST be rendered as `true` or `false`.
+
+r[cli.subcommand.eval.output.undefined]
+The undefined value MUST be rendered as `undefined`.
+
+r[cli.subcommand.eval.output.name]
+A name value MUST be rendered with an `@` prefix.
+
+r[cli.subcommand.eval.output.list]
+A list value MUST be rendered as a comma-separated sequence of values enclosed in brackets (`[`, `]`).
+
+r[cli.subcommand.eval.output.record]
+A record value MUST be rendered as a brace-enclosed block with one `key: value,` pair per line, indented by 4 spaces per nesting level. Fields MUST be sorted lexicographically by key. An empty record MUST be rendered as `{}`.
 
 #### Reserved Subcommands
 

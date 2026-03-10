@@ -1,51 +1,45 @@
 # Spec TODOs
 
-Areas where the implementation has normative behavior not yet covered by spec requirements.
+All previously identified underspecified areas have been addressed with new spec requirements. The remaining work is adding `r[impl]` and `r[verify]` tags to the implementation code.
 
-## RRULE Expansion Engine (~20 new requirements)
+## Uncovered Requirements (28)
 
-The spec has 6 high-level `record.rrule.eval.*` requirements but `gnomon-rrule` implements the full RFC 5545 §3.3.10 algorithm. Needs requirements for:
+The following new requirements need `r[impl ...]` tags in the implementation and `r[verify ...]` tags in tests:
 
-- **Expand/limit table**: Each BY* rule (BYMONTH, BYWEEKNO, BYYEARDAY, BYMONTHDAY, BYDAY, BYHOUR, BYMINUTE, BYSECOND) behaves differently depending on frequency — expand, limit, or N/A. BYDAY has 6 conditional branches depending on which other BY rules are present.
-- **Skip strategies**: `omit`/`forward`/`backward` for handling invalid dates produced during expansion (e.g. "every month on the 31st" in months with fewer days).
-- **Negative indexing**: BYMONTHDAY(-1) = last day of month, BYYEARDAY(-1) = last day of year, nth weekday from end of month/year.
-- **Period advancement**: Leap-year-safe month arithmetic with day-of-month clamping on overflow.
-- **ISO week computation**: Week numbering with custom WKST (week start day), 52/53-week year handling.
-- **BYSETPOS**: 1-based position filtering over the candidate set, with negative indices counting from end.
-- **Empty-period retry**: Iterator tries up to 1000 empty periods before stopping (prevents infinite loops on rules that produce no occurrences).
+### RRULE Expansion Engine (21 requirements)
 
-Files: `crates/gnomon-rrule/src/{expand,iter,table,util,types}.rs`
+Files: `crates/gnomon-rrule/src/{expand,iter,table,util}.rs`
 
-## String Escape Sequences (~1 requirement)
+- `record.rrule.eval.advance.yearly` — `util::advance_period` (Yearly branch)
+- `record.rrule.eval.advance.monthly` — `util::advance_period` (Monthly branch)
+- `record.rrule.eval.advance.weekly` — `util::advance_period` (Weekly branch)
+- `record.rrule.eval.advance.daily` — `util::advance_period` (Daily branch)
+- `record.rrule.eval.advance.sub-daily` — `util::advance_period` (Hourly/Minutely/Secondly)
+- `record.rrule.eval.table` — `table::action`
+- `record.rrule.eval.table.by-day-yearly` — `table::action` (ByDay/Yearly branch)
+- `record.rrule.eval.table.by-day-monthly` — `table::action` (ByDay/Monthly branch)
+- `record.rrule.eval.negative.month-day` — `util::resolve_month_day`
+- `record.rrule.eval.negative.year-day` — `util::resolve_year_day`
+- `record.rrule.eval.negative.weekday` — `util::nth_weekday_in_month`/`nth_weekday_in_year` (negative nth)
+- `record.rrule.eval.skip.omit` — `util::apply_skip` (Omit branch)
+- `record.rrule.eval.skip.forward` — `util::apply_skip` (Forward branch)
+- `record.rrule.eval.skip.backward` — `util::apply_skip` (Backward branch)
+- `record.rrule.eval.skip.default` — `types::Skip::default()`
+- `record.rrule.eval.by-set-pos` — `expand::apply_by_set_pos`
+- `record.rrule.eval.by-week-no` — `expand::apply_by_week_no`
+- `record.rrule.eval.iso-week` — `util::dates_in_iso_week`/`iso_weeks_in_year`
+- `record.rrule.eval.by-day.monthly-expand` — `expand::apply_by_day` (Monthly/Expand)
+- `record.rrule.eval.by-day.yearly-expand` — `expand::apply_by_day` (Yearly/Expand)
+- `record.rrule.eval.retry` — `iter::OccurrenceIter::next` (1000-period retry loop)
 
-`r[lexer.string.escape]` says escapes are recognized but doesn't enumerate which ones are valid. The implementation supports `\"`, `\\`, `\n`, `\t`. Needs a requirement listing the supported escape sequences.
-
-Files: `crates/gnomon-db/src/eval/literals.rs`
-
-## Import Path Resolution (~2 requirements)
-
-- Relative path imports resolve from the importing file's parent directory.
-- Cycle detection uses canonicalized (absolute) paths.
-
-Files: `crates/gnomon-db/src/eval/lower.rs`
-
-## Gregorian Calendar Validation (~1 requirement)
-
-Date validation uses the Gregorian calendar (leap year algorithm, max days per month) but the spec just says dates must be "valid" without defining the calendar system.
-
-Files: `crates/gnomon-parser/src/validate.rs`
-
-## Prefix Form Required Fields (~2 requirements)
-
-- `event { ... }` (prefix form) requires `name` and `start` fields.
-- `task { ... }` (prefix form) requires `name` field.
-
-Short-form desugaring implies these indirectly but the prefix form has no explicit field requirements in the spec.
-
-Files: `crates/gnomon-parser/src/validate.rs`
-
-## Output Format (optional, ~1-2 requirements)
-
-`render.rs` defines how `eval` prints values (record syntax, list syntax, string quoting). Currently the spec just says "write a textual representation." Could be pinned down if a stable output format is desired.
+### Output Format (7 requirements)
 
 Files: `crates/gnomon-db/src/eval/render.rs`
+
+- `cli.subcommand.eval.output.string` — `write_value` (String branch)
+- `cli.subcommand.eval.output.integer` — `write_value` (Integer branch)
+- `cli.subcommand.eval.output.bool` — `write_value` (Bool branch)
+- `cli.subcommand.eval.output.undefined` — `write_value` (Undefined branch)
+- `cli.subcommand.eval.output.name` — `write_value` (Name branch)
+- `cli.subcommand.eval.output.list` — `write_value` (List branch)
+- `cli.subcommand.eval.output.record` — `write_record`
