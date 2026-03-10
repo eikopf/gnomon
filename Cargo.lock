@@ -155,9 +155,9 @@ dependencies = [
 
 [[package]]
 name = "calico"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ecd4138c4c89413b5dfe7a16b5e14729446dad0862d9bb927cb48f7d9e18d44"
+checksum = "21d449699f11a9c4371ae284a9fde735245cfb4d63a7e5a01764e65770b9a513"
 dependencies = [
  "base64",
  "calendar-types",
