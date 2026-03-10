@@ -938,7 +938,7 @@ Value: string (no default)
 
 Meaning: The IANA time zone identifier (e.g. `"America/New_York"`) providing the default time zone context for date/time values in this object.
 
-r[field.time_zone.type]
+r[field.time-zone.type]
 If present, the `time_zone` field MUST have a string value that is a valid IANA time zone identifier.
 
 ### `priority`
@@ -968,7 +968,7 @@ Value: string (default: `"busy"`)
 
 Meaning: How this object affects free/busy time calculations.
 
-r[field.free_busy_status.type]
+r[field.free-busy-status.type]
 If present, the `free_busy_status` field MUST have a string value of `free` or `busy`.
 
 ### `show_without_time`
@@ -978,7 +978,7 @@ Value: boolean (default: `false`)
 
 Meaning: Whether the time component of the object is unimportant for display purposes. When `true`, the object SHOULD be displayed as an all-day item.
 
-r[field.show_without_time.type]
+r[field.show-without-time.type]
 If present, the `show_without_time` field MUST have a boolean value.
 
 ### `color`
@@ -1038,7 +1038,7 @@ Value: list of VirtualLocation records (no default)
 
 Meaning: The virtual meeting spaces or online platforms associated with the object.
 
-r[field.virtual_locations.type]
+r[field.virtual-locations.type]
 If present, the `virtual_locations` field MUST be a list of VirtualLocation records.
 
 ### `links`
@@ -1058,7 +1058,7 @@ Value: list of Relation records (no default)
 
 Meaning: Relationships between this object and other calendar objects.
 
-r[field.related_to.type]
+r[field.related-to.type]
 If present, the `related_to` field MUST be a list of Relation records.
 
 ### `participants`
