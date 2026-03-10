@@ -250,6 +250,7 @@ mod tests {
         record.get(&field_name).unwrap().value.clone()
     }
 
+    // r[verify lexer.date.desugar]
     #[test]
     fn date_desugar() {
         let db = Database::default();
@@ -265,6 +266,7 @@ mod tests {
         }
     }
 
+    // r[verify lexer.month-day.desugar]
     #[test]
     fn month_day_desugar() {
         let db = Database::default();
@@ -279,6 +281,7 @@ mod tests {
         }
     }
 
+    // r[verify lexer.time.desugar]
     #[test]
     fn time_desugar() {
         let db = Database::default();
@@ -307,6 +310,7 @@ mod tests {
         }
     }
 
+    // r[verify lexer.datetime.desugar]
     #[test]
     fn datetime_desugar() {
         let db = Database::default();
@@ -333,6 +337,7 @@ mod tests {
         }
     }
 
+    // r[verify lexer.duration.desugar]
     #[test]
     fn duration_desugar_positive() {
         let db = Database::default();
@@ -348,6 +353,7 @@ mod tests {
         }
     }
 
+    // r[verify lexer.duration.sign]
     #[test]
     fn duration_desugar_negative() {
         let db = Database::default();
@@ -389,6 +395,7 @@ mod tests {
         assert_eq!(month_day_to_year_day(13, 1), None);
     }
 
+    // r[verify record.rrule.every.desugar.equivalence]
     #[test]
     // r[verify record.rrule.every.desugar.subject.day]
     fn every_day_desugar() {
@@ -468,6 +475,43 @@ mod tests {
                     }
                     _ => panic!("expected list"),
                 }
+            }
+            _ => panic!("expected Record"),
+        }
+    }
+
+    // r[verify record.rrule.every.desugar.terminator+2]
+    #[test]
+    fn every_day_with_count_terminator() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        let source = SourceFile::new(
+            &db,
+            PathBuf::from("t.gnomon"),
+            "event @e { rrule: every day until 10 times }".into(),
+        );
+        let parse_result = crate::parse(&db, source);
+        let tree = parse_result.tree(&db);
+        let decl = tree.decls().next().unwrap();
+        let event = match decl {
+            gnomon_parser::ast::Decl::EventDecl(e) => e,
+            _ => panic!("expected event"),
+        };
+        let body = event.body().unwrap();
+        let field = body.fields().next().unwrap();
+        let every = match field.value().unwrap() {
+            gnomon_parser::ast::Expr::EveryExpr(e) => e,
+            _ => panic!("expected every"),
+        };
+
+        let value = desugar_every(&db, &every, &blame).unwrap();
+        match value {
+            Value::Record(r) => {
+                assert_eq!(
+                    get_field(&r, &db, "frequency"),
+                    Value::String("daily".into())
+                );
+                assert_eq!(get_field(&r, &db, "termination"), Value::Integer(10));
             }
             _ => panic!("expected Record"),
         }

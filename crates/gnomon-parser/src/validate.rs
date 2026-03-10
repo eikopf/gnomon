@@ -406,6 +406,7 @@ mod tests {
 
     // ── Date/time range checks ───────────────────────────────────
 
+    // r[verify lexer.date.valid]
     #[test]
     fn date_month_out_of_range() {
         let errs = validate("event @e 2026-13-01T00:00 1h \"x\"");
@@ -434,6 +435,7 @@ mod tests {
         assert!(errs[0].message.contains("minute"));
     }
 
+    // r[verify lexer.month-day.valid]
     #[test]
     fn month_day_out_of_range() {
         let errs = validate(
@@ -494,6 +496,23 @@ mod tests {
             "event { name: @e, start: 2026-01-01T00:00, recurrence: every year on 02-29 }",
         );
         assert!(errs.is_empty());
+    }
+
+    // ── Leap second ──────────────────────────────────────────────
+
+    // r[verify lexer.time.leap-second]
+    #[test]
+    fn time_leap_second_valid() {
+        // Second :60 is a leap second and must be accepted.
+        let errs = validate("event @e 2026-12-31T23:59:60 1h \"x\"");
+        assert!(errs.is_empty(), "second=60 should be valid (leap second), got: {errs:?}");
+    }
+
+    #[test]
+    fn time_second_61_invalid() {
+        let errs = validate("event @e 2026-12-31T23:59:61 1h \"x\"");
+        assert_eq!(errs.len(), 1);
+        assert!(errs[0].message.contains("second"));
     }
 
     // ── Duplicate record keys ────────────────────────────────────

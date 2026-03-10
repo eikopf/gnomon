@@ -209,6 +209,20 @@ mod tests {
         DateTime::new(y, mo, d, h, mi, s, 0).unwrap()
     }
 
+    // r[verify record.rrule.eval.empty]
+    #[test]
+    fn count_zero_yields_empty() {
+        let rule = RecurrenceRule {
+            frequency: Frequency::Daily,
+            termination: Termination::Count(0),
+            ..Default::default()
+        };
+        let occ = Occurrences::new(rule, dt(2024, 1, 1, 9, 0, 0));
+        let dates: Vec<_> = occ.iter().collect();
+        assert!(dates.is_empty(), "COUNT=0 should produce no occurrences");
+    }
+
+    // r[verify record.rrule.eval.dtstart]
     #[test]
     fn daily_count_5() {
         let rule = RecurrenceRule {

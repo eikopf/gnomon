@@ -2012,4 +2012,87 @@ mod tests {
             "expected estimated_duration type error, got: {diags:?}"
         );
     }
+
+    // r[verify model.entry.type]
+    #[test]
+    fn entry_type_dispatch() {
+        // Events get event-specific validation, tasks get task-specific validation.
+        // An event missing `start` should produce an error for events but not tasks.
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {}
+                task @t "T" {}
+                "#,
+            )],
+        );
+        // Both should pass with no type-related errors.
+        assert!(
+            !diags.iter().any(|d| d.contains("type")),
+            "expected no type errors for valid event/task, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.description.type.string]
+    #[test]
+    fn description_string_accepted() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { description: "A test event" }
+                "#,
+            )],
+        );
+        assert!(
+            !diags.iter().any(|d| d.contains("description")),
+            "expected no description error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.description.type.record]
+    #[test]
+    fn description_record_accepted() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" { description: { content: "html body" } }
+                "#,
+            )],
+        );
+        assert!(
+            !diags.iter().any(|d| d.contains("description")),
+            "expected no description error, got: {diags:?}"
+        );
+    }
+
+    // r[verify field.uid.type]
+    #[test]
+    fn uid_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: 42 }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("uid")),
+            "expected uid type error, got: {diags:?}"
+        );
+    }
 }

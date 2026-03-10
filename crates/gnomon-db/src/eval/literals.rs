@@ -192,11 +192,13 @@ mod tests {
 
     // ── eval_uri / eval_atom / eval_name ─────────────────────────
 
+    // r[verify lexer.uri.desugar]
     #[test]
     fn uri_strips_brackets() {
         assert_eq!(eval_uri("<https://example.com>"), "https://example.com");
     }
 
+    // r[verify lexer.atom.desugar]
     #[test]
     fn atom_strips_hash() {
         assert_eq!(eval_atom("#confirmed"), "confirmed");
@@ -231,6 +233,7 @@ mod tests {
         assert_eq!(parse_time_components("14:30:59"), Some((14, 30, 59)));
     }
 
+    // r[verify lexer.time.default-second]
     #[test]
     fn time_without_seconds() {
         assert_eq!(parse_time_components("14:30"), Some((14, 30, 0)));
@@ -243,6 +246,7 @@ mod tests {
 
     // ── parse_duration_components ────────────────────────────────
 
+    // r[verify lexer.duration.part.default]
     #[test]
     fn duration_simple() {
         assert_eq!(

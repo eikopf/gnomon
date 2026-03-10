@@ -9,7 +9,6 @@ use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, ev
 // r[impl cli.syntax]
 // r[impl cli.option.help]
 // r[impl cli.option.help.short]
-// r[impl cli.option.help.xor]
 // r[impl cli.option.help.behavior.root]
 // r[impl cli.option.help.behavior.subcommand]
 // r[impl cli.option.order]
@@ -62,7 +61,6 @@ fn main() -> ExitCode {
     // r[impl cli.option.version]
     // r[impl cli.option.version.short]
     // r[impl cli.option.version.behavior]
-    // r[impl cli.option.version.xor]
     let matches = Cli::command()
         .version(env!("CARGO_PKG_VERSION"))
         .disable_version_flag(true)
@@ -315,7 +313,15 @@ mod cli_coverage {
     // r[verify cli.subcommand.eval.no-file]
     // r[verify cli.subcommand.eval.output]
     // r[verify cli.subcommand.reserved+3]
+    // r[verify cli.syntax]
+    // r[verify cli.option.help.behavior.root]
+    // r[verify cli.option.help.behavior.subcommand]
+    // r[verify cli.option.order]
+    // r[verify cli.subcommand.order]
+    // r[verify cli.subcommand.help.root]
+    // r[verify cli.subcommand.help.penultimate]
     // r[verify lexer.input-format.malformed]
+    // r[verify lexer.input-format.utf-8]
     // See tests/cli.rs for the actual integration tests.
 }
 

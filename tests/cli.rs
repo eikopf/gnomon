@@ -28,6 +28,8 @@ fn no_args_shows_help() {
 // ── --help ───────────────────────────────────────────────────
 
 // r[verify cli.option.help]
+// r[verify cli.option.help.behavior.root]
+// r[verify cli.syntax]
 #[test]
 fn help_flag() {
     gnomon()
@@ -73,6 +75,7 @@ fn version_short_flag() {
 // ── help subcommand ──────────────────────────────────────────
 
 // r[verify cli.subcommand.help]
+// r[verify cli.subcommand.help.root]
 #[test]
 fn help_subcommand() {
     gnomon()
@@ -222,6 +225,65 @@ fn eval_missing_file() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("error"));
+}
+
+// ── Help/version exclusivity ────────────────────────────────
+
+// r[verify cli.option.help.behavior.subcommand]
+#[test]
+fn help_flag_on_subcommand() {
+    gnomon()
+        .args(["parse", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage"));
+}
+
+// r[verify cli.option.order]
+#[test]
+fn option_order_independent() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write_temp_file(&dir, "test.gnomon", r#"{ x: 1 }"#);
+
+    // --expr before eval vs after — both should work
+    gnomon()
+        .args(["eval", "--expr", "{ x: 1 }"])
+        .assert()
+        .success();
+}
+
+// r[verify cli.subcommand.order]
+#[test]
+fn subcommand_order_determines_action() {
+    // "parse" subcommand always triggers parse action regardless of other input
+    gnomon()
+        .args(["parse", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Parse"));
+}
+
+// r[verify cli.subcommand.help.penultimate]
+#[test]
+fn help_subcommand_for_specific_command() {
+    gnomon()
+        .args(["help", "parse"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Parse"));
+}
+
+// r[verify lexer.input-format.utf-8]
+#[test]
+fn valid_utf8_accepted() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write_temp_file(&dir, "test.gnomon", "{ name: \"héllo wörld\" }");
+
+    gnomon()
+        .arg("eval")
+        .arg(&file)
+        .assert()
+        .success();
 }
 
 // ── UTF-8 validation ────────────────────────────────────────

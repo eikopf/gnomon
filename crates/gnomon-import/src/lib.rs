@@ -1650,6 +1650,8 @@ mod tests {
 
     // ── iCalendar tests ──────────────────────────────────────
 
+    // r[verify model.import.icalendar.components]
+    // r[verify model.import.icalendar.event]
     #[test]
     fn ical_minimal_event() {
         let ics = "\
@@ -1723,6 +1725,7 @@ END:VCALENDAR\r\n";
         }
     }
 
+    // r[verify model.import.icalendar.task]
     #[test]
     fn ical_minimal_todo() {
         let ics = "\
@@ -1766,6 +1769,7 @@ END:VCALENDAR\r\n";
         assert!(result.is_err());
     }
 
+    // r[verify model.import.icalendar.event.duration-fallback]
     #[test]
     fn ical_event_with_dtend() {
         let ics = "\
@@ -1794,6 +1798,7 @@ END:VCALENDAR\r\n";
         }
     }
 
+    // r[verify model.import.icalendar.calendar]
     #[test]
     fn ical_vcalendar_properties() {
         let ics = "\
@@ -1825,6 +1830,8 @@ END:VCALENDAR\r\n";
         );
     }
 
+    // r[verify model.import.icalendar.extension]
+    // r[verify model.import.preserve]
     #[test]
     fn ical_x_properties_on_event() {
         let ics = "\
@@ -1935,6 +1942,7 @@ END:VCALENDAR\r\n";
         }
     }
 
+    // r[verify model.import.icalendar.rrule]
     #[test]
     fn ical_rrule_event() {
         let ics = "\
@@ -1967,6 +1975,7 @@ END:VCALENDAR\r\n";
         }
     }
 
+    // r[verify model.import.icalendar.status]
     #[test]
     fn ical_todo_completed() {
         let ics = "\
@@ -1993,6 +2002,7 @@ END:VCALENDAR\r\n";
 
     // ── JSCalendar tests ─────────────────────────────────────
 
+    // r[verify model.import.jscalendar.event]
     #[test]
     fn jscal_minimal_event() {
         let json = r#"{
@@ -2038,6 +2048,7 @@ END:VCALENDAR\r\n";
         }
     }
 
+    // r[verify model.import.jscalendar.task]
     #[test]
     fn jscal_task() {
         let json = r#"{
@@ -2064,6 +2075,7 @@ END:VCALENDAR\r\n";
         assert!(has_field(rec, "due"));
     }
 
+    // r[verify model.import.jscalendar.vendor]
     #[test]
     fn jscal_passthrough_unknown_fields() {
         let json = r#"{
@@ -2094,6 +2106,7 @@ END:VCALENDAR\r\n";
         }
     }
 
+    // r[verify model.import.jscalendar.types]
     #[test]
     fn jscal_array_of_objects() {
         let json = r#"[
@@ -2112,5 +2125,48 @@ END:VCALENDAR\r\n";
     fn jscal_parse_error() {
         let result = translate_jscalendar("not json{");
         assert!(result.is_err());
+    }
+
+    // r[verify model.import.icalendar.priority]
+    #[test]
+    fn ical_event_priority() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:prio-ev1\r\n\
+SUMMARY:Priority Event\r\n\
+DTSTART:20260315T120000\r\n\
+DURATION:PT1H\r\n\
+PRIORITY:1\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_, entries) = split_ical_result(&result);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(*get_field(entries[0], "priority"), ImportValue::Integer(1));
+    }
+
+    // r[verify model.import.jscalendar.priority]
+    #[test]
+    fn jscal_event_priority() {
+        let json = r#"{
+            "@type": "Event",
+            "uid": "prio-js-1",
+            "title": "Priority Event",
+            "start": "2026-03-15T12:00:00",
+            "duration": "PT1H",
+            "priority": 3
+        }"#;
+
+        let result = translate_jscalendar(json).unwrap();
+        match &result {
+            ImportValue::Record(r) => {
+                assert_eq!(*get_field(r, "priority"), ImportValue::Integer(3));
+            }
+            _ => panic!("expected record"),
+        }
     }
 }

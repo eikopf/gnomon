@@ -451,6 +451,7 @@ mod tests {
     // ── New expression forms ─────────────────────────────────────
 
     // r[verify expr.let.scope]
+    // r[verify expr.let.syntax]
     #[test]
     fn let_expression() {
         let db = Database::default();
@@ -589,6 +590,9 @@ mod tests {
 
         // r[verify expr.import.eval]
         // r[verify expr.import.eager]
+        // r[verify expr.import.syntax+2]
+        // r[verify model.import.resolution]
+        // r[verify model.import.transparent]
         #[test]
         fn import_gnomon_file() {
             let dir = tempfile::tempdir().unwrap();
@@ -877,6 +881,7 @@ mod tests {
             addr
         }
 
+        // r[verify expr.import.format.uri]
         #[test]
         fn import_uri_icalendar() {
             let ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\n\

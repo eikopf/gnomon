@@ -208,6 +208,7 @@ mod tests {
     // ── Ambiguity resolution ─────────────────────────────────────
 
     // r[verify lexer.datetime]
+    // r[verify lexer.datetime.local]
     #[test]
     fn datetime_wins_over_date() {
         let toks = kinds("2026-03-01T14:30");
@@ -418,6 +419,7 @@ mod tests {
     }
 
     // r[verify lexer.path]
+    // r[verify lexer.path.slash]
     #[test]
     fn path_named() {
         let toks = kinds("lib/core.gnomon");
@@ -475,6 +477,7 @@ mod tests {
     // ── Whitespace ───────────────────────────────────────────────
 
     // r[verify lexer.whitespace]
+    // r[verify lexer.whitespace.insignificant]
     #[test]
     fn whitespace_preserved() {
         let toks = kinds("  \t\n  ");
@@ -542,6 +545,18 @@ mod tests {
                 SyntaxKind::URI_LITERAL,
                 "<urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6>"
             )]
+        );
+    }
+
+    // r[verify lexer.uri.no-multiline]
+    #[test]
+    fn uri_with_newline_does_not_lex() {
+        let toks = kinds("<https://a.com\n/path>");
+        // The newline breaks the URI — it should NOT produce a single URI_LITERAL token.
+        assert!(
+            toks.iter().all(|(kind, _)| *kind != SyntaxKind::URI_LITERAL
+                || !toks.iter().any(|(_, text)| text.contains('\n'))),
+            "URI with newline should not lex as a single URI token: {toks:?}"
         );
     }
 
