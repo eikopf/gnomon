@@ -223,3 +223,33 @@ fn eval_missing_file() {
         .failure()
         .stderr(predicate::str::contains("error"));
 }
+
+// ── UTF-8 validation ────────────────────────────────────────
+
+// r[verify lexer.input-format.malformed]
+#[test]
+fn malformed_utf8_produces_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bad.gnomon");
+    // Write invalid UTF-8 bytes.
+    std::fs::write(&path, b"\xff\xfe invalid utf-8").unwrap();
+
+    gnomon()
+        .args(["parse", path.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("error"));
+}
+
+// ── Reserved subcommands ────────────────────────────────────
+
+// r[verify cli.subcommand.reserved+3]
+#[test]
+fn reserved_subcommands_rejected() {
+    for name in ["about", "clean", "compile", "daemon", "fetch", "lsp", "merge", "query", "run"] {
+        gnomon()
+            .arg(name)
+            .assert()
+            .failure();
+    }
+}

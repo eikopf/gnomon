@@ -20,6 +20,7 @@ enum Shape {
     Relation,
     Participant,
     Alert,
+    Trigger,
     RecurrenceRule,
     NDay,
     LeapMonth,
@@ -76,6 +77,7 @@ fn shape_fields(shape: Shape) -> &'static [FieldDef] {
         Shape::Relation => &RELATION_FIELDS,
         Shape::Participant => &PARTICIPANT_FIELDS,
         Shape::Alert => &ALERT_FIELDS,
+        Shape::Trigger => &TRIGGER_FIELDS,
         Shape::RecurrenceRule => &RECURRENCE_RULE_FIELDS,
         Shape::NDay => &NDAY_FIELDS,
         Shape::LeapMonth => &LEAP_MONTH_FIELDS,
@@ -457,12 +459,27 @@ const ALERT_FIELDS: [FieldDef; 2] = [
     FieldDef {
         name: "trigger",
         required: true,
-        expected: ExpectedType::AnyRecord,
+        expected: ExpectedType::Record(Shape::Trigger),
     },
     FieldDef {
         name: "action",
         required: false,
         expected: ExpectedType::Enum(&["display", "email"]),
+    },
+];
+
+// r[impl record.alert.trigger.at]
+// r[impl record.alert.trigger.offset]
+const TRIGGER_FIELDS: [FieldDef; 2] = [
+    FieldDef {
+        name: "at",
+        required: false,
+        expected: ExpectedType::AnyRecord,
+    },
+    FieldDef {
+        name: "offset",
+        required: false,
+        expected: ExpectedType::AnyRecord,
     },
 ];
 
@@ -1686,6 +1703,50 @@ mod tests {
         assert!(
             diags.iter().any(|d| d.contains("trigger")),
             "expected trigger required error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.alert.trigger.at]
+    #[test]
+    fn trigger_at_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    alerts: [ { trigger: { at: "bad" } } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("at")),
+            "expected at type error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.alert.trigger.offset]
+    #[test]
+    fn trigger_offset_wrong_type() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h "E" {
+                    alerts: [ { trigger: { offset: "bad" } } ]
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags.iter().any(|d| d.contains("offset")),
+            "expected offset type error, got: {diags:?}"
         );
     }
 

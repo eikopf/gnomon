@@ -28,6 +28,7 @@ struct Cli {
 // r[impl cli.subcommand.help.root]
 // r[impl cli.subcommand.help.penultimate]
 // r[impl cli.subcommand.order]
+// r[impl cli.subcommand.reserved+3]
 #[derive(Subcommand)]
 enum Command {
     // r[impl cli.subcommand.parse]
@@ -79,6 +80,7 @@ fn main() -> ExitCode {
     match cli.command {
         Command::Parse { file } => {
             // r[impl cli.subcommand.parse.no-file]
+            // r[impl lexer.input-format.malformed]
             let text = match std::fs::read_to_string(&file) {
                 Ok(s) => s,
                 Err(e) => {
@@ -312,6 +314,8 @@ mod cli_coverage {
     // r[verify cli.subcommand.eval.expr.exclusive]
     // r[verify cli.subcommand.eval.no-file]
     // r[verify cli.subcommand.eval.output]
+    // r[verify cli.subcommand.reserved+3]
+    // r[verify lexer.input-format.malformed]
     // See tests/cli.rs for the actual integration tests.
 }
 
