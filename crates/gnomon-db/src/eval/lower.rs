@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use gnomon_parser::ast;
-use gnomon_parser::SyntaxKind;
+use gnomon_parser::{SyntaxKind, SyntaxToken};
 
 use super::desugar;
 use super::interned::{DeclId, DeclKind, FieldName, FieldPath};
@@ -9,6 +9,14 @@ use super::literals;
 use super::types::{Blame, Blamed, Record, Value};
 use crate::input::SourceFile;
 use crate::queries::Diagnostic;
+
+/// Evaluate a string or triple-string token to its string value.
+fn eval_string_token(token: &SyntaxToken) -> String {
+    match token.kind() {
+        SyntaxKind::TRIPLE_STRING_LITERAL => literals::eval_triple_string(token.text()),
+        _ => literals::eval_string(token.text()),
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 enum ImportFormat {
@@ -189,7 +197,7 @@ impl<'db> LowerCtx<'db> {
             }
 
             if let Some(title_token) = ev.title() {
-                let title = literals::eval_string(title_token.text());
+                let title = eval_string_token(&title_token);
                 self.insert_field(
                     &mut record,
                     "title",
@@ -240,7 +248,7 @@ impl<'db> LowerCtx<'db> {
             }
 
             if let Some(title_token) = task.title() {
-                let title = literals::eval_string(title_token.text());
+                let title = eval_string_token(&title_token);
                 self.insert_field(
                     &mut record,
                     "title",
@@ -493,6 +501,9 @@ impl<'db> LowerCtx<'db> {
             }
             SyntaxKind::STRING_LITERAL => {
                 Some(Value::String(literals::eval_string(text)))
+            }
+            SyntaxKind::TRIPLE_STRING_LITERAL => {
+                Some(Value::String(literals::eval_triple_string(text)))
             }
             SyntaxKind::TRUE_KW => Some(Value::Bool(true)),
             SyntaxKind::FALSE_KW => Some(Value::Bool(false)),

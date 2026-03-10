@@ -87,6 +87,13 @@ enum LogosToken {
     #[regex(r"[+-][0-9]+")]
     SignedIntegerLiteral,
 
+    // r[impl lexer.triple-string]
+    // r[impl lexer.triple-string.escape]
+    // r[impl lexer.triple-string.multiline]
+    // r[impl lexer.triple-string.embedded-quotes]
+    #[token("\"\"\"", lex_triple_string)]
+    TripleStringLiteral,
+
     // r[impl lexer.string]
     // r[impl lexer.string.escape]
     #[regex(r#""([^"\\]|\\.)*""#, allow_greedy = true)]
@@ -128,6 +135,28 @@ enum LogosToken {
     Ident,
 }
 
+/// Logos callback for triple-quoted strings: scan from after the opening `"""`
+/// until the closing `"""` is found, respecting `\"` escapes.
+fn lex_triple_string(lex: &mut logos::Lexer<'_, LogosToken>) -> bool {
+    let remainder = lex.remainder();
+    let bytes = remainder.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'\\' {
+            // Skip escaped character
+            i += 2;
+            continue;
+        }
+        if i + 2 < bytes.len() && bytes[i] == b'"' && bytes[i + 1] == b'"' && bytes[i + 2] == b'"'
+        {
+            lex.bump(i + 3);
+            return true;
+        }
+        i += 1;
+    }
+    false // Unclosed triple-string → becomes ERROR
+}
+
 impl LogosToken {
     fn to_syntax_kind(self) -> SyntaxKind {
         match self {
@@ -156,6 +185,7 @@ impl LogosToken {
             LogosToken::MonthDayLiteral => SyntaxKind::MONTH_DAY_LITERAL,
             LogosToken::DurationLiteral => SyntaxKind::DURATION_LITERAL,
             LogosToken::SignedIntegerLiteral => SyntaxKind::SIGNED_INTEGER_LITERAL,
+            LogosToken::TripleStringLiteral => SyntaxKind::TRIPLE_STRING_LITERAL,
             LogosToken::StringLiteral => SyntaxKind::STRING_LITERAL,
             LogosToken::IntegerLiteral => SyntaxKind::INTEGER_LITERAL,
             LogosToken::UriLiteral => SyntaxKind::URI_LITERAL,
@@ -612,6 +642,86 @@ mod tests {
         assert_eq!(
             toks,
             vec![(SyntaxKind::ERROR, "#"), (SyntaxKind::WHITESPACE, " "),]
+        );
+    }
+
+    // ── Triple-quoted strings ─────────────────────────────────────
+
+    // r[verify lexer.triple-string]
+    #[test]
+    fn triple_string_basic() {
+        let toks = kinds(r#""""hello""""#);
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, r#""""hello""""#)]
+        );
+    }
+
+    // r[verify lexer.triple-string.multiline]
+    #[test]
+    fn triple_string_multiline() {
+        let input = "\"\"\"\nline1\nline2\n\"\"\"";
+        let toks = kinds(input);
+        assert_eq!(toks, vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]);
+    }
+
+    // r[verify lexer.triple-string.embedded-quotes]
+    #[test]
+    fn triple_string_embedded_quotes() {
+        let input = r#""""he said "hi" ok""""#;
+        let toks = kinds(input);
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]
+        );
+    }
+
+    // r[verify lexer.triple-string.embedded-quotes]
+    #[test]
+    fn triple_string_embedded_double_quotes() {
+        let input = r#""""a ""b"" c""""#;
+        let toks = kinds(input);
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]
+        );
+    }
+
+    #[test]
+    fn empty_string_still_works() {
+        let toks = kinds(r#""""#);
+        assert_eq!(toks, vec![(SyntaxKind::STRING_LITERAL, r#""""#)]);
+    }
+
+    #[test]
+    fn triple_string_empty() {
+        let toks = kinds(r#""""""""#);
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, r#""""""""#)]
+        );
+    }
+
+    #[test]
+    fn triple_string_unclosed_is_error() {
+        let toks = kinds("\"\"\"hello");
+        // Unclosed triple-string should not produce a valid TRIPLE_STRING_LITERAL
+        assert!(
+            toks.iter()
+                .all(|(kind, _)| *kind != SyntaxKind::TRIPLE_STRING_LITERAL),
+            "Unclosed triple-string should be an error: {toks:?}"
+        );
+    }
+
+    // r[verify lexer.triple-string.escape]
+    #[test]
+    fn triple_string_with_escaped_close() {
+        // A \" inside should not end the string
+        let input = r#""""a\"b""""#;
+        let toks = kinds(input);
+        assert_eq!(
+            toks,
+            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]
         );
     }
 

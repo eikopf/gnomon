@@ -37,18 +37,34 @@ impl Parser {
                     self.expect(SyntaxKind::R_BRACKET);
                     self.finish_node();
                 }
-                // Binary: ++, //, ==, != (binding power 50, left-associative)
-                SyntaxKind::PLUS_PLUS
-                | SyntaxKind::SLASH_SLASH
-                | SyntaxKind::EQ_EQ
-                | SyntaxKind::BANG_EQ => {
+                // r[impl expr.op.assoc.concat-merge]
+                // Right-associative: ++, // (binding power 50)
+                SyntaxKind::PLUS_PLUS | SyntaxKind::SLASH_SLASH => {
                     if 50 < min_bp {
                         break;
                     }
                     self.start_node_at(cp, SyntaxKind::BINARY_EXPR);
                     self.bump(); // operator
-                    self.parse_expr_bp(51); // left-associative: right side gets higher min_bp
+                    self.parse_expr_bp(50); // right-associative: same min_bp
                     self.finish_node();
+                }
+                // r[impl expr.op.assoc.comparison]
+                // Non-associative: ==, != (binding power 30)
+                SyntaxKind::EQ_EQ | SyntaxKind::BANG_EQ => {
+                    if 30 < min_bp {
+                        break;
+                    }
+                    self.start_node_at(cp, SyntaxKind::BINARY_EXPR);
+                    self.bump(); // operator
+                    self.parse_expr_bp(31); // higher min_bp prevents right nesting
+                    self.finish_node();
+                    // Non-associative: error if another comparison follows
+                    if matches!(self.current(), SyntaxKind::EQ_EQ | SyntaxKind::BANG_EQ) {
+                        self.error_at_current(
+                            "comparison operators cannot be chained; use parentheses",
+                        );
+                    }
+                    break; // prevent left-nesting by exiting the loop
                 }
                 _ => break,
             }
@@ -71,6 +87,7 @@ impl Parser {
             SyntaxKind::INTEGER_LITERAL
             | SyntaxKind::SIGNED_INTEGER_LITERAL
             | SyntaxKind::STRING_LITERAL
+            | SyntaxKind::TRIPLE_STRING_LITERAL
             | SyntaxKind::DATE_LITERAL
             | SyntaxKind::MONTH_DAY_LITERAL
             | SyntaxKind::TIME_LITERAL

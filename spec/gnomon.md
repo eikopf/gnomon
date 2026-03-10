@@ -204,6 +204,44 @@ string char = any char - ( '"' | "\\" | newline )
 escape char = '"' | "\\" | "n" | "t" ;
 ```
 
+### Triple-Quoted String Literals
+
+A triple-quoted string literal is a multi-line string delimited by `"""` (three double-quote characters). Triple-quoted strings support the same escape sequences as regular strings, but may span multiple lines and may contain unescaped `"` and `""` characters.
+
+> r[lexer.triple-string]
+> The syntax of a triple-quoted string literal is the following:
+>
+> ```ebnf
+> triple string      = '"""', { triple string char }, '"""' ;
+> triple string char = any char - '"""'
+>                    | "\\", escape char ;
+> ```
+
+r[lexer.triple-string.multiline]
+Triple-quoted string literals MAY span multiple lines.
+
+r[lexer.triple-string.embedded-quotes]
+Unescaped `"` and `""` characters within a triple-quoted string literal MUST be preserved literally. Only the sequence `"""` terminates the string.
+
+r[lexer.triple-string.escape]
+The same escape sequences recognized in regular string literals (`\"`, `\\`, `\n`, `\t`) MUST be recognized within triple-quoted string literals.
+
+Triple-quoted string literals are auto-dedented. The dedent algorithm is:
+1. Split the content (between the opening and closing `"""` delimiters) into lines.
+2. If the first line (immediately after the opening `"""`) is empty, remove it.
+3. If the last line (immediately before the closing `"""`) consists only of whitespace, remove it and use its length as the dedent baseline.
+4. If no baseline was established in step 3, compute the minimum indentation across all non-empty remaining lines.
+5. Strip that many leading whitespace characters from each remaining line.
+6. Join the remaining lines with newlines.
+
+r[lexer.triple-string.dedent]
+Triple-quoted string literals MUST be auto-dedented using the algorithm described above.
+
+Triple-quoted string literals desugar into strings.
+
+r[lexer.triple-string.desugar]
+A triple-quoted string literal MUST desugar into a string value containing the dedented content with escape sequences resolved.
+
 ### Date Literals
 
 A date literal represents an ISO 8601/RFC 3339 date.
@@ -420,39 +458,45 @@ Path literals are resolved relative to the directory containing the file in whic
 
 Gnomon's expression syntax includes literal expressions, record expressions, list expressions, import expressions, let-in expressions, every expressions, operator expressions, and parenthesized expressions.
 
-> r[expr.syntax+2]
+> r[expr.syntax+3]
 > The grammar for expressions is as follows:
 >
 > ```ebnf
-> expr = unary expr, { binary op, unary expr } ;
+> expr = comparison expr ;
 >
-> unary expr = literal expr
->            | record expr
->            | list expr
->            | import expr
->            | let expr
->            | every expr
->            | "(", expr, ")"
->            | unary expr, ".", identifier
->            | unary expr, "[", expr, "]"
->            ;
+> comparison expr = concat expr, [ comparison op, concat expr ] ;
+> comparison op   = "==" | "!=" ;
 >
-> binary op = "++"    (* list concatenation *)
->           | "//"    (* record merge *)
->           | "=="    (* equality *)
->           | "!="    (* inequality *)
->           ;
+> concat expr = postfix expr, { concat op, postfix expr } ;
+> concat op   = "++"    (* list concatenation *)
+>             | "//"    (* record merge *)
+>             ;
+>
+> postfix expr = primary expr
+>              | postfix expr, ".", identifier
+>              | postfix expr, "[", expr, "]"
+>              ;
+>
+> primary expr = literal expr
+>              | record expr
+>              | list expr
+>              | import expr
+>              | let expr
+>              | every expr
+>              | "(", expr, ")"
+>              ;
 > ```
 
 ### Literal Expressions
 
-A literal expression is a string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, path literal, name, `true`, `false`, or `undefined`.
+A literal expression is a string literal, triple-quoted string literal, integer literal, signed integer literal, date literal, month-day literal, time literal, datetime literal, duration literal, URI literal, atom literal, path literal, name, `true`, `false`, or `undefined`.
 
-> r[expr.literal.syntax+4]
+> r[expr.literal.syntax+5]
 > The grammar for literal expressions is as follows:
 >
 > ```ebnf
 > literal expr = string literal
+>              | triple string literal
 >              | integer literal
 >              | signed integer literal
 >              | date literal
@@ -552,6 +596,23 @@ Let bindings MUST be sequential: the bound expression may reference variables fr
 
 r[expr.let.scope]
 The variable introduced by a `let` binding MUST be in scope for the body expression (the expression after `in`).
+
+### Operator Precedence and Associativity
+
+> r[expr.op.precedence]
+> Operators MUST be evaluated with the following precedence, from highest to lowest:
+>
+> | Precedence | Operators | Associativity |
+> |------------|-----------|---------------|
+> | Highest | `.` (field access), `[]` (index access) | Left (postfix) |
+> | Middle | `++` (concatenation), `//` (merge) | Right |
+> | Lowest | `==` (equality), `!=` (inequality) | Non-associative |
+
+r[expr.op.assoc.concat-merge]
+The `++` and `//` operators MUST be right-associative. That is, `a ++ b ++ c` MUST be parsed as `a ++ (b ++ c)`, and `a // b // c` MUST be parsed as `a // (b // c)`.
+
+r[expr.op.assoc.comparison]
+The `==` and `!=` operators MUST be non-associative. Chaining comparisons (e.g., `a == b == c` or `a != b == c`) MUST be a parse error.
 
 ### Operators
 

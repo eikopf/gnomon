@@ -6,6 +6,28 @@
 pub fn eval_string(text: &str) -> String {
     // Strip surrounding quotes.
     let inner = &text[1..text.len() - 1];
+    process_escapes(inner)
+}
+
+/// Evaluate a triple-quoted string literal: strip `"""` delimiters,
+/// process escape sequences, and apply auto-dedent.
+// r[impl lexer.triple-string]
+// r[impl lexer.triple-string.escape]
+// r[impl lexer.triple-string.dedent]
+// r[impl lexer.triple-string.desugar]
+pub fn eval_triple_string(text: &str) -> String {
+    // Strip surrounding """ delimiters (3 chars each side).
+    let inner = &text[3..text.len() - 3];
+    // Process escape sequences first, then dedent.
+    let escaped = process_escapes(inner);
+    dedent(&escaped)
+}
+
+/// Process escape sequences in a string interior.
+///
+/// Recognized escapes: `\"`, `\\`, `\n`, `\t`.
+/// Unknown escapes are preserved literally.
+fn process_escapes(inner: &str) -> String {
     let mut result = String::with_capacity(inner.len());
     let mut chars = inner.chars();
     while let Some(ch) = chars.next() {
@@ -27,6 +49,70 @@ pub fn eval_string(text: &str) -> String {
         }
     }
     result
+}
+
+/// Apply auto-dedent to a multi-line string.
+///
+/// Algorithm:
+/// 1. Split into lines.
+/// 2. If the first line is empty, remove it.
+/// 3. If the last line is whitespace-only, use its length as baseline and remove it.
+/// 4. Otherwise, compute minimum indentation across non-empty lines.
+/// 5. Strip that many leading whitespace chars from each line.
+/// 6. Join with newlines.
+fn dedent(s: &str) -> String {
+    let mut lines: Vec<&str> = s.split('\n').collect();
+
+    // 1. If the first line is empty, strip it.
+    if let Some(first) = lines.first() {
+        if first.is_empty() {
+            lines.remove(0);
+        }
+    }
+
+    if lines.is_empty() {
+        return String::new();
+    }
+
+    // 2. If the last line is whitespace-only (including empty), use its indentation as
+    //    baseline and remove it.
+    let baseline_indent = if let Some(last) = lines.last() {
+        if last.chars().all(|c| c == ' ' || c == '\t') {
+            let indent = last.len();
+            lines.pop();
+            Some(indent)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // 3. Compute minimum indentation.
+    let min_indent = baseline_indent.unwrap_or_else(|| {
+        lines
+            .iter()
+            .filter(|line| !line.is_empty())
+            .map(|line| line.len() - line.trim_start().len())
+            .min()
+            .unwrap_or(0)
+    });
+
+    // 4. Strip min_indent characters from each line.
+    let dedented: Vec<&str> = lines
+        .iter()
+        .map(|line| {
+            if line.len() >= min_indent {
+                &line[min_indent..]
+            } else {
+                // Empty or shorter-than-indent lines become empty.
+                ""
+            }
+        })
+        .collect();
+
+    // 5. Join with newlines.
+    dedented.join("\n")
 }
 
 /// Parse an integer literal token as `u64`.
@@ -166,6 +252,80 @@ mod tests {
     #[test]
     fn string_escaped_newline_and_tab() {
         assert_eq!(eval_string(r#""a\nb\tc""#), "a\nb\tc");
+    }
+
+    // ── eval_triple_string ─────────────────────────────────────
+
+    // r[verify lexer.triple-string.desugar]
+    #[test]
+    fn triple_string_simple() {
+        assert_eq!(eval_triple_string(r#""""hello""""#), "hello");
+    }
+
+    #[test]
+    fn triple_string_empty() {
+        assert_eq!(eval_triple_string(r#""""""""#), "");
+    }
+
+    // r[verify lexer.triple-string.multiline]
+    #[test]
+    fn triple_string_multiline() {
+        // Content: \nhello\nworld\n
+        // After dedent: first empty line stripped, last empty line stripped
+        assert_eq!(
+            eval_triple_string("\"\"\"\nhello\nworld\n\"\"\""),
+            "hello\nworld"
+        );
+    }
+
+    // r[verify lexer.triple-string.dedent]
+    #[test]
+    fn triple_string_dedent_with_baseline() {
+        // The closing """ is indented 4 spaces, establishing the baseline.
+        let input = "\"\"\"\n    hello\n    world\n    \"\"\"";
+        assert_eq!(eval_triple_string(input), "hello\nworld");
+    }
+
+    // r[verify lexer.triple-string.dedent]
+    #[test]
+    fn triple_string_dedent_mixed_indent() {
+        // Baseline is 4 from closing line; "world" has 8 → becomes 4.
+        let input = "\"\"\"\n    hello\n        world\n    \"\"\"";
+        assert_eq!(eval_triple_string(input), "hello\n    world");
+    }
+
+    // r[verify lexer.triple-string.embedded-quotes]
+    #[test]
+    fn triple_string_embedded_quotes() {
+        assert_eq!(
+            eval_triple_string(r#""""he said "hi" ok""""#),
+            r#"he said "hi" ok"#
+        );
+    }
+
+    // r[verify lexer.triple-string.escape]
+    #[test]
+    fn triple_string_escapes() {
+        assert_eq!(eval_triple_string(r#""""a\nb\tc""""#), "a\nb\tc");
+    }
+
+    #[test]
+    fn triple_string_no_dedent_inline() {
+        // Content on same line as delimiters — no first/last line stripping.
+        assert_eq!(eval_triple_string(r#""""hello world""""#), "hello world");
+    }
+
+    #[test]
+    fn triple_string_dedent_without_baseline() {
+        // No trailing whitespace-only line, so min-indent is computed.
+        let input = "\"\"\"\n  a\n    b\n  c\"\"\"";
+        assert_eq!(eval_triple_string(input), "a\n  b\nc");
+    }
+
+    #[test]
+    fn triple_string_preserves_empty_lines() {
+        let input = "\"\"\"\n    hello\n\n    world\n    \"\"\"";
+        assert_eq!(eval_triple_string(input), "hello\n\nworld");
     }
 
     // ── eval_integer / eval_signed_integer ───────────────────────

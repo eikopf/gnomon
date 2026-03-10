@@ -52,8 +52,10 @@ impl Parser {
                 // Short form: event @name short_span [title] [record]
                 self.bump(); // NAME
                 self.parse_short_span();
-                // Optional title (string literal)
-                if self.at(SyntaxKind::STRING_LITERAL) {
+                // Optional title (string or triple-string literal)
+                if self.at(SyntaxKind::STRING_LITERAL)
+                    || self.at(SyntaxKind::TRIPLE_STRING_LITERAL)
+                {
                     self.bump();
                 }
                 // Optional record
@@ -88,8 +90,10 @@ impl Parser {
                 if self.at_short_dt_start() {
                     self.parse_short_dt();
                 }
-                // Optional title
-                if self.at(SyntaxKind::STRING_LITERAL) {
+                // Optional title (string or triple-string literal)
+                if self.at(SyntaxKind::STRING_LITERAL)
+                    || self.at(SyntaxKind::TRIPLE_STRING_LITERAL)
+                {
                     self.bump();
                 }
                 // Optional record

@@ -139,7 +139,15 @@ impl EventDecl {
     }
 
     pub fn title(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::STRING_LITERAL)
+        self.syntax
+            .children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::STRING_LITERAL | SyntaxKind::TRIPLE_STRING_LITERAL
+                )
+            })
     }
 
     pub fn body(&self) -> Option<RecordExpr> {
@@ -157,7 +165,15 @@ impl TaskDecl {
     }
 
     pub fn title(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::STRING_LITERAL)
+        self.syntax
+            .children_with_tokens()
+            .filter_map(|it| it.into_token())
+            .find(|t| {
+                matches!(
+                    t.kind(),
+                    SyntaxKind::STRING_LITERAL | SyntaxKind::TRIPLE_STRING_LITERAL
+                )
+            })
     }
 
     pub fn body(&self) -> Option<RecordExpr> {

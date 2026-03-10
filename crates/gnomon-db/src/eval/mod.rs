@@ -565,15 +565,65 @@ mod tests {
         assert_eq!(get_field(r, &db, "count"), Value::Integer(42));
     }
 
+    // r[verify expr.op.assoc.concat-merge]
     #[test]
-    fn binary_left_associative() {
+    fn binary_right_associative() {
         let db = Database::default();
-        // [1] ++ [2] ++ [3] should be ([1] ++ [2]) ++ [3] = [1, 2, 3]
+        // [1] ++ [2] ++ [3] should be [1] ++ ([2] ++ [3]) = [1, 2, 3] (right-associative)
         let result = eval(&db, "[1] ++ [2] ++ [3]");
         match &result.value {
             Value::List(items) => assert_eq!(items.len(), 3),
             other => panic!("expected List, got: {other:?}"),
         }
+    }
+
+    // r[verify expr.op.assoc.concat-merge]
+    #[test]
+    fn merge_right_associative() {
+        let db = Database::default();
+        // { a: 1 } // { a: 2 } // { a: 3 } should yield { a: 3 }
+        let result = eval(&db, "{ a: 1 } // { a: 2 } // { a: 3 }");
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "a"), Value::Integer(3));
+    }
+
+    // r[verify expr.op.precedence]
+    #[test]
+    fn concat_binds_tighter_than_comparison() {
+        let db = Database::default();
+        // [1] ++ [2] == [3] should parse as ([1] ++ [2]) == [3] and produce Bool
+        // (not a type error from trying to compare, then concat the result)
+        let result = eval(&db, "[1] ++ [2] == [3]");
+        match &result.value {
+            Value::Bool(b) => assert!(!*b), // [1, 2] != [3]
+            other => panic!("expected Bool, got: {other:?}"),
+        }
+    }
+
+    // r[verify lexer.triple-string.desugar]
+    #[test]
+    fn triple_string_in_record() {
+        let db = Database::default();
+        let input = "{ desc: \"\"\"hello world\"\"\" }";
+        let result = eval(&db, input);
+        let r = expect_record(&result);
+        assert_eq!(
+            get_field(r, &db, "desc"),
+            Value::String("hello world".into())
+        );
+    }
+
+    // r[verify lexer.triple-string.dedent]
+    #[test]
+    fn triple_string_dedent_in_record() {
+        let db = Database::default();
+        let input = "{\n    desc: \"\"\"\n        hello\n        world\n        \"\"\",\n}";
+        let result = eval(&db, input);
+        let r = expect_record(&result);
+        assert_eq!(
+            get_field(r, &db, "desc"),
+            Value::String("hello\nworld".into())
+        );
     }
 
     // ── Import expressions ──────────────────────────────────────

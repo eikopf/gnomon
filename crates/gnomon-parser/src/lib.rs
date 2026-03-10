@@ -911,7 +911,7 @@ task @cleanup "Clean""#;
 
     // ── Expression syntax ────────────────────────────────────────
 
-    // r[verify expr.syntax+2]
+    // r[verify expr.syntax+3]
     #[test]
     fn expression_syntax_complex() {
         // Exercises let, record, list, field access, index, identifiers
@@ -924,6 +924,186 @@ task @cleanup "Clean""#;
                 field_b: x.b[0]
             }
             "#,
+        );
+    }
+
+    // ── Triple-quoted strings ────────────────────────────────────
+
+    // r[verify lexer.triple-string]
+    #[test]
+    fn parse_triple_string_literal() {
+        check(
+            r#"{ x: """hello""" }"#,
+            expect![[r#"
+                SOURCE_FILE@0..18
+                  RECORD_EXPR@0..18
+                    L_BRACE@0..1 "{"
+                    WHITESPACE@1..2 " "
+                    FIELD@2..16
+                      IDENT@2..3 "x"
+                      COLON@3..4 ":"
+                      WHITESPACE@4..5 " "
+                      LITERAL_EXPR@5..16
+                        TRIPLE_STRING_LITERAL@5..16 "\"\"\"hello\"\"\""
+                    WHITESPACE@16..17 " "
+                    R_BRACE@17..18 "}"
+            "#]],
+        );
+    }
+
+    // r[verify lexer.triple-string]
+    #[test]
+    fn parse_event_with_triple_string_title() {
+        check_no_errors(
+            "event @e 2026-01-01T00:00 1h \"\"\"My Event\"\"\"",
+        );
+    }
+
+    // r[verify lexer.triple-string]
+    #[test]
+    fn parse_task_with_triple_string_title() {
+        check_no_errors(
+            "task @t \"\"\"My Task\"\"\"",
+        );
+    }
+
+    // ── Operator precedence and associativity ────────────────────
+
+    // r[verify expr.op.assoc.concat-merge]
+    #[test]
+    fn concat_right_associative() {
+        // [1] ++ [2] ++ [3] should parse as [1] ++ ([2] ++ [3])
+        // i.e., the RHS of the outer ++ is itself a BINARY_EXPR
+        check(
+            "[1] ++ [2] ++ [3]",
+            expect![[r#"
+                SOURCE_FILE@0..17
+                  BINARY_EXPR@0..17
+                    LIST_EXPR@0..3
+                      L_BRACKET@0..1 "["
+                      LITERAL_EXPR@1..2
+                        INTEGER_LITERAL@1..2 "1"
+                      R_BRACKET@2..3 "]"
+                    WHITESPACE@3..4 " "
+                    PLUS_PLUS@4..6 "++"
+                    WHITESPACE@6..7 " "
+                    BINARY_EXPR@7..17
+                      LIST_EXPR@7..10
+                        L_BRACKET@7..8 "["
+                        LITERAL_EXPR@8..9
+                          INTEGER_LITERAL@8..9 "2"
+                        R_BRACKET@9..10 "]"
+                      WHITESPACE@10..11 " "
+                      PLUS_PLUS@11..13 "++"
+                      WHITESPACE@13..14 " "
+                      LIST_EXPR@14..17
+                        L_BRACKET@14..15 "["
+                        LITERAL_EXPR@15..16
+                          INTEGER_LITERAL@15..16 "3"
+                        R_BRACKET@16..17 "]"
+            "#]],
+        );
+    }
+
+    // r[verify expr.op.assoc.concat-merge]
+    #[test]
+    fn merge_right_associative() {
+        // {a: 1} // {a: 2} // {a: 3} should parse as {a: 1} // ({a: 2} // {a: 3})
+        check(
+            "{a: 1} // {a: 2} // {a: 3}",
+            expect![[r#"
+                SOURCE_FILE@0..26
+                  BINARY_EXPR@0..26
+                    RECORD_EXPR@0..6
+                      L_BRACE@0..1 "{"
+                      FIELD@1..5
+                        IDENT@1..2 "a"
+                        COLON@2..3 ":"
+                        WHITESPACE@3..4 " "
+                        LITERAL_EXPR@4..5
+                          INTEGER_LITERAL@4..5 "1"
+                      R_BRACE@5..6 "}"
+                    WHITESPACE@6..7 " "
+                    SLASH_SLASH@7..9 "//"
+                    WHITESPACE@9..10 " "
+                    BINARY_EXPR@10..26
+                      RECORD_EXPR@10..16
+                        L_BRACE@10..11 "{"
+                        FIELD@11..15
+                          IDENT@11..12 "a"
+                          COLON@12..13 ":"
+                          WHITESPACE@13..14 " "
+                          LITERAL_EXPR@14..15
+                            INTEGER_LITERAL@14..15 "2"
+                        R_BRACE@15..16 "}"
+                      WHITESPACE@16..17 " "
+                      SLASH_SLASH@17..19 "//"
+                      WHITESPACE@19..20 " "
+                      RECORD_EXPR@20..26
+                        L_BRACE@20..21 "{"
+                        FIELD@21..25
+                          IDENT@21..22 "a"
+                          COLON@22..23 ":"
+                          WHITESPACE@23..24 " "
+                          LITERAL_EXPR@24..25
+                            INTEGER_LITERAL@24..25 "3"
+                        R_BRACE@25..26 "}"
+            "#]],
+        );
+    }
+
+    // r[verify expr.op.precedence]
+    #[test]
+    fn concat_binds_tighter_than_comparison() {
+        // [1] ++ [2] == [3] should parse as ([1] ++ [2]) == [3]
+        check(
+            "[1] ++ [2] == [3]",
+            expect![[r#"
+                SOURCE_FILE@0..17
+                  BINARY_EXPR@0..17
+                    BINARY_EXPR@0..10
+                      LIST_EXPR@0..3
+                        L_BRACKET@0..1 "["
+                        LITERAL_EXPR@1..2
+                          INTEGER_LITERAL@1..2 "1"
+                        R_BRACKET@2..3 "]"
+                      WHITESPACE@3..4 " "
+                      PLUS_PLUS@4..6 "++"
+                      WHITESPACE@6..7 " "
+                      LIST_EXPR@7..10
+                        L_BRACKET@7..8 "["
+                        LITERAL_EXPR@8..9
+                          INTEGER_LITERAL@8..9 "2"
+                        R_BRACKET@9..10 "]"
+                    WHITESPACE@10..11 " "
+                    EQ_EQ@11..13 "=="
+                    WHITESPACE@13..14 " "
+                    LIST_EXPR@14..17
+                      L_BRACKET@14..15 "["
+                      LITERAL_EXPR@15..16
+                        INTEGER_LITERAL@15..16 "3"
+                      R_BRACKET@16..17 "]"
+            "#]],
+        );
+    }
+
+    // r[verify expr.op.assoc.comparison]
+    #[test]
+    fn comparison_non_associative_error() {
+        let parse = parse("1 == 2 == 3");
+        assert!(
+            !parse.ok(),
+            "chaining comparisons should produce a parse error"
+        );
+    }
+
+    // r[verify expr.op.assoc.comparison]
+    #[test]
+    fn comparison_mixed_non_associative_error() {
+        let parse = parse("1 != 2 == 3");
+        assert!(
+            !parse.ok(),
+            "chaining mixed comparisons should produce a parse error"
         );
     }
 }
