@@ -21,6 +21,7 @@ pub struct CheckResult<'db> {
 /// and any diagnostics from evaluation. Flattens the value into records, checks
 /// uniqueness constraints (single calendar, unique names), derives UIDs,
 /// runs shape-checking, and expands recurrence rules.
+// r[impl model.shape.diagnostic]
 pub fn validate_calendar<'db>(
     db: &'db dyn crate::Db,
     root_source: SourceFile,

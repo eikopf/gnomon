@@ -266,6 +266,7 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    // r[impl expr.record.syntax]
     fn lower_record(
         &mut self,
         record: &ast::RecordExpr,
@@ -533,6 +534,7 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    // r[impl expr.list.syntax]
     fn lower_list(
         &mut self,
         list: &ast::ListExpr,

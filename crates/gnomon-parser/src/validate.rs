@@ -28,11 +28,11 @@ pub fn validate_syntax(root: &SyntaxNode) -> Vec<SyntaxError> {
                 SyntaxKind::INTEGER_LITERAL => {
                     check_integer(token.text(), token.text_range(), &mut errors);
                 }
-                // r[lexer.signed-integer.range]
+                // r[impl lexer.signed-integer.range]
                 SyntaxKind::SIGNED_INTEGER_LITERAL => {
                     check_signed_integer(token.text(), token.text_range(), &mut errors);
                 }
-                // r[lexer.string.no-multiline]
+                // r[impl lexer.string.no-multiline]
                 SyntaxKind::STRING_LITERAL => {
                     check_string_no_multiline(token.text(), token.text_range(), &mut errors);
                 }
@@ -292,6 +292,8 @@ fn check_duplicate_keys(record: &RecordExpr, errors: &mut Vec<SyntaxError>) {
     }
 }
 
+// r[impl record.event.name+2]
+// r[impl record.event.start]
 fn check_event_decl(ev: &EventDecl, errors: &mut Vec<SyntaxError>) {
     if let Some(body) = ev.body() {
         check_duplicate_keys(&body, errors);
@@ -303,6 +305,7 @@ fn check_event_decl(ev: &EventDecl, errors: &mut Vec<SyntaxError>) {
     }
 }
 
+// r[impl record.task.name+2]
 fn check_task_decl(task: &TaskDecl, errors: &mut Vec<SyntaxError>) {
     if let Some(body) = task.body() {
         check_duplicate_keys(&body, errors);

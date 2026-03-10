@@ -1,6 +1,8 @@
 /// Evaluate a string literal token: strip outer quotes and process escape sequences.
 ///
 /// Recognized escapes: `\"`, `\\`, `\n`, `\t`.
+// r[impl lexer.string]
+// r[impl lexer.string.escape]
 pub fn eval_string(text: &str) -> String {
     // Strip surrounding quotes.
     let inner = &text[1..text.len() - 1];
@@ -28,11 +30,13 @@ pub fn eval_string(text: &str) -> String {
 }
 
 /// Parse an integer literal token as `u64`.
+// r[impl lexer.integer]
 pub fn eval_integer(text: &str) -> Option<u64> {
     text.parse().ok()
 }
 
 /// Parse a signed integer literal token as `i64`.
+// r[impl lexer.signed-integer]
 pub fn eval_signed_integer(text: &str) -> Option<i64> {
     text.parse().ok()
 }
@@ -50,6 +54,7 @@ pub fn eval_atom(text: &str) -> String {
 }
 
 /// Strip the `@` prefix from a name token: `@foo.bar` → `foo.bar`.
+// r[impl syntax.name]
 pub fn eval_name(text: &str) -> String {
     text[1..].to_string()
 }
