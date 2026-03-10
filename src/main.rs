@@ -327,42 +327,4 @@ fn offset_to_line_col(text: &str, offset: usize) -> (usize, usize) {
     (line, col)
 }
 
-// CLI integration tests live in tests/cli.rs and exercise the binary
-// via assert_cmd. The verify annotations below allow tracey to track
-// test coverage for CLI requirements.
-#[cfg(test)]
-mod cli_coverage {
-    // r[verify cli.root]
-    // r[verify cli.option.help]
-    // r[verify cli.option.help.short]
-    // r[verify cli.option.version]
-    // r[verify cli.option.version.behavior]
-    // r[verify cli.option.version.short]
-    // r[verify cli.subcommand.help]
-    // r[verify cli.subcommand.parse]
-    // r[verify cli.subcommand.parse.no-file]
-    // r[verify cli.subcommand.parse.output]
-    // r[verify cli.subcommand.check+2]
-    // r[verify cli.subcommand.check.no-file+2]
-    // r[verify cli.subcommand.check.output+2]
-    // r[verify cli.subcommand.check.unused]
-    // r[verify cli.subcommand.eval]
-    // r[verify cli.subcommand.eval.expr]
-    // r[verify cli.subcommand.eval.expr.exclusive]
-    // r[verify cli.subcommand.eval.no-file]
-    // r[verify cli.subcommand.eval.output]
-    // r[verify cli.subcommand.reserved+3]
-    // r[verify cli.syntax]
-    // r[verify cli.option.help.behavior.root]
-    // r[verify cli.option.help.behavior.subcommand]
-    // r[verify cli.option.order]
-    // r[verify cli.subcommand.order]
-    // r[verify cli.subcommand.help.root]
-    // r[verify cli.subcommand.help.penultimate]
-    // r[verify cli.option.help.xor]
-    // r[verify cli.option.version.xor]
-    // r[verify lexer.input-format.malformed]
-    // r[verify lexer.input-format.utf-8]
-    // See tests/cli.rs for the actual integration tests.
-}
 
