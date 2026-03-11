@@ -61,46 +61,53 @@ pub fn validate_calendar<'db>(
     let records = flatten_to_records(db, root_source, value);
 
     for (record, blame) in records {
-        // Determine if this is an entry (has type: "event"|"task") or calendar.
-        let is_entry = record.get(&type_key).is_some_and(|v| {
-            matches!(&v.value, Value::String(s) if s == "event" || s == "task")
-        });
-
         let source = blame.decl.source(db);
+        let type_val = record.get(&type_key).map(|v| &v.value);
 
-        if is_entry {
-            check_name_collision(
-                db,
-                &record,
-                &name_key,
-                source,
-                &mut seen_names,
-                &mut diagnostics,
-                &mut has_errors,
-            );
-            calendar.entries.push(Blamed {
-                value: record,
-                blame,
-            });
-        } else {
-            // Calendar
-            calendar_count += 1;
-            if calendar_count == 1 {
-                first_calendar_source = Some(source);
-                calendar.properties = record;
-            } else {
+        match type_val {
+            Some(Value::String(s)) if s == "event" || s == "task" => {
+                check_name_collision(
+                    db,
+                    &record,
+                    &name_key,
+                    source,
+                    &mut seen_names,
+                    &mut diagnostics,
+                    &mut has_errors,
+                );
+                calendar.entries.push(Blamed {
+                    value: record,
+                    blame,
+                });
+            }
+            Some(Value::String(s)) if s == "calendar" => {
+                calendar_count += 1;
+                if calendar_count == 1 {
+                    first_calendar_source = Some(source);
+                    calendar.properties = record;
+                } else {
+                    has_errors = true;
+                    diagnostics.push(Diagnostic {
+                        source,
+                        range: rowan::TextRange::default(),
+                        severity: Severity::Error,
+                        message: format!(
+                            "duplicate calendar record (first defined in {})",
+                            first_calendar_source
+                                .unwrap_or(root_source)
+                                .path(db)
+                                .display()
+                        ),
+                    });
+                }
+            }
+            _ => {
                 has_errors = true;
                 diagnostics.push(Diagnostic {
                     source,
                     range: rowan::TextRange::default(),
                     severity: Severity::Error,
-                    message: format!(
-                        "duplicate calendar declaration (first defined in {})",
-                        first_calendar_source
-                            .unwrap_or(root_source)
-                            .path(db)
-                            .display()
-                    ),
+                    message: "record has no recognized type field".into(),
                 });
             }
         }
@@ -113,7 +120,7 @@ pub fn validate_calendar<'db>(
             source: root_source,
             range: rowan::TextRange::default(),
             severity: Severity::Error,
-            message: "no calendar declaration found".into(),
+            message: "no calendar record found".into(),
         });
     }
 
@@ -321,6 +328,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {
+                        type: "calendar",
                         uid: "test",
                     },
                     entries: [
@@ -367,6 +375,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {
+                        type: "calendar",
                         uid: "cal",
                     },
                     entries: [
@@ -431,7 +440,7 @@ mod tests {
             &db,
             r#"event @a 2026-01-01T09:00 1h "A""#,
         );
-        assert!(diags.iter().any(|d| d.contains("no calendar declaration")));
+        assert!(diags.iter().any(|d| d.contains("no calendar record")));
     }
 
     // r[verify model.calendar.singular]
@@ -447,7 +456,7 @@ mod tests {
         );
         assert!(diags
             .iter()
-            .any(|d| d.contains("duplicate calendar declaration")));
+            .any(|d| d.contains("duplicate calendar record")));
     }
 
     // r[verify model.name.unique]
@@ -493,7 +502,7 @@ mod tests {
         assert!(result
             .diagnostics
             .iter()
-            .any(|d| d.message.contains("no calendar declaration")));
+            .any(|d| d.message.contains("no calendar record")));
     }
 
     #[test]
@@ -532,7 +541,9 @@ mod tests {
             "#,
             expect![[r#"
                 Calendar {
-                    properties: {},
+                    properties: {
+                        type: "calendar",
+                    },
                     entries: [
                         {
                             name: @review,
@@ -574,6 +585,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {
+                        type: "calendar",
                         uid: "main",
                     },
                     entries: [
@@ -680,6 +692,7 @@ mod tests {
             expect![[r#"
                 Calendar {
                     properties: {
+                        type: "calendar",
                         uid: "minimal",
                     },
                     entries: [],
@@ -716,7 +729,9 @@ mod tests {
             "#,
             expect![[r#"
                 Calendar {
-                    properties: {},
+                    properties: {
+                        type: "calendar",
+                    },
                     entries: [
                         {
                             duration: {

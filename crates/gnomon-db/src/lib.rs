@@ -42,7 +42,7 @@ mod tests {
         let result = parse(&db, source);
         assert!(!result.has_errors(&db));
         let tree = result.tree(&db);
-        assert_eq!(tree.decls().count(), 1,);
+        assert_eq!(tree.body_exprs().count(), 1,);
     }
 
     #[test]

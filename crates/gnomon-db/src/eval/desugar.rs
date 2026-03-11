@@ -405,9 +405,9 @@ mod tests {
             SourceFile::new(&db, PathBuf::from("t.gnomon"), "event @e { rrule: every day }".into());
         let parse_result = crate::parse(&db, source);
         let tree = parse_result.tree(&db);
-        let decl = tree.decls().next().unwrap();
-        let event = match decl {
-            gnomon_parser::ast::Decl::EventDecl(e) => e,
+        let expr = tree.body_exprs().next().unwrap();
+        let event = match expr {
+            gnomon_parser::ast::Expr::EventExpr(e) => e,
             _ => panic!("expected event"),
         };
         let body = event.body().unwrap();
@@ -441,9 +441,9 @@ mod tests {
         );
         let parse_result = crate::parse(&db, source);
         let tree = parse_result.tree(&db);
-        let decl = tree.decls().next().unwrap();
-        let event = match decl {
-            gnomon_parser::ast::Decl::EventDecl(e) => e,
+        let expr = tree.body_exprs().next().unwrap();
+        let event = match expr {
+            gnomon_parser::ast::Expr::EventExpr(e) => e,
             _ => panic!("expected event"),
         };
         let body = event.body().unwrap();
@@ -492,9 +492,9 @@ mod tests {
         );
         let parse_result = crate::parse(&db, source);
         let tree = parse_result.tree(&db);
-        let decl = tree.decls().next().unwrap();
-        let event = match decl {
-            gnomon_parser::ast::Decl::EventDecl(e) => e,
+        let expr = tree.body_exprs().next().unwrap();
+        let event = match expr {
+            gnomon_parser::ast::Expr::EventExpr(e) => e,
             _ => panic!("expected event"),
         };
         let body = event.body().unwrap();
@@ -529,9 +529,9 @@ mod tests {
         );
         let parse_result = crate::parse(&db, source);
         let tree = parse_result.tree(&db);
-        let decl = tree.decls().next().unwrap();
-        let event = match decl {
-            gnomon_parser::ast::Decl::EventDecl(e) => e,
+        let expr = tree.body_exprs().next().unwrap();
+        let event = match expr {
+            gnomon_parser::ast::Expr::EventExpr(e) => e,
             _ => panic!("expected event"),
         };
         let body = event.body().unwrap();

@@ -229,7 +229,7 @@ impl Parser {
         (self.builder.finish(), self.errors)
     }
 
-    // r[impl syntax.start+2]
+    // r[impl syntax.start+3]
     fn parse_source_file(&mut self) {
         self.start_node_before_trivia(SyntaxKind::SOURCE_FILE);
 
@@ -261,21 +261,17 @@ impl Parser {
             }
         }
 
-        // Body: declarations or expression (unless already consumed by a let-expression)
+        // r[impl syntax.file.body+2]
+        // Body: declaration list or single expression (unless already consumed by a let-expression)
         if !parsed_body && !self.at_eof() {
-            if self.at_decl_start() || self.current() == SyntaxKind::ERROR {
-                // Declaration mode (also entered when leading errors precede decls)
+            if self.at_decl_start() {
+                // List mode: parse expressions until EOF
                 while !self.at_eof() {
-                    if self.at_decl_start() {
-                        self.parse_decl();
-                    } else {
-                        self.error_at_current("expected declaration");
-                        self.error_recover();
-                    }
+                    self.parse_expr();
                 }
             } else {
+                // Single expression mode
                 self.parse_expr();
-                // Error-recover any trailing non-trivia tokens.
                 while !self.at_eof() {
                     self.error_at_current("unexpected token after expression");
                     self.error_recover();

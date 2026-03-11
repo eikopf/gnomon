@@ -78,6 +78,9 @@ impl Parser {
             SyntaxKind::L_BRACKET => self.parse_list_expr(),
             SyntaxKind::L_PAREN => self.parse_paren_expr(),
 
+            SyntaxKind::IDENT if self.current_text() == "calendar" => self.parse_calendar_expr(),
+            SyntaxKind::IDENT if self.current_text() == "event" => self.parse_event_expr(),
+            SyntaxKind::IDENT if self.current_text() == "task" => self.parse_task_expr(),
             SyntaxKind::IDENT if self.current_text() == "import" => self.parse_import_expr(),
             SyntaxKind::IDENT if self.current_text() == "let" => self.parse_let_expr(),
             SyntaxKind::IDENT if self.current_text() == "every" => self.parse_every_expr(),

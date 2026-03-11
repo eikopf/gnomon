@@ -90,9 +90,9 @@ pub enum SyntaxKind {
 
     // ── Node kinds (internal / composite) ────────────────────────────
     SOURCE_FILE,
-    CALENDAR_DECL,
-    EVENT_DECL,
-    TASK_DECL,
+    CALENDAR_EXPR,
+    EVENT_EXPR,
+    TASK_EXPR,
     SHORT_SPAN,
     SHORT_DT,
     LITERAL_EXPR,

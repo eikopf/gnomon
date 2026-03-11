@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use rowan::ast::AstNode;
 
-use crate::ast::{self, EventDecl, RecordExpr, TaskDecl};
+use crate::ast::{self, EventExpr, RecordExpr, TaskExpr};
 use crate::syntax_kind::{SyntaxKind, SyntaxNode};
 
 /// A syntactic validation error with a byte range and message.
@@ -57,20 +57,15 @@ pub fn validate_syntax(root: &SyntaxNode) -> Vec<SyntaxError> {
         }
     }
 
-    // AST-level checks
-    let file = match ast::SourceFile::cast(root.clone()) {
-        Some(f) => f,
-        None => return errors,
-    };
-
-    for decl in file.decls() {
-        match decl {
-            ast::Decl::EventDecl(ev) => check_event_decl(&ev, &mut errors),
-            ast::Decl::TaskDecl(task) => check_task_decl(&task, &mut errors),
-            ast::Decl::CalendarDecl(cal) => {
-                if let Some(body) = cal.body() {
-                    check_duplicate_keys(&body, &mut errors);
-                }
+    // AST-level checks: walk entire tree to find declaration expressions at any depth
+    for node in root.descendants() {
+        if let Some(ev) = ast::EventExpr::cast(node.clone()) {
+            check_event_expr(&ev, &mut errors);
+        } else if let Some(task) = ast::TaskExpr::cast(node.clone()) {
+            check_task_expr(&task, &mut errors);
+        } else if let Some(cal) = ast::CalendarExpr::cast(node.clone()) {
+            if let Some(body) = cal.body() {
+                check_duplicate_keys(&body, &mut errors);
             }
         }
     }
@@ -294,7 +289,7 @@ fn check_duplicate_keys(record: &RecordExpr, errors: &mut Vec<SyntaxError>) {
 
 // r[impl record.event.name+2]
 // r[impl record.event.start]
-fn check_event_decl(ev: &EventDecl, errors: &mut Vec<SyntaxError>) {
+fn check_event_expr(ev: &EventExpr, errors: &mut Vec<SyntaxError>) {
     if let Some(body) = ev.body() {
         check_duplicate_keys(&body, errors);
         // Prefix form: no short-form name token on EventDecl itself
@@ -306,7 +301,7 @@ fn check_event_decl(ev: &EventDecl, errors: &mut Vec<SyntaxError>) {
 }
 
 // r[impl record.task.name+2]
-fn check_task_decl(task: &TaskDecl, errors: &mut Vec<SyntaxError>) {
+fn check_task_expr(task: &TaskExpr, errors: &mut Vec<SyntaxError>) {
     if let Some(body) = task.body() {
         check_duplicate_keys(&body, errors);
         // Prefix form: no short-form name token on TaskDecl itself

@@ -224,7 +224,10 @@ mod tests {
 
     #[test]
     fn empty_calendar() {
-        check("calendar {}", expect![[r#"{}"#]]);
+        check("calendar {}", expect![[r#"
+            [{
+                type: "calendar",
+            }]"#]]);
     }
 
     // r[verify cli.subcommand.eval.output.string]
@@ -234,10 +237,11 @@ mod tests {
         check(
             r#"calendar { uid: "test-cal", name: "My Cal" }"#,
             expect![[r#"
-                {
+                [{
                     name: "My Cal",
+                    type: "calendar",
                     uid: "test-cal",
-                }"#]],
+                }]"#]],
         );
     }
 
@@ -248,7 +252,7 @@ mod tests {
         check(
             r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#,
             expect![[r#"
-                {
+                [{
                     duration: {
                         days: 0,
                         hours: 1,
@@ -271,7 +275,7 @@ mod tests {
                     },
                     title: "Standup",
                     type: "event",
-                }"#]],
+                }]"#]],
         );
     }
 
@@ -281,9 +285,10 @@ mod tests {
         check(
             r#"calendar { keywords: ["work", "meeting"] }"#,
             expect![[r#"
-                {
+                [{
                     keywords: ["work", "meeting"],
-                }"#]],
+                    type: "calendar",
+                }]"#]],
         );
     }
 
@@ -292,7 +297,7 @@ mod tests {
         check(
             r#"task @review 2026-03-15T17:00 "Code review""#,
             expect![[r#"
-                {
+                [{
                     due: {
                         date: {
                             day: 15,
@@ -308,7 +313,7 @@ mod tests {
                     name: @review,
                     title: "Code review",
                     type: "task",
-                }"#]],
+                }]"#]],
         );
     }
 
@@ -318,10 +323,11 @@ mod tests {
         check(
             "calendar { show_without_time: true, priority: 5 }",
             expect![[r#"
-                {
+                [{
                     priority: 5,
                     show_without_time: true,
-                }"#]],
+                    type: "calendar",
+                }]"#]],
         );
     }
 
@@ -331,9 +337,10 @@ mod tests {
         check(
             "calendar { optional: undefined }",
             expect![[r#"
-                {
+                [{
                     optional: undefined,
-                }"#]],
+                    type: "calendar",
+                }]"#]],
         );
     }
 }

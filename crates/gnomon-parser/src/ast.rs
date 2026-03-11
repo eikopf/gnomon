@@ -12,7 +12,7 @@ mod tests {
     fn source_file_cast() {
         let p = parse("calendar {}");
         let file = SourceFile::cast(p.syntax()).unwrap();
-        assert_eq!(file.decls().count(), 1);
+        assert_eq!(file.body_exprs().count(), 1);
     }
 
     #[test]
@@ -23,62 +23,62 @@ mod tests {
     }
 
     #[test]
-    fn calendar_decl_accessors() {
+    fn calendar_expr_accessors() {
         let p = parse(r#"calendar { uid: "test" }"#);
         let file = p.tree();
-        let decl = file.decls().next().unwrap();
-        match decl {
-            Decl::CalendarDecl(cal) => {
+        let expr = file.body_exprs().next().unwrap();
+        match expr {
+            Expr::CalendarExpr(cal) => {
                 let body = cal.body().unwrap();
                 assert_eq!(body.fields().count(), 1);
             }
-            _ => panic!("expected CalendarDecl"),
+            _ => panic!("expected CalendarExpr"),
         }
     }
 
     #[test]
-    fn event_decl_short_form() {
+    fn event_expr_short_form() {
         let p = parse(r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#);
         let file = p.tree();
-        let decl = file.decls().next().unwrap();
-        match decl {
-            Decl::EventDecl(ev) => {
+        let expr = file.body_exprs().next().unwrap();
+        match expr {
+            Expr::EventExpr(ev) => {
                 assert_eq!(ev.name().unwrap().text(), "@meeting");
                 assert!(ev.short_span().is_some());
                 assert_eq!(ev.title().unwrap().text(), "\"Standup\"");
             }
-            _ => panic!("expected EventDecl"),
+            _ => panic!("expected EventExpr"),
         }
     }
 
     #[test]
-    fn event_decl_prefix_form() {
+    fn event_expr_prefix_form() {
         let p = parse("event { name: @meeting }");
         let file = p.tree();
-        let decl = file.decls().next().unwrap();
-        match decl {
-            Decl::EventDecl(ev) => {
-                // NAME is inside the record, not a direct child of EventDecl
+        let expr = file.body_exprs().next().unwrap();
+        match expr {
+            Expr::EventExpr(ev) => {
+                // NAME is inside the record, not a direct child of EventExpr
                 assert!(ev.name().is_none());
                 assert!(ev.body().is_some());
             }
-            _ => panic!("expected EventDecl"),
+            _ => panic!("expected EventExpr"),
         }
     }
 
     #[test]
-    fn task_decl_with_datetime() {
+    fn task_expr_with_datetime() {
         let p = parse(r#"task @deadline 2026-06-01T17:00 "Submit report""#);
         let file = p.tree();
-        let decl = file.decls().next().unwrap();
-        match decl {
-            Decl::TaskDecl(task) => {
+        let expr = file.body_exprs().next().unwrap();
+        match expr {
+            Expr::TaskExpr(task) => {
                 assert_eq!(task.name().unwrap().text(), "@deadline");
                 let dt = task.short_dt().unwrap();
                 assert!(dt.datetime().is_some());
                 assert_eq!(task.title().unwrap().text(), "\"Submit report\"");
             }
-            _ => panic!("expected TaskDecl"),
+            _ => panic!("expected TaskExpr"),
         }
     }
 
@@ -86,9 +86,9 @@ mod tests {
     fn record_field_count_and_names() {
         let p = parse(r#"calendar { uid: "test", name: "cal" }"#);
         let file = p.tree();
-        let cal = match file.decls().next().unwrap() {
-            Decl::CalendarDecl(c) => c,
-            _ => panic!("expected CalendarDecl"),
+        let cal = match file.body_exprs().next().unwrap() {
+            Expr::CalendarExpr(c) => c,
+            _ => panic!("expected CalendarExpr"),
         };
         let body = cal.body().unwrap();
         let fields: Vec<_> = body.fields().collect();
@@ -101,9 +101,9 @@ mod tests {
     fn field_value_literal() {
         let p = parse(r#"calendar { uid: "test" }"#);
         let file = p.tree();
-        let cal = match file.decls().next().unwrap() {
-            Decl::CalendarDecl(c) => c,
-            _ => panic!("expected CalendarDecl"),
+        let cal = match file.body_exprs().next().unwrap() {
+            Expr::CalendarExpr(c) => c,
+            _ => panic!("expected CalendarExpr"),
         };
         let field = cal.body().unwrap().fields().next().unwrap();
         match field.value().unwrap() {
@@ -118,9 +118,9 @@ mod tests {
     fn list_expr_elements() {
         let p = parse("calendar { tags: [1, 2, 3] }");
         let file = p.tree();
-        let cal = match file.decls().next().unwrap() {
-            Decl::CalendarDecl(c) => c,
-            _ => panic!("expected CalendarDecl"),
+        let cal = match file.body_exprs().next().unwrap() {
+            Expr::CalendarExpr(c) => c,
+            _ => panic!("expected CalendarExpr"),
         };
         let field = cal.body().unwrap().fields().next().unwrap();
         match field.value().unwrap() {
@@ -135,9 +135,9 @@ mod tests {
     fn every_expr_day() {
         let p = parse("event { name: @daily, recurrence: every day }");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
         match rec_field.value().unwrap() {
@@ -154,9 +154,9 @@ mod tests {
     fn every_expr_weekday() {
         let p = parse("event { name: @weekly, recurrence: every monday }");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
         match rec_field.value().unwrap() {
@@ -172,9 +172,9 @@ mod tests {
     fn every_expr_year_on() {
         let p = parse("event { name: @bday, recurrence: every year on 03-15 }");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
         match rec_field.value().unwrap() {
@@ -191,9 +191,9 @@ mod tests {
     fn every_expr_until_datetime() {
         let p = parse("event { name: @daily, recurrence: every day until 2026-12-31T23:59 }");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
         match rec_field.value().unwrap() {
@@ -209,9 +209,9 @@ mod tests {
     fn every_expr_until_date() {
         let p = parse("event { name: @daily, recurrence: every day until 2026-12-31 }");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
         match rec_field.value().unwrap() {
@@ -228,9 +228,9 @@ mod tests {
     fn every_expr_until_count() {
         let p = parse("event { name: @limited, recurrence: every day until 10 times }");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let rec_field = ev.body().unwrap().fields().nth(1).unwrap();
         match rec_field.value().unwrap() {
@@ -247,9 +247,9 @@ mod tests {
     fn short_span_accessors() {
         let p = parse(r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#);
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let span = ev.short_span().unwrap();
         assert!(span.start().is_some());
@@ -260,9 +260,9 @@ mod tests {
     fn short_dt_date_time() {
         let p = parse("event @lunch 2026-03-01 12:00 1h");
         let file = p.tree();
-        let ev = match file.decls().next().unwrap() {
-            Decl::EventDecl(e) => e,
-            _ => panic!("expected EventDecl"),
+        let ev = match file.body_exprs().next().unwrap() {
+            Expr::EventExpr(e) => e,
+            _ => panic!("expected EventExpr"),
         };
         let span = ev.short_span().unwrap();
         let dt = span.start().unwrap();
@@ -272,17 +272,17 @@ mod tests {
     }
 
     #[test]
-    fn multiple_decls_enum_dispatch() {
+    fn multiple_exprs_enum_dispatch() {
         let p = parse(
             r#"calendar { uid: "cal" }
 event @meeting 2026-03-01T14:30 1h "Standup"
 task @cleanup "Clean""#,
         );
         let file = p.tree();
-        let decls: Vec<_> = file.decls().collect();
-        assert_eq!(decls.len(), 3);
-        assert!(matches!(decls[0], Decl::CalendarDecl(_)));
-        assert!(matches!(decls[1], Decl::EventDecl(_)));
-        assert!(matches!(decls[2], Decl::TaskDecl(_)));
+        let exprs: Vec<_> = file.body_exprs().collect();
+        assert_eq!(exprs.len(), 3);
+        assert!(matches!(exprs[0], Expr::CalendarExpr(_)));
+        assert!(matches!(exprs[1], Expr::EventExpr(_)));
+        assert!(matches!(exprs[2], Expr::TaskExpr(_)));
     }
 }

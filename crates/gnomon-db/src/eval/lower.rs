@@ -70,7 +70,7 @@ impl<'db> LowerCtx<'db> {
     ///
     /// File structure: optional `let` bindings, then either declarations or an expression body.
     // r[impl syntax.file.let]
-    // r[impl syntax.file.body]
+    // r[impl syntax.file.body+2]
     pub fn lower_source_file(&mut self, file: &ast::SourceFile) -> Value<'db> {
         // 1. Process file-level let bindings (pushed into env).
         for binding in file.let_bindings() {
@@ -85,84 +85,40 @@ impl<'db> LowerCtx<'db> {
             }
         }
 
-        // 2. Evaluate body
-        let decls: Vec<_> = file.decls().collect();
-        if !decls.is_empty() {
-            // Declaration mode
-            if decls.len() == 1 {
-                self.lower_decl_to_value(&decls[0], 0)
-            } else {
-                let items: Vec<_> = decls
+        // 2. Evaluate body expressions
+        let exprs: Vec<_> = file.body_exprs().collect();
+        if exprs.is_empty() {
+            // Empty body → empty list
+            Value::List(vec![])
+        } else {
+            let first_is_decl = matches!(
+                &exprs[0],
+                ast::Expr::CalendarExpr(_) | ast::Expr::EventExpr(_) | ast::Expr::TaskExpr(_)
+            );
+            if first_is_decl {
+                // List mode: all expressions collected into a list
+                let items = exprs
                     .iter()
                     .enumerate()
-                    .map(|(i, decl)| {
-                        let value = self.lower_decl_to_value(decl, i);
-                        let did = self.make_decl_id(i, match decl {
-                            ast::Decl::CalendarDecl(_) => DeclKind::Calendar,
-                            ast::Decl::EventDecl(_) => DeclKind::Event,
-                            ast::Decl::TaskDecl(_) => DeclKind::Task,
-                        });
+                    .map(|(i, expr)| {
+                        let decl_id = self.make_decl_id(i, decl_kind_for_expr(expr));
+                        let value = self.lower_top_expr(expr, decl_id, &FieldPath::root());
                         Blamed {
                             value,
-                            blame: self.root_blame(did),
+                            blame: self.root_blame(decl_id),
                         }
                     })
                     .collect();
                 Value::List(items)
-            }
-        } else if let Some(body) = file.body_expr() {
-            let decl_id = self.make_decl_id(0, DeclKind::Expr);
-            self.lower_top_expr(&body, decl_id, &FieldPath::root())
-        } else {
-            Value::Undefined
-        }
-    }
-
-    /// Lower a declaration to a Value.
-    fn lower_decl_to_value(&mut self, decl: &ast::Decl, index: usize) -> Value<'db> {
-        match decl {
-            // r[impl decl.calendar.desugar]
-            ast::Decl::CalendarDecl(cal) => {
-                let decl_id = self.make_decl_id(index, DeclKind::Calendar);
-                match cal.body() {
-                    Some(body) => {
-                        Value::Record(self.lower_record(&body, decl_id, &FieldPath::root()))
-                    }
-                    None => Value::Record(Record::new()),
-                }
-            }
-            // r[impl model.entry.type.infer]
-            // r[impl decl.event.desugar]
-            ast::Decl::EventDecl(ev) => {
-                let decl_id = self.make_decl_id(index, DeclKind::Event);
-                let mut record = self.lower_event(ev, decl_id);
-                self.insert_field(
-                    &mut record,
-                    "type",
-                    Value::String("event".into()),
-                    decl_id,
-                    &FieldPath::root(),
-                );
-                Value::Record(record)
-            }
-            // r[impl model.entry.type.infer]
-            // r[impl decl.task.desugar]
-            ast::Decl::TaskDecl(task) => {
-                let decl_id = self.make_decl_id(index, DeclKind::Task);
-                let mut record = self.lower_task(task, decl_id);
-                self.insert_field(
-                    &mut record,
-                    "type",
-                    Value::String("task".into()),
-                    decl_id,
-                    &FieldPath::root(),
-                );
-                Value::Record(record)
+            } else {
+                // Single expression mode
+                let decl_id = self.make_decl_id(0, DeclKind::Expr);
+                self.lower_top_expr(&exprs[0], decl_id, &FieldPath::root())
             }
         }
     }
 
-    fn lower_event(&mut self, ev: &ast::EventDecl, decl_id: DeclId<'db>) -> Record<'db> {
+    fn lower_event(&mut self, ev: &ast::EventExpr, decl_id: DeclId<'db>) -> Record<'db> {
         let base_path = FieldPath::root();
 
         if ev.name().is_some() {
@@ -223,7 +179,7 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    fn lower_task(&mut self, task: &ast::TaskDecl, decl_id: DeclId<'db>) -> Record<'db> {
+    fn lower_task(&mut self, task: &ast::TaskExpr, decl_id: DeclId<'db>) -> Record<'db> {
         let base_path = FieldPath::root();
 
         if task.name().is_some() {
@@ -476,6 +432,47 @@ impl<'db> LowerCtx<'db> {
             }
             ast::Expr::ImportExpr(import) => {
                 self.lower_import(import)
+            }
+            // r[impl decl.calendar.desugar+2]
+            ast::Expr::CalendarExpr(cal) => {
+                let mut record = match cal.body() {
+                    Some(body) => self.lower_record(&body, decl_id, path),
+                    None => Record::new(),
+                };
+                self.insert_field(
+                    &mut record,
+                    "type",
+                    Value::String("calendar".into()),
+                    decl_id,
+                    path,
+                );
+                Value::Record(record)
+            }
+            // r[impl model.entry.type.infer]
+            // r[impl decl.event.desugar+2]
+            ast::Expr::EventExpr(ev) => {
+                let mut record = self.lower_event(ev, decl_id);
+                self.insert_field(
+                    &mut record,
+                    "type",
+                    Value::String("event".into()),
+                    decl_id,
+                    path,
+                );
+                Value::Record(record)
+            }
+            // r[impl model.entry.type.infer]
+            // r[impl decl.task.desugar+2]
+            ast::Expr::TaskExpr(task) => {
+                let mut record = self.lower_task(task, decl_id);
+                self.insert_field(
+                    &mut record,
+                    "type",
+                    Value::String("task".into()),
+                    decl_id,
+                    path,
+                );
+                Value::Record(record)
             }
         }
     }
@@ -834,6 +831,15 @@ impl<'db> LowerCtx<'db> {
             severity: crate::queries::Severity::Error,
             message,
         });
+    }
+}
+
+fn decl_kind_for_expr(expr: &ast::Expr) -> DeclKind {
+    match expr {
+        ast::Expr::CalendarExpr(_) => DeclKind::Calendar,
+        ast::Expr::EventExpr(_) => DeclKind::Event,
+        ast::Expr::TaskExpr(_) => DeclKind::Task,
+        _ => DeclKind::Expr,
     }
 }
 

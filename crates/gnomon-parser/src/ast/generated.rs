@@ -69,9 +69,9 @@ macro_rules! ast_enum {
 // ── Node types ──────────────────────────────────────────────────────
 
 ast_node!(SourceFile, SOURCE_FILE);
-ast_node!(CalendarDecl, CALENDAR_DECL);
-ast_node!(EventDecl, EVENT_DECL);
-ast_node!(TaskDecl, TASK_DECL);
+ast_node!(CalendarExpr, CALENDAR_EXPR);
+ast_node!(EventExpr, EVENT_EXPR);
+ast_node!(TaskExpr, TASK_EXPR);
 ast_node!(LiteralExpr, LITERAL_EXPR);
 ast_node!(RecordExpr, RECORD_EXPR);
 ast_node!(ListExpr, LIST_EXPR);
@@ -90,7 +90,6 @@ ast_node!(Field, FIELD);
 
 // ── Enum types ──────────────────────────────────────────────────────
 
-ast_enum!(Decl, CalendarDecl, EventDecl, TaskDecl);
 ast_enum!(
     Expr,
     LiteralExpr,
@@ -103,33 +102,32 @@ ast_enum!(
     FieldAccessExpr,
     IndexExpr,
     ParenExpr,
-    IdentExpr
+    IdentExpr,
+    CalendarExpr,
+    EventExpr,
+    TaskExpr
 );
 
 // ── Accessor methods ────────────────────────────────────────────────
 
 impl SourceFile {
-    pub fn decls(&self) -> impl Iterator<Item = Decl> {
-        support::children(&self.syntax)
-    }
-
     pub fn let_bindings(&self) -> impl Iterator<Item = LetBindingNode> {
         support::children(&self.syntax)
     }
 
-    /// The body expression (if file body is a single expression, not declarations).
-    pub fn body_expr(&self) -> Option<Expr> {
-        support::child(&self.syntax)
+    /// Body expressions (0 or more top-level expressions after let bindings).
+    pub fn body_exprs(&self) -> impl Iterator<Item = Expr> {
+        support::children(&self.syntax)
     }
 }
 
-impl CalendarDecl {
+impl CalendarExpr {
     pub fn body(&self) -> Option<RecordExpr> {
         support::child(&self.syntax)
     }
 }
 
-impl EventDecl {
+impl EventExpr {
     pub fn name(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::NAME)
     }
@@ -155,7 +153,7 @@ impl EventDecl {
     }
 }
 
-impl TaskDecl {
+impl TaskExpr {
     pub fn name(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::NAME)
     }

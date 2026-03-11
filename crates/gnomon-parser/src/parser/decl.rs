@@ -14,33 +14,19 @@ impl Parser {
         }
     }
 
-    // r[impl decl.syntax+3]
-    /// Parse a single declaration.
-    pub(super) fn parse_decl(&mut self) {
-        match self.current_text() {
-            "calendar" => self.parse_calendar_decl(),
-            "event" => self.parse_event_decl(),
-            "task" => self.parse_task_decl(),
-            _ => {
-                self.error_at_current("expected declaration keyword");
-                self.error_recover();
-            }
-        }
-    }
-
-    // r[impl decl.syntax+3]
+    // r[impl decl.syntax+4]
     /// `calendar record`
-    fn parse_calendar_decl(&mut self) {
-        self.start_node(SyntaxKind::CALENDAR_DECL);
+    pub(super) fn parse_calendar_expr(&mut self) {
+        self.start_node(SyntaxKind::CALENDAR_EXPR);
         self.bump_remap(SyntaxKind::CALENDAR_KW);
         self.parse_record_expr();
         self.finish_node();
     }
 
-    // r[impl decl.syntax+3]
+    // r[impl decl.syntax+4]
     /// `event { ... }` (prefix form) or `event @name short_span [title] [record]` (short form)
-    fn parse_event_decl(&mut self) {
-        self.start_node(SyntaxKind::EVENT_DECL);
+    pub(super) fn parse_event_expr(&mut self) {
+        self.start_node(SyntaxKind::EVENT_EXPR);
         self.bump_remap(SyntaxKind::EVENT_KW);
 
         match self.current() {
@@ -71,10 +57,10 @@ impl Parser {
         self.finish_node();
     }
 
-    // r[impl decl.syntax+3]
+    // r[impl decl.syntax+4]
     /// `task { ... }` (prefix form) or `task @name [short_dt] [title] [record]` (short form)
-    fn parse_task_decl(&mut self) {
-        self.start_node(SyntaxKind::TASK_DECL);
+    pub(super) fn parse_task_expr(&mut self) {
+        self.start_node(SyntaxKind::TASK_EXPR);
         self.bump_remap(SyntaxKind::TASK_KW);
 
         match self.current() {
@@ -109,7 +95,7 @@ impl Parser {
         self.finish_node();
     }
 
-    // r[impl decl.syntax+3]
+    // r[impl decl.syntax+4]
     /// `short_span = short_dt [duration]`
     fn parse_short_span(&mut self) {
         self.start_node(SyntaxKind::SHORT_SPAN);
@@ -121,7 +107,7 @@ impl Parser {
         self.finish_node();
     }
 
-    // r[impl decl.syntax+3]
+    // r[impl decl.syntax+4]
     /// `short_dt = date time | datetime`
     pub(super) fn parse_short_dt(&mut self) {
         self.start_node(SyntaxKind::SHORT_DT);

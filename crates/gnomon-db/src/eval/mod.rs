@@ -88,7 +88,7 @@ mod tests {
         record.get(&field_name).is_some()
     }
 
-    /// Extract the record from a single-decl file that produces a Value::Record.
+    /// Extract a record from an expression-mode file (not declaration mode).
     fn expect_record<'a, 'db>(result: &'a super::EvalResult<'db>) -> &'a Record<'db> {
         match &result.value {
             Value::Record(r) => r,
@@ -96,7 +96,7 @@ mod tests {
         }
     }
 
-    /// Extract the record from a list item in a multi-decl file.
+    /// Extract the record from a list item (declaration mode).
     fn expect_list_record<'a, 'db>(result: &'a super::EvalResult<'db>, index: usize) -> &'a Record<'db> {
         match &result.value {
             Value::List(items) => match &items[index].value {
@@ -107,7 +107,12 @@ mod tests {
         }
     }
 
-    /// Unwrap a singleton list containing a calendar record.
+    /// Extract the single record from a declaration-mode file with one declaration.
+    fn expect_single_decl<'a, 'db>(result: &'a super::EvalResult<'db>) -> &'a Record<'db> {
+        expect_list_record(result, 0)
+    }
+
+    /// Unwrap a singleton list containing a calendar record (from iCalendar import).
     fn unwrap_singleton_calendar<'a, 'db>(value: &'a Value<'db>, db: &'db Database) -> &'a Record<'db> {
         match value {
             Value::List(items) => {
@@ -133,27 +138,29 @@ mod tests {
 
     // ── Calendar ─────────────────────────────────────────────────
 
-    // r[verify decl.calendar.desugar]
+    // r[verify decl.calendar.desugar+2]
     #[test]
     fn empty_calendar() {
         let db = Database::default();
         let result = eval(&db, "calendar {}");
-        let r = expect_record(&result);
-        assert!(r.0.is_empty());
+        let r = expect_single_decl(&result);
+        // Calendar now has type: "calendar"
+        assert_eq!(get_field(r, &db, "type"), Value::String("calendar".into()));
     }
 
-    // r[verify decl.calendar.desugar]
+    // r[verify decl.calendar.desugar+2]
     #[test]
     fn calendar_with_string_field() {
         let db = Database::default();
         let result = eval(&db, r#"calendar { uid: "test-cal" }"#);
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "uid"), Value::String("test-cal".into()));
+        assert_eq!(get_field(r, &db, "type"), Value::String("calendar".into()));
     }
 
     // ── Event (prefix form) ──────────────────────────────────────
 
-    // r[verify decl.event.desugar]
+    // r[verify decl.event.desugar+2]
     // r[verify model.entry.type.infer]
     #[test]
     fn event_prefix_form() {
@@ -162,7 +169,7 @@ mod tests {
             &db,
             r#"event { name: @standup, start: 2026-03-01T14:00, title: "Standup" }"#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("standup".into()));
         assert_eq!(
             get_field(r, &db, "title"),
@@ -189,7 +196,7 @@ mod tests {
             &db,
             r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("meeting".into()));
         assert_eq!(
             get_field(r, &db, "title"),
@@ -207,7 +214,7 @@ mod tests {
             &db,
             r#"event @meeting 2026-03-01T14:30 1h "Standup" { priority: 5 }"#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("meeting".into()));
         assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
     }
@@ -221,7 +228,7 @@ mod tests {
             &db,
             r#"event @meeting 2026-03-01 14:30 1h "Standup""#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         match get_field(r, &db, "start") {
             Value::Record(dt) => {
                 assert!(has_field(&dt, &db, "date"));
@@ -233,7 +240,7 @@ mod tests {
 
     // ── Task ─────────────────────────────────────────────────────
 
-    // r[verify decl.task.desugar]
+    // r[verify decl.task.desugar+2]
     // r[verify model.entry.type.infer]
     #[test]
     fn task_prefix_form() {
@@ -242,7 +249,7 @@ mod tests {
             &db,
             r#"task { name: @review, title: "Code review" }"#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
     }
 
@@ -255,7 +262,7 @@ mod tests {
             &db,
             r#"task @review 2026-03-15T17:00 "Code review""#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
         assert_eq!(
             get_field(r, &db, "title"),
@@ -269,7 +276,7 @@ mod tests {
     fn task_short_form_no_datetime() {
         let db = Database::default();
         let result = eval(&db, r#"task @todo "Do something""#);
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("todo".into()));
         assert!(!has_field(r, &db, "due"));
     }
@@ -283,7 +290,7 @@ mod tests {
             &db,
             r#"calendar { location: { name: "Office", coordinates: "geo:37,-122" } }"#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         match get_field(r, &db, "location") {
             Value::Record(loc) => {
                 assert_eq!(
@@ -302,7 +309,7 @@ mod tests {
             &db,
             r#"calendar { keywords: ["work", "meeting"] }"#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         match get_field(r, &db, "keywords") {
             Value::List(items) => {
                 assert_eq!(items.len(), 2);
@@ -322,7 +329,7 @@ mod tests {
             &db,
             "calendar { show_without_time: true, expect_reply: false }",
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "show_without_time"), Value::Bool(true));
         assert_eq!(get_field(r, &db, "expect_reply"), Value::Bool(false));
     }
@@ -331,7 +338,7 @@ mod tests {
     fn undefined_literal() {
         let db = Database::default();
         let result = eval(&db, "calendar { x: undefined }");
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "x"), Value::Undefined);
     }
 
@@ -342,7 +349,7 @@ mod tests {
             &db,
             "calendar { priority: 5, offset: -3 }",
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
         assert_eq!(get_field(r, &db, "offset"), Value::SignedInteger(-3));
     }
@@ -354,7 +361,7 @@ mod tests {
             &db,
             r#"calendar { href: <https://example.com>, status: #confirmed }"#,
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         assert_eq!(
             get_field(r, &db, "href"),
             Value::String("https://example.com".into())
@@ -409,7 +416,7 @@ mod tests {
     fn blame_field_path_on_record_field() {
         let db = Database::default();
         let result = eval(&db, r#"calendar { uid: "test" }"#);
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         let uid_name = FieldName::new(&db, "uid".to_string());
         let blamed_value = r.get(&uid_name).unwrap();
         assert_eq!(blamed_value.blame.path.0.len(), 1);
@@ -424,7 +431,7 @@ mod tests {
             &db,
             "event { name: @standup, start: 2026-03-01T09:00, rrule: every day }",
         );
-        let r = expect_record(&result);
+        let r = expect_single_decl(&result);
         match get_field(r, &db, "rrule") {
             Value::Record(rrule) => {
                 assert_eq!(
@@ -532,7 +539,7 @@ mod tests {
     }
 
     // r[verify syntax.file.let]
-    // r[verify syntax.file.body]
+    // r[verify syntax.file.body+2]
     #[test]
     fn file_level_let_binding() {
         let db = Database::default();
@@ -543,8 +550,8 @@ mod tests {
             event { name: @e, start: 2026-01-01T00:00 }
             "#,
         );
-        // base is not used in decls, so it doesn't affect the result
-        let r = expect_record(&result);
+        // Declaration mode: produces a list
+        let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("e".into()));
     }
 

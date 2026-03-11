@@ -106,14 +106,14 @@ task @cleanup "Clean up" {
 
     // ── Calendar ─────────────────────────────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_calendar() {
         check(
             r#"calendar { uid: "my-cal" }"#,
             expect![[r#"
                 SOURCE_FILE@0..26
-                  CALENDAR_DECL@0..26
+                  CALENDAR_EXPR@0..26
                     CALENDAR_KW@0..8 "calendar"
                     WHITESPACE@8..9 " "
                     RECORD_EXPR@9..26
@@ -131,7 +131,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_calendar_no_errors() {
         check_no_errors(r#"calendar { uid: "my-cal" }"#);
@@ -139,14 +139,14 @@ task @cleanup "Clean up" {
 
     // ── Event (short form) ───────────────────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_event_short_datetime() {
         check(
             r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#,
             expect![[r#"
                 SOURCE_FILE@0..47
-                  EVENT_DECL@0..47
+                  EVENT_EXPR@0..47
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     NAME@6..14 "@meeting"
@@ -162,20 +162,20 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_event_short_no_errors() {
         check_no_errors(r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#);
     }
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_event_short_date_time() {
         check(
             "event @lunch 2026-03-01 12:00 1h",
             expect![[r#"
                 SOURCE_FILE@0..32
-                  EVENT_DECL@0..32
+                  EVENT_EXPR@0..32
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     NAME@6..12 "@lunch"
@@ -193,14 +193,14 @@ task @cleanup "Clean up" {
 
     // ── Event (prefix form) ──────────────────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_event_prefix() {
         check(
             r#"event { name: @meeting, start: 2026-03-01T14:30 }"#,
             expect![[r#"
                 SOURCE_FILE@0..49
-                  EVENT_DECL@0..49
+                  EVENT_EXPR@0..49
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..49
@@ -228,14 +228,14 @@ task @cleanup "Clean up" {
 
     // ── Task (short form) ────────────────────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_task_short() {
         check(
             r#"task @cleanup "Clean up""#,
             expect![[r#"
                 SOURCE_FILE@0..24
-                  TASK_DECL@0..24
+                  TASK_EXPR@0..24
                     TASK_KW@0..4 "task"
                     WHITESPACE@4..5 " "
                     NAME@5..13 "@cleanup"
@@ -245,7 +245,7 @@ task @cleanup "Clean up" {
         );
     }
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_task_short_no_errors() {
         check_no_errors(r#"task @cleanup "Clean up""#);
@@ -253,14 +253,14 @@ task @cleanup "Clean up" {
 
     // ── Task (prefix form) ───────────────────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_task_prefix() {
         check(
             r#"task { name: @cleanup }"#,
             expect![[r#"
                 SOURCE_FILE@0..23
-                  TASK_DECL@0..23
+                  TASK_EXPR@0..23
                     TASK_KW@0..4 "task"
                     WHITESPACE@4..5 " "
                     RECORD_EXPR@5..23
@@ -287,7 +287,7 @@ task @cleanup "Clean up" {
             r#"calendar { uid: "test", description: { type: "text/html", content: "hello" } }"#,
             expect![[r#"
                 SOURCE_FILE@0..78
-                  CALENDAR_DECL@0..78
+                  CALENDAR_EXPR@0..78
                     CALENDAR_KW@0..8 "calendar"
                     WHITESPACE@8..9 " "
                     RECORD_EXPR@9..78
@@ -339,7 +339,7 @@ task @cleanup "Clean up" {
             "calendar { tags: [1, 2, 3] }",
             expect![[r#"
                 SOURCE_FILE@0..28
-                  CALENDAR_DECL@0..28
+                  CALENDAR_EXPR@0..28
                     CALENDAR_KW@0..8 "calendar"
                     WHITESPACE@8..9 " "
                     RECORD_EXPR@9..28
@@ -377,7 +377,7 @@ task @cleanup "Clean up" {
             r#"event { name: @daily, recurrence: every day }"#,
             expect![[r#"
                 SOURCE_FILE@0..45
-                  EVENT_DECL@0..45
+                  EVENT_EXPR@0..45
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..45
@@ -413,7 +413,7 @@ task @cleanup "Clean up" {
             "event { name: @weekly, recurrence: every monday }",
             expect![[r#"
                 SOURCE_FILE@0..49
-                  EVENT_DECL@0..49
+                  EVENT_EXPR@0..49
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..49
@@ -448,7 +448,7 @@ task @cleanup "Clean up" {
             "event { name: @birthday, recurrence: every year on 03-15 }",
             expect![[r#"
                 SOURCE_FILE@0..58
-                  EVENT_DECL@0..58
+                  EVENT_EXPR@0..58
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..58
@@ -487,7 +487,7 @@ task @cleanup "Clean up" {
             "event { name: @daily, recurrence: every day until 2026-12-31T23:59 }",
             expect![[r#"
                 SOURCE_FILE@0..68
-                  EVENT_DECL@0..68
+                  EVENT_EXPR@0..68
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..68
@@ -526,7 +526,7 @@ task @cleanup "Clean up" {
             "event { name: @limited, recurrence: every day until 10 times }",
             expect![[r#"
                 SOURCE_FILE@0..62
-                  EVENT_DECL@0..62
+                  EVENT_EXPR@0..62
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..62
@@ -569,7 +569,7 @@ task @cleanup "Clean up" {
             "event { name: @daily, recurrence: every day until 2026-12-31 }",
             expect![[r#"
                 SOURCE_FILE@0..62
-                  EVENT_DECL@0..62
+                  EVENT_EXPR@0..62
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..62
@@ -618,7 +618,7 @@ task @cleanup "Clean up" {
                 SOURCE_FILE@0..44
                   COMMENT@0..19 "; A simple calendar"
                   WHITESPACE@19..20 "\n"
-                  CALENDAR_DECL@20..44
+                  CALENDAR_EXPR@20..44
                     CALENDAR_KW@20..28 "calendar"
                     WHITESPACE@28..29 " "
                     RECORD_EXPR@29..44
@@ -642,10 +642,9 @@ task @cleanup "Clean up" {
     fn error_recovery_bad_decl() {
         let parse = parse("~~~ calendar { uid: \"test\" }");
         assert!(!parse.ok());
-        // Despite errors, the calendar declaration should still be parsed
+        // Despite errors, there should be error recovery nodes
         let tree = parse.debug_tree();
         assert!(tree.contains("ERROR_NODE"));
-        assert!(tree.contains("CALENDAR_DECL"));
     }
 
     #[test]
@@ -659,7 +658,7 @@ task @cleanup "Clean up" {
 
     // ── Multiple declarations ────────────────────────────────────
 
-    // r[verify syntax.start+2]
+    // r[verify syntax.start+3]
     #[test]
     fn parse_multiple_decls() {
         let source = r#"calendar { uid: "cal" }
@@ -685,7 +684,7 @@ task @cleanup "Clean""#;
             "calendar {}",
             expect![[r#"
                 SOURCE_FILE@0..11
-                  CALENDAR_DECL@0..11
+                  CALENDAR_EXPR@0..11
                     CALENDAR_KW@0..8 "calendar"
                     WHITESPACE@8..9 " "
                     RECORD_EXPR@9..11
@@ -697,7 +696,7 @@ task @cleanup "Clean""#;
 
     // ── Event with short form + record ───────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_event_short_with_record() {
         check_no_errors(
@@ -707,14 +706,14 @@ task @cleanup "Clean""#;
 
     // ── Task with short_dt ───────────────────────────────────────
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_task_with_datetime() {
         check(
             r#"task @deadline 2026-06-01T17:00 "Submit report""#,
             expect![[r#"
                 SOURCE_FILE@0..47
-                  TASK_DECL@0..47
+                  TASK_EXPR@0..47
                     TASK_KW@0..4 "task"
                     WHITESPACE@4..5 " "
                     NAME@5..14 "@deadline"
@@ -727,7 +726,7 @@ task @cleanup "Clean""#;
         );
     }
 
-    // r[verify decl.syntax+3]
+    // r[verify decl.syntax+4]
     #[test]
     fn parse_task_with_datetime_no_errors() {
         check_no_errors(r#"task @deadline 2026-06-01T17:00 "Submit report""#);
@@ -749,7 +748,7 @@ task @cleanup "Clean""#;
             "calendar { x: undefined }",
             expect![[r#"
                 SOURCE_FILE@0..25
-                  CALENDAR_DECL@0..25
+                  CALENDAR_EXPR@0..25
                     CALENDAR_KW@0..8 "calendar"
                     WHITESPACE@8..9 " "
                     RECORD_EXPR@9..25
@@ -776,7 +775,7 @@ task @cleanup "Clean""#;
             "event { name: @meeting, url: <https://meet.example.com/abc> }",
             expect![[r#"
                 SOURCE_FILE@0..61
-                  EVENT_DECL@0..61
+                  EVENT_EXPR@0..61
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..61
@@ -823,7 +822,7 @@ task @cleanup "Clean""#;
             "event { name: @meeting, status: #confirmed }",
             expect![[r##"
                 SOURCE_FILE@0..44
-                  EVENT_DECL@0..44
+                  EVENT_EXPR@0..44
                     EVENT_KW@0..5 "event"
                     WHITESPACE@5..6 " "
                     RECORD_EXPR@6..44
@@ -862,7 +861,7 @@ task @cleanup "Clean""#;
             "calendar { days: [#monday, #wednesday, #friday] }",
             expect![[r##"
                 SOURCE_FILE@0..49
-                  CALENDAR_DECL@0..49
+                  CALENDAR_EXPR@0..49
                     CALENDAR_KW@0..8 "calendar"
                     WHITESPACE@8..9 " "
                     RECORD_EXPR@9..49
