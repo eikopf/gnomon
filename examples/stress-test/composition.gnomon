@@ -1,0 +1,126 @@
+; composition.gnomon — real-world patterns using let, merge, and concat
+;
+; Demonstrates the power (and gotchas) of composing Gnomon's small set
+; of operators to build complex calendars from simple parts.
+
+let tz = "Europe/Zurich"
+let work-hours = { time_zone: tz, free_busy_status: #busy }
+let personal = { time_zone: tz, privacy: #private }
+
+calendar {
+    uid: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    title: "Composition Demo",
+    time_zone: tz,
+}
+
+; --- Gotcha: short-form trailing record must be a LITERAL record ---
+; You can't pass a variable as the trailing record:
+;   event @standup 2026-03-11T09:00 15m "Standup" work-hours    ; parse error!
+; The parser expects `{ ... }`, not an identifier. You must inline it:
+event @standup 2026-03-11T09:00 15m "Standup" {
+    time_zone: tz,
+    free_busy_status: #busy,
+}
+
+; --- Gotcha: can't use `//` after a short-form trailing record ---
+; The `//` would be at the file level, not part of the event expression:
+;   event @focus ... { ... } // work-hours   ; parse error!
+; Use the prefix form instead:
+event {
+    name: @focus,
+    start: 2026-03-11T14:00,
+    duration: 3h,
+    description: "No meetings",
+    color: "#000000",
+    time_zone: tz,
+    free_busy_status: #busy,
+}
+
+; --- Pattern: building entry lists with ++ ---
+; If you want to programmatically assemble a list of entries, use a
+; top-level expression instead of declarations. But then you lose the
+; convenient `event`/`task` keyword sugar. Trade-off.
+
+; --- Pattern: recurrence rule customization ---
+; `every` desugars to a record, so `//` can add or override any field.
+; This is the intended way to express rules that `every` can't:
+
+; Every other Monday
+event @biweekly 2026-01-05T10:00 1h "Biweekly" {
+    recur: every monday // { interval: 2 },
+}
+
+; Every day, but skip forward on invalid dates (relevant for monthly rules)
+event @monthly-30th 2026-01-30T10:00 1h "Month-end Review" {
+    recur: {
+        frequency: #monthly,
+        by_month_day: [+30],
+        skip: #forward,
+    },
+}
+
+; --- Pattern: multi-location event ---
+event @offsite 2026-06-15T09:00 8h "Team Offsite" {
+    locations: [
+        { name: "Main Office", coordinates: "geo:47.3769,8.5417" },
+        { name: "Backup Venue" },
+    ],
+    virtual_locations: [{
+        uri: "https://meet.example.com/offsite",
+        features: [#audio, #video],
+    }],
+}
+
+; --- Pattern: cascading alerts ---
+event @important 2026-04-01T10:00 1h "Important Meeting" {
+    alerts: [
+        { trigger: { offset: -1w } },
+        { trigger: { offset: -1d } },
+        { trigger: { offset: -1h } },
+        { trigger: { offset: -15m } },
+    ],
+    priority: 1,
+}
+
+; --- Pattern: task with related events ---
+task @prepare-slides 2026-03-31T17:00 "Prepare Slides" {
+    related_to: [
+        { uid: "some-event-uid", relation: [#parent] },
+    ],
+    estimated_duration: 4h,
+    progress: #needs-action,
+}
+
+; --- Gotcha: `//` in trailing record position ---
+; The trailing record in a short-form event is a RECORD EXPRESSION,
+; not an arbitrary expression. So you can't write:
+;   event @e 2026-01-01T00:00 1h { a: 1 } // { b: 2 }
+; That would parse as TWO declarations: the event, and a standalone
+; `// { b: 2 }` expression (which is a parse error).
+; You must put the merge inside the record:
+; PROBLEM: you can't use `//` with ANY event declaration form:
+;
+;   event @e 2026-01-01T00:00 1h { a: 1 } // defaults   ; error!
+;   event { name: @e, ... } // defaults                   ; error!
+;
+; Both `event ... { ... }` forms are declarations. `//` after the closing
+; brace is a new expression at the file level. Declarations and operators
+; don't compose.
+;
+; WORKAROUND: inline the fields or build the record in a let binding and
+; pass it to the prefix form:
+event {
+    name: @merged,
+    start: 2026-05-01T12:00,
+    duration: 1h,
+    title: "Merged",
+    description: "Uses let-bound defaults",
+    time_zone: tz,
+    privacy: #private,
+    free_busy_status: #busy,
+}
+;
+; DESIGN QUESTION: should declarations allow a trailing `//` expression?
+; Something like:
+;   event @e 2026-01-01T00:00 1h "Title" { ... } // defaults // more
+; This would make shared defaults much more ergonomic.

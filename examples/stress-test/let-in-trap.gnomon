@@ -1,0 +1,43 @@
+; let-in-trap.gnomon — demonstrates the most common user mistake
+;
+; THE TRAP:
+; A user familiar with functional languages writes:
+;
+;   let tz = "US/Eastern" in
+;   calendar { uid: "..." }
+;   event @e 2026-01-01T00:00 1h
+;
+; But `in` makes this a let-EXPRESSION, so the body is a single expression.
+; The parser sees `calendar` as a variable reference (weak keyword → identifier),
+; the `{ uid: "..." }` as a separate record expression, and `event` as another
+; variable reference. Everything fails.
+;
+; THE FIX:
+; File-level let bindings do NOT use `in`:
+;
+;   let tz = "US/Eastern"
+;   calendar { uid: "..." }
+;   event @e 2026-01-01T00:00 1h
+;
+; DESIGN QUESTION:
+; Would it be better to warn when `in` is followed by what looks like a declaration
+; keyword? Or to allow `let ... in` to scope over multiple declarations?
+
+let tz = "America/New_York"
+
+calendar {
+    uid: "550e8400-e29b-41d4-a716-446655440000",
+    title: "Let-In Trap Demo",
+    time_zone: tz,
+}
+
+; ANOTHER TRAP: short-form events only accept duration LITERALS, not variables.
+; This fails:
+;   let dur = 1h
+;   event @e 2026-03-11T08:00 dur "Title"   ; parse error!
+; The parser expects a literal token (like `1h`), not an expression.
+; You must use the prefix form to use a variable:
+;   event { name: @e, start: 2026-03-11T08:00, duration: dur, title: "Title" }
+
+event @morning 2026-03-11T08:00 1h "Morning Routine"
+event @evening 2026-03-11T18:00 1h "Evening Routine"

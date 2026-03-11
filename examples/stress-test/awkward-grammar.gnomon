@@ -1,0 +1,142 @@
+; awkward-grammar.gnomon — expressions that probe grammar edge cases and oddities
+;
+; This file is a standalone expression (no calendar/event declarations), intended
+; to be run with `gnomon eval`. Each section demonstrates a grammar area that is
+; confusing, surprising, or easy to get wrong.
+
+let results = {
+
+    ; --- 1. `let ... in` vs file-level `let` ---
+    ; File-level let omits `in`; let-expression requires it.
+    ; Accidentally writing `in` makes the body a single expression, so subsequent
+    ; declarations become variable references to weak keywords.
+    ;
+    ;   let tz = "US/Eastern" in      ; <- `in` makes this a let-expression
+    ;   calendar { ... }              ; <- `calendar` is now a variable, not a keyword!
+    ;
+    ; Correct file-level usage:
+    ;   let tz = "US/Eastern"
+    ;   calendar { ... }
+    ;
+    ; The `in` / no-`in` distinction is the single most confusing part of the
+    ; grammar for new users.
+    let-in-test: let x = 1 in let y = x in [x, y],
+
+    ; --- 2. Weak keywords as identifiers ---
+    ; All non-strict keywords decay to identifiers in non-keyword positions.
+    ; This means you can use `day`, `event`, `calendar`, etc. as field names,
+    ; variable names, and name segments — but it reads strangely.
+    day: let day = "not a keyword here" in day,
+    event: let event = 42 in event,
+
+    ; --- 3. `every` expression composability ---
+    ; `every` desugars to a record, so it composes with `//` (merge).
+    ; This is powerful but non-obvious: you can build complex recurrence rules
+    ; by merging simple `every` expressions with override records.
+    custom-rrule: every monday // { interval: 2, skip: #forward },
+
+    ; --- 4. Mixing `++` and `//` ---
+    ; Both operators are at the same precedence level with right associativity.
+    ; Mixing them in a single expression parses fine but always produces a type
+    ; error, because `++` requires lists and `//` requires records. The parser
+    ; gives you no warning — the error comes only at eval time.
+    ; Uncomment to see confusing error messages:
+    ;   broken: [1] ++ [2] // {a: 1},   ; parses as [1] ++ ([2] // {a: 1})
+
+    ; --- 5. Duration vs signed integer ---
+    ; `+5` is a signed integer. `+5h` is a duration. The distinction is purely
+    ; whether a unit character follows the digits. There's no space tolerance:
+    ; `+5 h` is signed-integer followed by identifier `h`, which is an error.
+    signed-int: +5,
+    duration: +5h,
+
+    ; --- 6. `2026-01` is NOT a partial date ---
+    ; It's integer `2026` followed by signed-integer `-01`. Two expressions
+    ; side by side with no operator between them — parse error. This is because
+    ; date literals require all three components (YYYY-MM-DD).
+    ;   broken: 2026-01,   ; parse error: unexpected token after expression
+
+    ; --- 7. Hyphen in identifiers ---
+    ; Identifiers allow hyphens: `x-custom-field` is ONE identifier, not
+    ; `x` minus `custom` minus `field`. Since there's no minus operator,
+    ; this is unambiguous — but it's visually confusing.
+    ; Also: `x-5` is an identifier (not x minus 5).
+    x-custom-field: "this is one identifier",
+
+    ; --- 8. `5 - 3` is NOT subtraction ---
+    ; `-` is punctuation (for hyphen in dates), not a subtraction operator.
+    ; `5 - 3` is integer `5`, punctuation `-`, integer `3` — parse error.
+    ; There is NO arithmetic in Gnomon.
+    ;   broken: 5 - 3,   ; parse error
+
+    ; --- 9. Atom literals with keyword names ---
+    ; `#true` is an atom that desugars to the string `"true"`, NOT the boolean
+    ; `true`. This is a subtle gotcha: `#confirmed` and `"confirmed"` are the
+    ; same value, but `#true` and `true` are different types entirely.
+    atom-true: #true,
+    bool-true: true,
+    same-value: #confirmed == "confirmed",
+    different-type: #true == true,   ; false! string vs boolean
+
+    ; --- 10. Date literal desugars to a record ---
+    ; So you can access its fields with `.` and compare it with `==` against
+    ; an equivalent hand-written record.
+    date-field: 2026-03-01.year,
+    date-equals-record: 2026-03-01 == { year: 2026, month: 3, day: 1 },
+
+    ; --- 11. `month-day` literal ---
+    ; `02-29` is valid (leap year is unknown), `02-30` is not.
+    ; This is a lexer-level validation.
+    leap-day: 02-29,
+    ; broken: 02-30,   ; error: day 30 is invalid for month 02
+
+    ; --- 12. Leap second ---
+    ; 23:59:60 is valid per the spec, even though no specific instant may
+    ; actually have been a leap second. The spec says implementations MUST NOT
+    ; reject it.
+    leap-second: 23:59:60,
+
+    ; --- 13. Non-associative comparison ---
+    ; `a == b == c` is a PARSE ERROR (non-associative). You must parenthesize.
+    ; This is deliberate but surprising for users of C-like languages.
+    ;   broken: 1 == 2 == 3,   ; parse error: comparison operators cannot be chained
+    chained-ok: (1 == 2) == false,
+
+    ; --- 14. Record field ordering ---
+    ; Records are unordered maps. `{a: 1, b: 2} == {b: 2, a: 1}` is true.
+    ; The `eval` command renders fields in sorted order.
+    order-irrelevant: {z: 1, a: 2} == {a: 2, z: 1},
+
+    ; --- 15. Undefined behavior collection ---
+    ; Accessing a nonexistent field returns `undefined`.
+    ; Indexing out of bounds returns `undefined`.
+    ; Indexing a non-list returns `undefined`.
+    ; The spec says these should be errors, but the current implementation
+    ; returns `undefined` silently for some of them.
+    missing-field: {a: 1}.b,                  ; undefined (spec says error)
+    oob-index: [1, 2, 3][99],                 ; undefined (spec says error)
+
+    ; --- 16. Shadowing ---
+    ; `let` bindings can shadow earlier bindings. The innermost wins.
+    shadow: let x = 1 in let x = 2 in x,     ; 2
+
+    ; --- 17. Self-reference in let is an error ---
+    ; `let x = x in x` — the `x` in the binding body refers to the outer scope,
+    ; which has no `x`. This is an error, not infinite recursion.
+    ;   broken: let x = x in x,   ; error: undefined variable `x`
+
+    ; --- 18. Empty containers ---
+    empty-list: [],
+    empty-record: {},
+
+    ; --- 19. Name with keyword segments ---
+    ; `@day.event.task` is a valid name — weak keywords are valid identifiers
+    ; in all positions including name segments.
+    keyword-name: @day.event.task,
+
+    ; --- 20. Duration unit order doesn't matter ---
+    ; `5s4m3h2d1w` is the same as `1w2d3h4m5s`. Both are valid.
+    duration-reversed: 5s4m3h2d1w == 1w2d3h4m5s,
+}
+
+in results

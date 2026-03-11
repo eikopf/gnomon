@@ -1,0 +1,159 @@
+; kitchen-sink.gnomon — exercises as many features as possible in a valid calendar
+
+let tz = "America/New_York"
+let base-overrides = { time_zone: tz, privacy: #public }
+
+calendar {
+    uid: "550e8400-e29b-41d4-a716-446655440000",
+    title: "Stress Test Calendar",
+    description: "A calendar exercising every language feature",
+    time_zone: tz,
+    color: "#4285f4",
+}
+
+; --- Short-form events: all variations ---
+
+; Maximal: name, datetime, duration, title, trailing record
+event @standup 2026-03-11T09:00 30m "Daily Standup" {
+    recur: every day until 2026-12-31,
+    time_zone: tz,
+    description: "Fifteen-minute sync with the team",
+}
+
+; Date-space-time (not T-joined) — equivalent to datetime
+event @lunch 2026-03-11 12:00 1h "Lunch Break"
+
+; Datetime + duration, no title, no record
+event @block 2026-06-15T10:00 2h
+
+; Datetime, no duration, with title
+event @deadline 2026-04-15T17:00 "Q1 Report Due"
+
+; Datetime, no duration, no title, trailing record only
+event @mystery 2026-07-04T00:00 { title: "Surprise", show_without_time: true }
+
+; Datetime + duration, no title, trailing record
+event @focus 2026-03-12T14:00 3h { description: "Deep work block", color: "#000000" }
+
+; --- Short-form tasks: all variations ---
+
+; Task with due date and title
+task @taxes 2026-04-15T23:59 "File Taxes" { priority: 1 }
+
+; Task with no due date — name and title only
+task @cleanup "Clean up desk"
+
+; Task with due date, title, trailing record
+task @review 2026-03-20T17:00 "Code Review" {
+    progress: #needs-action,
+    estimated_duration: 2h,
+}
+
+; --- Prefix-form event ---
+event {
+    name: @board-meeting,
+    title: "Board Meeting",
+    start: 2026-03-20T10:00,
+    duration: 2h,
+    locations: [{name: "HQ Conference Room"}],
+}
+
+; --- Prefix-form task ---
+task {
+    name: @budget,
+    title: "Submit Budget",
+    due: 2026-03-31T17:00,
+    percent_complete: 0,
+    progress: #in-process,
+}
+
+; --- Rich event: participants, alerts, locations, links ---
+event @workshop 2026-04-01T09:00 4h "Workshop" {
+    participants: [
+        {
+            name: "Alice",
+            email: "alice@example.com",
+            roles: [#owner, #chair],
+            participation_status: #accepted,
+        },
+        {
+            name: "Bob",
+            email: "bob@example.com",
+            roles: [#required],
+            expect_reply: true,
+        },
+    ],
+    locations: [
+        {
+            name: "Building 5, Room 301",
+            coordinates: "geo:37.7749,-122.4194",
+        },
+    ],
+    virtual_locations: [{
+        uri: "https://zoom.us/j/123456789",
+        features: [#audio, #video, #screen],
+    }],
+    alerts: [
+        { trigger: { offset: -15m }, action: #display },
+        { trigger: { offset: -1h } },
+        { trigger: { at: 2026-04-01T08:00 } },
+    ],
+    links: [{
+        href: "https://docs.example.com/workshop",
+        content_type: "text/html",
+        title: "Workshop Materials",
+    }],
+    related_to: [
+        { uid: "related-event-uid-001", relation: [#parent] },
+    ],
+    categories: [#training, #team],
+    keywords: [#quarterly, #mandatory],
+    color: "#34a853",
+    priority: 1,
+    free_busy_status: #busy,
+    locale: "en-US",
+}
+
+; --- Recurrence: every day, merge to customize ---
+event @biweekly 2026-01-05T10:00 1h "Biweekly Sync" {
+    recur: every monday // { interval: 2 },
+}
+
+; --- Recurrence: every year on a date ---
+; BUG: `every year on 07-20` desugars `by_year_day` as unsigned int (201),
+; but the shape checker expects signed integers. Use prefix form as workaround.
+event @birthday 2026-07-20T00:00 "Birthday" {
+    recur: {
+        frequency: #yearly,
+        by_year_day: [+201],
+    },
+    show_without_time: true,
+}
+
+; --- Recurrence: count terminator ---
+event @limited 2026-01-01T08:00 30m "Limited Run" {
+    recur: every day until 5 times,
+}
+
+; --- Triple-quoted string as description ---
+event @conference 2026-09-15T09:00 8h "Annual Conference" {
+    description: {
+        type: "text/html",
+        content: """
+            <h1>Annual Engineering Conference</h1>
+            <p>Join us for a day of talks, workshops, and networking.</p>
+            <ul>
+                <li>Keynote: 9:00 AM</li>
+                <li>Workshops: 10:30 AM</li>
+                <li>Lunch: 12:00 PM</li>
+            </ul>
+            """,
+    },
+}
+
+; --- Open records: unknown fields preserved ---
+event @custom 2026-05-01T12:00 1h "Custom Event" {
+    x-custom-field: "vendor-specific data",
+    x-internal-id: 42,
+    x-tags: [#internal, #experimental],
+}
