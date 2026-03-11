@@ -267,7 +267,12 @@ impl Parser {
             if self.at_decl_start() {
                 // List mode: parse expressions until EOF
                 while !self.at_eof() {
+                    let before = self.pos;
                     self.parse_expr();
+                    if self.pos == before {
+                        // No progress — skip the stuck token to avoid an infinite loop
+                        self.error_recover();
+                    }
                 }
             } else {
                 // Single expression mode
