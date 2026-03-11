@@ -456,9 +456,9 @@ Path literals are resolved relative to the directory containing the file in whic
 
 ## Expressions
 
-Gnomon's expression syntax includes literal expressions, record expressions, list expressions, import expressions, let-in expressions, every expressions, operator expressions, and parenthesized expressions.
+Gnomon's expression syntax includes literal expressions, record expressions, list expressions, import expressions, let-in expressions, every expressions, calendar expressions, event expressions, task expressions, operator expressions, and parenthesized expressions.
 
-> r[expr.syntax+3]
+> r[expr.syntax+4]
 > The grammar for expressions is as follows:
 >
 > ```ebnf
@@ -483,6 +483,9 @@ Gnomon's expression syntax includes literal expressions, record expressions, lis
 >              | import expr
 >              | let expr
 >              | every expr
+>              | calendar expr
+>              | event expr
+>              | task expr
 >              | "(", expr, ")"
 >              ;
 > ```
@@ -650,6 +653,56 @@ The `==` and `!=` operators compare two values for structural equality.
 
 r[expr.op.eq]
 The `==` operator MUST return `true` if the two operands are structurally equal and `false` otherwise. The `!=` operator MUST return the negation of `==`.
+
+### Declaration Expressions
+
+The `calendar`, `event`, and `task` keywords are expression forms that produce record values. They are syntactic sugar for constructing records with specific fields; the keyword itself carries no semantic weight beyond determining the desugared form.
+
+Because they are expressions, they may appear anywhere an expression is expected: at the top level, inside lists, as the body of a `let` expression, or as an operand to `//` (merge) or other operators.
+
+> r[decl.syntax+4]
+> The grammar for declaration expressions is as follows:
+>
+> ```ebnf
+> calendar expr = "calendar", record expr ;
+>
+> event expr = "event", name, short span, [ string literal | triple string literal ], [ record expr ]
+>            | "event", record expr
+>            ;
+>
+> task expr = "task", name, [ short dt ], [ string literal | triple string literal ], [ record expr ]
+>           | "task", record expr
+>           ;
+>
+> short span = short dt, [ duration literal ] ;
+>
+> short dt = date literal, time literal
+>          | datetime literal
+>          ;
+> ```
+
+#### Desugaring
+
+Declaration expressions are purely syntactic sugar for record construction. Each keyword inserts a `type` field into the resulting record.
+
+r[decl.calendar.desugar+2]
+The calendar expression `calendar { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"calendar"`.
+
+r[decl.event.desugar+2]
+The event expression `event { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"event"`.
+
+r[decl.task.desugar+2]
+The task expression `task { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"task"`.
+
+#### Short-form Desugaring
+
+The short forms for events and tasks desugar into their corresponding prefix form with a record expression.
+
+r[decl.short-event.desugar+2]
+The short event expression `event @name dt [dur] [str] [record]` MUST desugar into the prefix form `event { name: @name, start: dt, duration: dur, title: str, ...record }`, where `dt` is a datetime expression, `dur` is an optional duration literal, `str` is an optional string literal mapped to the `title` field, and `record` is an optional record expression whose fields are merged into the result. Fields from the short form take precedence when they overlap with fields in the trailing record.
+
+r[decl.short-task.desugar+2]
+The short task expression `task @name [dt] [str] [record]` MUST desugar into the prefix form `task { name: @name, due: dt, title: str, ...record }`, where `dt` is an optional datetime expression mapped to the `due` field, `str` is an optional string literal mapped to the `title` field, and `record` is an optional record expression whose fields are merged into the result.
 
 ## Record Types
 
@@ -1273,8 +1326,8 @@ The `uid` field follows RFC 5545 in accepting any string. However, implementatio
 
 A calendar may have additional optional metadata fields such as `title`, `description`, `time_zone`, `color`, or other properties. These are not enumerated exhaustively; as with all Gnomon records, calendars are open.
 
-> r[model.calendar.singular]
-> A calendar project MUST contain exactly one `calendar` declaration. It is an error if no `calendar` declaration is found. It is an error if more than one `calendar` declaration is found.
+> r[model.calendar.singular+2]
+> A calendar project MUST contain exactly one record with `type` set to `"calendar"` among its top-level values. It is an error if no such record is found. It is an error if more than one is found.
 
 ### Calendar Entries
 
@@ -1286,10 +1339,10 @@ A calendar record MUST have a field named `entries` whose value is a list of rec
 > r[model.entry.type]
 > Each record in the `entries` list MUST have a field named `type` whose value is `"event"` or `"task"`.
 
-The `type` field distinguishes events from tasks within the entries list. When an event or task is declared using the `event` or `task` keyword, the corresponding `type` field is inferred from the declaration keyword. A user may also write the `type` field explicitly.
+The `type` field distinguishes calendar records, events, and tasks within the top-level list. When a `calendar`, `event`, or `task` expression is used, the corresponding `type` field is inserted automatically. A user may also write the `type` field explicitly.
 
-> r[model.entry.type.infer]
-> An event declaration MUST produce a record with `type` set to `"event"`. A task declaration MUST produce a record with `type` set to `"task"`.
+> r[model.entry.type.infer+2]
+> A `calendar` expression MUST produce a record with `type` set to `"calendar"`. An `event` expression MUST produce a record with `type` set to `"event"`. A `task` expression MUST produce a record with `type` set to `"task"`.
 
 Once the `type` field is known, the entry is validated against the corresponding record type definition (see Events and Tasks under Record Types). The remaining field constraints — mandatory fields, optional field types, and common record fields — apply as specified in those sections.
 
@@ -1525,71 +1578,24 @@ Shape-checking is applied recursively: if a field's expected type is itself a re
 
 ## File Structure
 
-A Gnomon source file consists of zero or more `let` bindings followed by a body. The body is either a single expression or one or more declarations. Multiple declarations evaluate to a list of their desugared values; a single declaration evaluates to its desugared value directly.
+A Gnomon source file consists of zero or more `let` bindings followed by a body. The body is a sequence of expressions. If the body begins with a declaration keyword (`calendar`, `event`, or `task`), the file is in list mode: all top-level expressions are collected into a list. Otherwise, the body is a single expression whose value is the file's result.
 
-> r[syntax.start+2]
+> r[syntax.start+3]
 > Source data MUST be parsed according to the following grammar:
 >
 > ```ebnf
 > START = { let binding }, body ;
 > let binding = "let", identifier, "=", expr ;
-> body = expr | declarations ;
-> declarations = decl, { decl } ;
+> body = expr, { expr }
+>      | (* empty *)
+>      ;
 > ```
 
 r[syntax.file.let]
-Let bindings at the file level MUST precede all declarations or expressions. They are in scope for the entire body.
+Let bindings at the file level MUST precede all expressions. They are in scope for the entire body.
 
-r[syntax.file.body]
-If the body consists of a single expression, the file evaluates to that expression's value. If the body consists of declarations, a single declaration evaluates to its desugared value, and multiple declarations evaluate to a list of their desugared values.
-
-## Declarations
-
-Declarations are syntactic sugar for constructing record values. Each declaration keyword produces a record with specific fields; the keyword itself carries no semantic weight beyond determining the desugared form.
-
-> r[decl.syntax+3]
-> The grammar for declarations is as follows:
->
-> ```ebnf
-> decl = short event
->      | short task
->      | "calendar", record expr
->      | "event", record expr
->      | "task", record expr
->      ;
->
-> short event = "event", name,  short span,  [ string literal ], [ record expr ] ;
-> short task  = "task",  name, [ short dt ], [ string literal ], [ record expr ] ;
->
-> short span = short dt, [ duration literal ] ;
->
-> short dt = date literal, time literal
->          | datetime literal
->          ;
-> ```
-
-### Declaration Desugaring
-
-Declarations are purely syntactic sugar for record construction. The `calendar` keyword is a no-op — it produces the record inside the braces unchanged. The `event` and `task` keywords insert a `type` field into the resulting record.
-
-r[decl.calendar.desugar]
-The calendar declaration `calendar { ... }` MUST evaluate to the record inside the braces. The `calendar` keyword does not add or modify any fields.
-
-r[decl.event.desugar]
-The event declaration `event { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"event"`.
-
-r[decl.task.desugar]
-The task declaration `task { ... }` MUST evaluate to a record containing all fields from the braces with `type` set to `"task"`.
-
-### Short-form Desugaring
-
-The short forms for events and tasks desugar into their corresponding prefix form with a record expression.
-
-r[decl.short-event.desugar]
-The short event declaration `event @name dt [dur] [str] [record]` MUST desugar into the prefix form `event { name: @name, start: dt, duration: dur, title: str, ...record }`, where `dt` is a datetime expression, `dur` is an optional duration literal, `str` is an optional string literal mapped to the `title` field, and `record` is an optional record expression whose fields are merged into the result. Fields from the short form take precedence when they overlap with fields in the trailing record.
-
-r[decl.short-task.desugar]
-The short task declaration `task @name [dt] [str] [record]` MUST desugar into the prefix form `task { name: @name, due: dt, title: str, ...record }`, where `dt` is an optional datetime expression mapped to the `due` field, `str` is an optional string literal mapped to the `title` field, and `record` is an optional record expression whose fields are merged into the result.
+r[syntax.file.body+2]
+If the body is empty, the file evaluates to an empty list. If the body begins with a `calendar`, `event`, or `task` keyword, the file is in list mode: each top-level expression is evaluated and the results are collected into a list. Otherwise, the body MUST consist of a single expression, and the file evaluates to that expression's value.
 
 ## CLI
 
