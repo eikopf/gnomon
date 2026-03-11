@@ -3,7 +3,7 @@ use predicates::prelude::*;
 use std::io::Write;
 
 fn gnomon() -> Command {
-    let cmd = assert_cmd::cargo::cargo_bin("gnomon");
+    let cmd = assert_cmd::cargo::cargo_bin!("gnomon");
     Command::new(cmd)
 }
 
@@ -92,11 +92,7 @@ fn help_subcommand() {
 #[test]
 fn parse_subcommand() {
     let dir = tempfile::tempdir().unwrap();
-    let file = write_temp_file(
-        &dir,
-        "test.gnomon",
-        r#"calendar { uid: "test" }"#,
-    );
+    let file = write_temp_file(&dir, "test.gnomon", r#"calendar { uid: "test" }"#);
 
     gnomon()
         .arg("parse")
@@ -179,11 +175,7 @@ fn check_unused_file_warning() {
 #[test]
 fn eval_subcommand() {
     let dir = tempfile::tempdir().unwrap();
-    let file = write_temp_file(
-        &dir,
-        "test.gnomon",
-        r#"calendar { uid: "test" }"#,
-    );
+    let file = write_temp_file(&dir, "test.gnomon", r#"calendar { uid: "test" }"#);
 
     gnomon()
         .arg("eval")
@@ -232,19 +224,13 @@ fn eval_missing_file() {
 // r[verify cli.option.help.xor]
 #[test]
 fn help_with_version_is_error() {
-    gnomon()
-        .args(["--help", "--version"])
-        .assert()
-        .failure();
+    gnomon().args(["--help", "--version"]).assert().failure();
 }
 
 // r[verify cli.option.version.xor]
 #[test]
 fn version_with_help_is_error() {
-    gnomon()
-        .args(["--version", "--help"])
-        .assert()
-        .failure();
+    gnomon().args(["--version", "--help"]).assert().failure();
 }
 
 // r[verify cli.option.help.behavior.subcommand]
@@ -261,7 +247,7 @@ fn help_flag_on_subcommand() {
 #[test]
 fn option_order_independent() {
     let dir = tempfile::tempdir().unwrap();
-    let file = write_temp_file(&dir, "test.gnomon", r#"{ x: 1 }"#);
+    let _file = write_temp_file(&dir, "test.gnomon", r#"{ x: 1 }"#);
 
     // --expr before eval vs after — both should work
     gnomon()
@@ -297,11 +283,7 @@ fn valid_utf8_accepted() {
     let dir = tempfile::tempdir().unwrap();
     let file = write_temp_file(&dir, "test.gnomon", "{ name: \"héllo wörld\" }");
 
-    gnomon()
-        .arg("eval")
-        .arg(&file)
-        .assert()
-        .success();
+    gnomon().arg("eval").arg(&file).assert().success();
 }
 
 // ── UTF-8 validation ────────────────────────────────────────
@@ -326,10 +308,9 @@ fn malformed_utf8_produces_error() {
 // r[verify cli.subcommand.reserved+3]
 #[test]
 fn reserved_subcommands_rejected() {
-    for name in ["about", "clean", "compile", "daemon", "fetch", "lsp", "merge", "query", "run"] {
-        gnomon()
-            .arg(name)
-            .assert()
-            .failure();
+    for name in [
+        "about", "clean", "compile", "daemon", "fetch", "lsp", "merge", "query", "run",
+    ] {
+        gnomon().arg(name).assert().failure();
     }
 }
