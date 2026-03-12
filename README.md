@@ -1,8 +1,6 @@
 # Gnomon
 
-> **Warning:** Gnomon is under active development and is not yet ready for
-> production use. The language, CLI, and output formats are all subject to
-> breaking changes. Expect missing features and rough edges.
+> **Warning:** Gnomon is under active development and both the language and CLI are likely to change.
 
 Gnomon is a plaintext language for authoring and maintaining calendars,
 designed to compile to [iCalendar](https://datatracker.ietf.org/doc/html/rfc5545)
@@ -10,15 +8,11 @@ and [JSCalendar](https://datatracker.ietf.org/doc/html/rfc8984).
 
 ## Installation
 
-Gnomon is written in Rust. To build from source:
-
 ```sh
 git clone https://github.com/eikopf/gnomon.git
 cd gnomon
 cargo install --path .
 ```
-
-This places the `gnomon` binary in your Cargo bin directory (usually `~/.cargo/bin`).
 
 ## Examples
 
