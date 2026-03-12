@@ -30,28 +30,40 @@ fn record_to_datetime(
     };
 
     let year = match get_field(db, &date_rec, "year") {
-        Some(Value::Integer(n)) => n as i16,
+        Some(Value::Integer(n)) => {
+            i16::try_from(n).map_err(|_| format!("date.year out of range: {n}"))?
+        }
         _ => return Err("missing or invalid 'date.year'".into()),
     };
     let month = match get_field(db, &date_rec, "month") {
-        Some(Value::Integer(n)) => n as i8,
+        Some(Value::Integer(n)) => {
+            i8::try_from(n).map_err(|_| format!("date.month out of range: {n}"))?
+        }
         _ => return Err("missing or invalid 'date.month'".into()),
     };
     let day = match get_field(db, &date_rec, "day") {
-        Some(Value::Integer(n)) => n as i8,
+        Some(Value::Integer(n)) => {
+            i8::try_from(n).map_err(|_| format!("date.day out of range: {n}"))?
+        }
         _ => return Err("missing or invalid 'date.day'".into()),
     };
 
     let hour = match get_field(db, &time_rec, "hour") {
-        Some(Value::Integer(n)) => n as i8,
+        Some(Value::Integer(n)) => {
+            i8::try_from(n).map_err(|_| format!("time.hour out of range: {n}"))?
+        }
         _ => return Err("missing or invalid 'time.hour'".into()),
     };
     let minute = match get_field(db, &time_rec, "minute") {
-        Some(Value::Integer(n)) => n as i8,
+        Some(Value::Integer(n)) => {
+            i8::try_from(n).map_err(|_| format!("time.minute out of range: {n}"))?
+        }
         _ => return Err("missing or invalid 'time.minute'".into()),
     };
     let second = match get_field(db, &time_rec, "second") {
-        Some(Value::Integer(n)) => n as i8,
+        Some(Value::Integer(n)) => {
+            i8::try_from(n).map_err(|_| format!("time.second out of range: {n}"))?
+        }
         _ => return Err("missing or invalid 'time.second'".into()),
     };
 
@@ -103,7 +115,7 @@ fn parse_skip(s: &str) -> Result<gnomon_rrule::Skip, String> {
 /// Extract a signed integer from a Value, accepting both Integer and SignedInteger.
 fn value_to_signed(v: &Value<'_>) -> Option<i64> {
     match v {
-        Value::Integer(n) => Some(*n as i64),
+        Value::Integer(n) => i64::try_from(*n).ok(),
         Value::SignedInteger(n) => Some(*n),
         _ => None,
     }
@@ -120,7 +132,9 @@ fn record_to_rule(
     };
 
     let interval = match get_field(db, record, "interval") {
-        Some(Value::Integer(n)) => n as u32,
+        Some(Value::Integer(n)) => {
+            u32::try_from(n).map_err(|_| format!("interval out of range: {n}"))?
+        }
         None => 1,
         _ => return Err("invalid 'interval' field: expected integer".into()),
     };
@@ -160,8 +174,14 @@ fn record_to_rule(
                             _ => return Err("by_day entry missing 'day' field".into()),
                         };
                         let nth = match get_field(db, r, "nth") {
-                            Some(Value::SignedInteger(n)) => Some(n as i8),
-                            Some(Value::Integer(n)) => Some(n as i8),
+                            Some(Value::SignedInteger(n)) => Some(
+                                i8::try_from(n)
+                                    .map_err(|_| format!("by_day nth out of range: {n}"))?,
+                            ),
+                            Some(Value::Integer(n)) => Some(
+                                i8::try_from(n)
+                                    .map_err(|_| format!("by_day nth out of range: {n}"))?,
+                            ),
                             None => None,
                             _ => return Err("invalid 'nth' in by_day entry".into()),
                         };
@@ -183,7 +203,8 @@ fn record_to_rule(
                 match &item.value {
                     Value::Record(r) => {
                         let month = match get_field(db, r, "month") {
-                            Some(Value::Integer(n)) => n as u8,
+                            Some(Value::Integer(n)) => u8::try_from(n)
+                                .map_err(|_| format!("by_month month out of range: {n}"))?,
                             _ => return Err("by_month entry missing 'month' field".into()),
                         };
                         let leap = match get_field(db, r, "leap") {
@@ -204,38 +225,38 @@ fn record_to_rule(
 
     let by_month_day = extract_signed_list(db, record, "by_month_day")?
         .into_iter()
-        .map(|n| n as i8)
-        .collect();
+        .map(|n| i8::try_from(n).map_err(|_| format!("by_month_day value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     let by_year_day = extract_signed_list(db, record, "by_year_day")?
         .into_iter()
-        .map(|n| n as i16)
-        .collect();
+        .map(|n| i16::try_from(n).map_err(|_| format!("by_year_day value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     let by_week_no = extract_signed_list(db, record, "by_week_no")?
         .into_iter()
-        .map(|n| n as i8)
-        .collect();
+        .map(|n| i8::try_from(n).map_err(|_| format!("by_week_no value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     let by_hour = extract_unsigned_list(db, record, "by_hour")?
         .into_iter()
-        .map(|n| n as u8)
-        .collect();
+        .map(|n| u8::try_from(n).map_err(|_| format!("by_hour value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     let by_minute = extract_unsigned_list(db, record, "by_minute")?
         .into_iter()
-        .map(|n| n as u8)
-        .collect();
+        .map(|n| u8::try_from(n).map_err(|_| format!("by_minute value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     let by_second = extract_unsigned_list(db, record, "by_second")?
         .into_iter()
-        .map(|n| n as u8)
-        .collect();
+        .map(|n| u8::try_from(n).map_err(|_| format!("by_second value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     let by_set_position = extract_signed_list(db, record, "by_set_position")?
         .into_iter()
-        .map(|n| n as i32)
-        .collect();
+        .map(|n| i32::try_from(n).map_err(|_| format!("by_set_position value out of range: {n}")))
+        .collect::<Result<_, _>>()?;
 
     Ok(gnomon_rrule::RecurrenceRule {
         frequency,

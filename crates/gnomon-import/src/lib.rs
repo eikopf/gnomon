@@ -67,13 +67,15 @@ fn signed_duration_to_secs(sd: &SignedDuration) -> Option<u64> {
     match &sd.duration {
         Duration::Nominal(nom) => {
             let exact_secs = nom.exact.as_ref().map_or(0u64, |e| {
-                e.hours as u64 * 3600 + e.minutes as u64 * 60 + e.seconds as u64
+                u64::from(e.hours) * 3600 + u64::from(e.minutes) * 60 + u64::from(e.seconds)
             });
-            Some(nom.weeks as u64 * 604_800 + nom.days as u64 * 86_400 + exact_secs)
+            Some(u64::from(nom.weeks) * 604_800 + u64::from(nom.days) * 86_400 + exact_secs)
         }
-        Duration::Exact(exact) => {
-            Some(exact.hours as u64 * 3600 + exact.minutes as u64 * 60 + exact.seconds as u64)
-        }
+        Duration::Exact(exact) => Some(
+            u64::from(exact.hours) * 3600
+                + u64::from(exact.minutes) * 60
+                + u64::from(exact.seconds),
+        ),
     }
 }
 
@@ -258,7 +260,7 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
         ));
     }
     if let Some(seq) = event.sequence() {
-        fields.push(("sequence", ImportValue::SignedInteger(seq.value as i64)));
+        fields.push(("sequence", ImportValue::SignedInteger(i64::from(seq.value))));
     }
     if let Some(transp) = event.transp() {
         fields.push(("transparency", translate_transp(&transp.value)));
@@ -427,7 +429,7 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     if let Some(pct) = todo.percent_complete() {
         fields.push((
             "percent_complete",
-            ImportValue::Integer(pct.value.get() as u64),
+            ImportValue::Integer(u64::from(pct.value.get())),
         ));
     }
     if let Some(status_prop) = todo.status() {
@@ -479,7 +481,7 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
         ));
     }
     if let Some(seq) = todo.sequence() {
-        fields.push(("sequence", ImportValue::SignedInteger(seq.value as i64)));
+        fields.push(("sequence", ImportValue::SignedInteger(i64::from(seq.value))));
     }
     if let Some(url) = todo.url() {
         fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
@@ -616,17 +618,23 @@ fn translate_utc_datetime(dt: &DateTime<Utc>) -> ImportValue {
     let date = dt.date;
     let time = dt.time;
     let date_fields = [
-        ("year", ImportValue::Integer(date.year().get() as u64)),
+        ("year", ImportValue::Integer(u64::from(date.year().get()))),
         (
             "month",
-            ImportValue::Integer(date.month().number().get() as u64),
+            ImportValue::Integer(u64::from(date.month().number().get())),
         ),
-        ("day", ImportValue::Integer(date.day() as u8 as u64)),
+        ("day", ImportValue::Integer(u64::from(date.day() as u8))),
     ];
     let time_fields = [
-        ("hour", ImportValue::Integer(time.hour() as u8 as u64)),
-        ("minute", ImportValue::Integer(time.minute() as u8 as u64)),
-        ("second", ImportValue::Integer(time.second() as u8 as u64)),
+        ("hour", ImportValue::Integer(u64::from(time.hour() as u8))),
+        (
+            "minute",
+            ImportValue::Integer(u64::from(time.minute() as u8)),
+        ),
+        (
+            "second",
+            ImportValue::Integer(u64::from(time.second() as u8)),
+        ),
     ];
     let dt_fields = [
         ("date", ImportValue::Record(make_record(&date_fields))),
@@ -685,9 +693,17 @@ fn base64_encode(data: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
-        let b0 = chunk[0] as u32;
-        let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
-        let b2 = if chunk.len() > 2 { chunk[2] as u32 } else { 0 };
+        let b0 = u32::from(chunk[0]);
+        let b1 = if chunk.len() > 1 {
+            u32::from(chunk[1])
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            u32::from(chunk[2])
+        } else {
+            0
+        };
         let triple = (b0 << 16) | (b1 << 8) | b2;
         result.push(ALPHABET[((triple >> 18) & 0x3F) as usize] as char);
         result.push(ALPHABET[((triple >> 12) & 0x3F) as usize] as char);
@@ -765,11 +781,9 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
         let items: Vec<ImportValue> = (0..=60u8)
             .filter_map(|s| {
                 let sec = calico::model::rrule::Second::from_repr(s)?;
-                if by_second.get(sec) {
-                    Some(ImportValue::Integer(s as u64))
-                } else {
-                    None
-                }
+                by_second
+                    .get(sec)
+                    .then(|| ImportValue::Integer(u64::from(s)))
             })
             .collect();
         if !items.is_empty() {
@@ -780,11 +794,9 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
         let items: Vec<ImportValue> = (0..=59u8)
             .filter_map(|m| {
                 let min = calico::model::rrule::Minute::from_repr(m)?;
-                if by_minute.get(min) {
-                    Some(ImportValue::Integer(m as u64))
-                } else {
-                    None
-                }
+                by_minute
+                    .get(min)
+                    .then(|| ImportValue::Integer(u64::from(m)))
             })
             .collect();
         if !items.is_empty() {
@@ -795,11 +807,9 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
         let items: Vec<ImportValue> = (0..=23u8)
             .filter_map(|h| {
                 let hour = calico::model::rrule::Hour::from_repr(h)?;
-                if by_hour.get(hour) {
-                    Some(ImportValue::Integer(h as u64))
-                } else {
-                    None
-                }
+                by_hour
+                    .get(hour)
+                    .then(|| ImportValue::Integer(u64::from(h)))
             })
             .collect();
         if !items.is_empty() {
@@ -810,11 +820,9 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
         let items: Vec<ImportValue> = (1..=12u8)
             .filter_map(|m| {
                 let month = calico::model::primitive::Month::new(m).ok()?;
-                if by_month.get(month) {
-                    Some(ImportValue::Integer(m as u64))
-                } else {
-                    None
-                }
+                by_month
+                    .get(month)
+                    .then(|| ImportValue::Integer(u64::from(m)))
             })
             .collect();
         if !items.is_empty() {
@@ -828,8 +836,8 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
                 let day_str = weekday_to_str(wdn.weekday);
                 if let Some((sign, week)) = wdn.ordinal {
                     let ord = match sign {
-                        Sign::Pos => week as u8 as i64,
-                        Sign::Neg => -(week as u8 as i64),
+                        Sign::Pos => i64::from(week as u8),
+                        Sign::Neg => -i64::from(week as u8),
                     };
                     let fields = [
                         ("day", ImportValue::String(day_str.into())),
@@ -848,7 +856,7 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
     if let Some(ref by_set_pos) = core.by_set_pos {
         let items: Vec<ImportValue> = by_set_pos
             .iter()
-            .map(|ydn| ImportValue::SignedInteger(ydn.get() as i64))
+            .map(|ydn| ImportValue::SignedInteger(i64::from(ydn.get())))
             .collect();
         if !items.is_empty() {
             fields.push(("by_set_pos", ImportValue::List(items)));
@@ -889,7 +897,7 @@ fn translate_by_month_day(
                 let idx =
                     calico::model::rrule::MonthDaySetIndex::from_signed_month_day(Sign::Pos, day);
                 if set.get(idx) {
-                    items.push(ImportValue::SignedInteger(d as i64));
+                    items.push(ImportValue::SignedInteger(i64::from(d)));
                 }
             }
         }
@@ -899,7 +907,7 @@ fn translate_by_month_day(
                 let idx =
                     calico::model::rrule::MonthDaySetIndex::from_signed_month_day(Sign::Neg, day);
                 if set.get(idx) {
-                    items.push(ImportValue::SignedInteger(-(d as i64)));
+                    items.push(ImportValue::SignedInteger(-i64::from(d)));
                 }
             }
         }
@@ -916,7 +924,7 @@ fn translate_by_year_day(
     if let Some(set) = by_year_day {
         let items: Vec<ImportValue> = set
             .iter()
-            .map(|ydn| ImportValue::SignedInteger(ydn.get() as i64))
+            .map(|ydn| ImportValue::SignedInteger(i64::from(ydn.get())))
             .collect();
         if !items.is_empty() {
             fields.push(("by_year_day", ImportValue::List(items)));
@@ -935,7 +943,7 @@ fn translate_by_week_no(
             if let Some(week) = calico::model::primitive::IsoWeek::from_index(w) {
                 let idx = calico::model::rrule::WeekNoSetIndex::from_signed_week(Sign::Pos, week);
                 if set.get(idx) {
-                    items.push(ImportValue::SignedInteger(w as i64));
+                    items.push(ImportValue::SignedInteger(i64::from(w)));
                 }
             }
         }
@@ -944,7 +952,7 @@ fn translate_by_week_no(
             if let Some(week) = calico::model::primitive::IsoWeek::from_index(w) {
                 let idx = calico::model::rrule::WeekNoSetIndex::from_signed_week(Sign::Neg, week);
                 if set.get(idx) {
-                    items.push(ImportValue::SignedInteger(-(w as i64)));
+                    items.push(ImportValue::SignedInteger(-i64::from(w)));
                 }
             }
         }
@@ -1000,7 +1008,7 @@ fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> Import
     use calico::model::primitive::Value;
     match val {
         Value::Text(s) => ImportValue::String(s.clone()),
-        Value::Integer(i) => ImportValue::SignedInteger(*i as i64),
+        Value::Integer(i) => ImportValue::SignedInteger(i64::from(*i)),
         Value::Boolean(b) => ImportValue::Bool(*b),
         Value::DateTime(dt) => {
             let dtod = DateTimeOrDate::DateTime(*dt);
@@ -1017,9 +1025,9 @@ fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> Import
         Value::Recur(rrule) => translate_rrule(rrule),
         Value::Time(t, _) => {
             let fields = [
-                ("hour", ImportValue::Integer(t.hour() as u8 as u64)),
-                ("minute", ImportValue::Integer(t.minute() as u8 as u64)),
-                ("second", ImportValue::Integer(t.second() as u8 as u64)),
+                ("hour", ImportValue::Integer(u64::from(t.hour() as u8))),
+                ("minute", ImportValue::Integer(u64::from(t.minute() as u8))),
+                ("second", ImportValue::Integer(u64::from(t.second() as u8))),
             ];
             ImportValue::Record(make_record(&fields))
         }
@@ -1254,7 +1262,10 @@ fn translate_js_task(task: &JsTask<serde_json::Value>) -> ImportRecord {
         fields.push(("estimated_duration", translate_jscal_duration(dur)));
     }
     if let Some(pct) = task.percent_complete() {
-        fields.push(("percent_complete", ImportValue::Integer(pct.get() as u64)));
+        fields.push((
+            "percent_complete",
+            ImportValue::Integer(u64::from(pct.get())),
+        ));
     }
     if let Some(progress) = task.progress() {
         fields.push(("progress", ImportValue::String(progress.to_string())));
@@ -1314,22 +1325,28 @@ fn translate_local_datetime(
     dt: &jscalendar::model::time::DateTime<jscalendar::model::time::Local>,
 ) -> ImportValue {
     let date_fields = [
-        ("year", ImportValue::Integer(dt.date.year().get() as u64)),
+        (
+            "year",
+            ImportValue::Integer(u64::from(dt.date.year().get())),
+        ),
         (
             "month",
-            ImportValue::Integer(dt.date.month().number().get() as u64),
+            ImportValue::Integer(u64::from(dt.date.month().number().get())),
         ),
-        ("day", ImportValue::Integer(dt.date.day() as u8 as u64)),
+        ("day", ImportValue::Integer(u64::from(dt.date.day() as u8))),
     ];
     let time_fields = [
-        ("hour", ImportValue::Integer(dt.time.hour() as u8 as u64)),
+        (
+            "hour",
+            ImportValue::Integer(u64::from(dt.time.hour() as u8)),
+        ),
         (
             "minute",
-            ImportValue::Integer(dt.time.minute() as u8 as u64),
+            ImportValue::Integer(u64::from(dt.time.minute() as u8)),
         ),
         (
             "second",
-            ImportValue::Integer(dt.time.second() as u8 as u64),
+            ImportValue::Integer(u64::from(dt.time.second() as u8)),
         ),
     ];
     let dt_fields = [
@@ -1344,12 +1361,16 @@ fn translate_jscal_duration(dur: &JsDuration) -> ImportValue {
     match dur {
         JsDuration::Nominal(nom) => {
             let (hours, minutes, seconds) = match &nom.exact {
-                Some(e) => (e.hours as u64, e.minutes as u64, e.seconds as u64),
+                Some(e) => (
+                    u64::from(e.hours),
+                    u64::from(e.minutes),
+                    u64::from(e.seconds),
+                ),
                 None => (0, 0, 0),
             };
             let fields = [
-                ("weeks", ImportValue::Integer(nom.weeks as u64)),
-                ("days", ImportValue::Integer(nom.days as u64)),
+                ("weeks", ImportValue::Integer(u64::from(nom.weeks))),
+                ("days", ImportValue::Integer(u64::from(nom.days))),
                 ("hours", ImportValue::Integer(hours)),
                 ("minutes", ImportValue::Integer(minutes)),
                 ("seconds", ImportValue::Integer(seconds)),
@@ -1360,9 +1381,9 @@ fn translate_jscal_duration(dur: &JsDuration) -> ImportValue {
             let fields = [
                 ("weeks", ImportValue::Integer(0)),
                 ("days", ImportValue::Integer(0)),
-                ("hours", ImportValue::Integer(exact.hours as u64)),
-                ("minutes", ImportValue::Integer(exact.minutes as u64)),
-                ("seconds", ImportValue::Integer(exact.seconds as u64)),
+                ("hours", ImportValue::Integer(u64::from(exact.hours))),
+                ("minutes", ImportValue::Integer(u64::from(exact.minutes))),
+                ("seconds", ImportValue::Integer(u64::from(exact.seconds))),
             ];
             ImportValue::Record(make_record(&fields))
         }
@@ -1427,17 +1448,23 @@ fn translate_datetime_or_date(dtod: &DateTimeOrDate) -> Option<ImportValue> {
             let date = dt.date;
             let time = dt.time;
             let date_fields = [
-                ("year", ImportValue::Integer(date.year().get() as u64)),
+                ("year", ImportValue::Integer(u64::from(date.year().get()))),
                 (
                     "month",
-                    ImportValue::Integer(date.month().number().get() as u64),
+                    ImportValue::Integer(u64::from(date.month().number().get())),
                 ),
-                ("day", ImportValue::Integer(date.day() as u8 as u64)),
+                ("day", ImportValue::Integer(u64::from(date.day() as u8))),
             ];
             let time_fields = [
-                ("hour", ImportValue::Integer(time.hour() as u8 as u64)),
-                ("minute", ImportValue::Integer(time.minute() as u8 as u64)),
-                ("second", ImportValue::Integer(time.second() as u8 as u64)),
+                ("hour", ImportValue::Integer(u64::from(time.hour() as u8))),
+                (
+                    "minute",
+                    ImportValue::Integer(u64::from(time.minute() as u8)),
+                ),
+                (
+                    "second",
+                    ImportValue::Integer(u64::from(time.second() as u8)),
+                ),
             ];
             let dt_fields = [
                 ("date", ImportValue::Record(make_record(&date_fields))),
@@ -1447,12 +1474,12 @@ fn translate_datetime_or_date(dtod: &DateTimeOrDate) -> Option<ImportValue> {
         }
         DateTimeOrDate::Date(date) => {
             let fields = [
-                ("year", ImportValue::Integer(date.year().get() as u64)),
+                ("year", ImportValue::Integer(u64::from(date.year().get()))),
                 (
                     "month",
-                    ImportValue::Integer(date.month().number().get() as u64),
+                    ImportValue::Integer(u64::from(date.month().number().get())),
                 ),
-                ("day", ImportValue::Integer(date.day() as u8 as u64)),
+                ("day", ImportValue::Integer(u64::from(date.day() as u8))),
             ];
             Some(ImportValue::Record(make_record(&fields)))
         }
@@ -1472,23 +1499,23 @@ fn translate_signed_duration(sd: &SignedDuration) -> Option<ImportValue> {
                 let fields = [
                     ("weeks", ImportValue::Integer(0)),
                     ("days", ImportValue::Integer(0)),
-                    ("hours", ImportValue::Integer(exact.hours as u64)),
-                    ("minutes", ImportValue::Integer(exact.minutes as u64)),
-                    ("seconds", ImportValue::Integer(exact.seconds as u64)),
+                    ("hours", ImportValue::Integer(u64::from(exact.hours))),
+                    ("minutes", ImportValue::Integer(u64::from(exact.minutes))),
+                    ("seconds", ImportValue::Integer(u64::from(exact.seconds))),
                 ];
                 Some(ImportValue::Record(make_record(&fields)))
             } else {
                 let fields = [
                     ("weeks", ImportValue::SignedInteger(0)),
                     ("days", ImportValue::SignedInteger(0)),
-                    ("hours", ImportValue::SignedInteger(-(exact.hours as i64))),
+                    ("hours", ImportValue::SignedInteger(-i64::from(exact.hours))),
                     (
                         "minutes",
-                        ImportValue::SignedInteger(-(exact.minutes as i64)),
+                        ImportValue::SignedInteger(-i64::from(exact.minutes)),
                     ),
                     (
                         "seconds",
-                        ImportValue::SignedInteger(-(exact.seconds as i64)),
+                        ImportValue::SignedInteger(-i64::from(exact.seconds)),
                     ),
                 ];
                 Some(ImportValue::Record(make_record(&fields)))
@@ -1502,14 +1529,14 @@ fn translate_nominal_duration(
     nom: &NominalDuration,
     exact: Option<&ExactDuration>,
 ) -> Option<ImportValue> {
-    let hours = exact.map_or(0, |e| e.hours as u64);
-    let minutes = exact.map_or(0, |e| e.minutes as u64);
-    let seconds = exact.map_or(0, |e| e.seconds as u64);
+    let hours = exact.map_or(0, |e| u64::from(e.hours));
+    let minutes = exact.map_or(0, |e| u64::from(e.minutes));
+    let seconds = exact.map_or(0, |e| u64::from(e.seconds));
 
     if positive {
         let fields = [
-            ("weeks", ImportValue::Integer(nom.weeks as u64)),
-            ("days", ImportValue::Integer(nom.days as u64)),
+            ("weeks", ImportValue::Integer(u64::from(nom.weeks))),
+            ("days", ImportValue::Integer(u64::from(nom.days))),
             ("hours", ImportValue::Integer(hours)),
             ("minutes", ImportValue::Integer(minutes)),
             ("seconds", ImportValue::Integer(seconds)),
@@ -1517,8 +1544,8 @@ fn translate_nominal_duration(
         Some(ImportValue::Record(make_record(&fields)))
     } else {
         let fields = [
-            ("weeks", ImportValue::SignedInteger(-(nom.weeks as i64))),
-            ("days", ImportValue::SignedInteger(-(nom.days as i64))),
+            ("weeks", ImportValue::SignedInteger(-i64::from(nom.weeks))),
+            ("days", ImportValue::SignedInteger(-i64::from(nom.days))),
             ("hours", ImportValue::SignedInteger(-(hours as i64))),
             ("minutes", ImportValue::SignedInteger(-(minutes as i64))),
             ("seconds", ImportValue::SignedInteger(-(seconds as i64))),
@@ -1556,14 +1583,14 @@ fn compute_duration_from_endpoints(
 fn datetime_to_total_seconds<M>(dt: &DateTime<M>) -> u64 {
     let date = dt.date;
     // Approximate: just convert to a day count + time seconds.
-    let y = date.year().get() as u64;
-    let m = date.month().number().get() as u64;
-    let d = date.day() as u8 as u64;
+    let y = u64::from(date.year().get());
+    let m = u64::from(date.month().number().get());
+    let d = u64::from(date.day() as u8);
     // Rough day count (exact isn't needed — we just want the difference).
     let days = y * 365 + y / 4 + m * 30 + d;
-    let time_secs = dt.time.hour() as u8 as u64 * 3600
-        + dt.time.minute() as u8 as u64 * 60
-        + dt.time.second() as u8 as u64;
+    let time_secs = u64::from(dt.time.hour() as u8) * 3600
+        + u64::from(dt.time.minute() as u8) * 60
+        + u64::from(dt.time.second() as u8);
     days * 86400 + time_secs
 }
 

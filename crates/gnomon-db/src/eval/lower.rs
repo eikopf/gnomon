@@ -449,8 +449,9 @@ impl<'db> LowerCtx<'db> {
                     None => return Value::Undefined,
                 };
                 match (target, index_val) {
-                    (Value::List(items), Value::Integer(i)) => items
-                        .get(i as usize)
+                    (Value::List(items), Value::Integer(i)) => usize::try_from(i)
+                        .ok()
+                        .and_then(|idx| items.get(idx))
                         .map(|b| b.value.clone())
                         .unwrap_or(Value::Undefined),
                     _ => Value::Undefined,

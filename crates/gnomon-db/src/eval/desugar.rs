@@ -211,7 +211,7 @@ pub(super) fn make_record<'db>(
 fn month_day_to_year_day(month: u64, day: u64) -> Option<u64> {
     const DAYS_BEFORE: [u64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
     let index = month.checked_sub(1)?;
-    Some(*DAYS_BEFORE.get(index as usize)? + day)
+    Some(*DAYS_BEFORE.get(usize::try_from(index).ok()?)? + day)
 }
 
 /// Map a weekday keyword SyntaxKind to its canonical name string.

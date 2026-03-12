@@ -29,12 +29,11 @@ pub struct ParseResult<'db> {
 pub fn parse(db: &dyn crate::Db, source: SourceFile) -> ParseResult<'_> {
     let result = gnomon_parser::parse(source.text(db));
     for error in result.errors() {
+        let start = u32::try_from(error.range.start).unwrap_or(u32::MAX);
+        let end = u32::try_from(error.range.end).unwrap_or(u32::MAX);
         Diagnostic {
             source,
-            range: rowan::TextRange::new(
-                rowan::TextSize::from(error.range.start as u32),
-                rowan::TextSize::from(error.range.end as u32),
-            ),
+            range: rowan::TextRange::new(rowan::TextSize::new(start), rowan::TextSize::new(end)),
             severity: Severity::Error,
             message: error.message.clone(),
         }

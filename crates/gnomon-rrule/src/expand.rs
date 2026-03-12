@@ -279,8 +279,8 @@ fn apply_by_day(
                             Frequency::Weekly => {
                                 let current_wd = dt.date().weekday();
                                 let target_wd = nday.day.to_jiff();
-                                let diff = (target_wd.to_monday_zero_offset() as i64)
-                                    - (current_wd.to_monday_zero_offset() as i64);
+                                let diff = i64::from(target_wd.to_monday_zero_offset())
+                                    - i64::from(current_wd.to_monday_zero_offset());
                                 if let Ok(d) = dt.date().checked_add(Span::new().days(diff)) {
                                     result.push(d.to_datetime(dt.time()));
                                 }

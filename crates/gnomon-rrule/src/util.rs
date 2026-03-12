@@ -10,7 +10,7 @@ pub fn resolve_year_day(day: i16, days_in_year: i16) -> Option<i16> {
         Some(day)
     } else if day < 0 {
         let resolved = days_in_year + 1 + day;
-        if resolved >= 1 { Some(resolved) } else { None }
+        (resolved >= 1).then_some(resolved)
     } else {
         None
     }
@@ -24,7 +24,7 @@ pub fn resolve_month_day(day: i8, days_in_month: i8) -> Option<i8> {
         Some(day)
     } else if day < 0 {
         let resolved = days_in_month + 1 + day;
-        if resolved >= 1 { Some(resolved) } else { None }
+        (resolved >= 1).then_some(resolved)
     } else {
         None
     }
@@ -188,7 +188,7 @@ pub fn all_weekday_in_year(year: i16, weekday: Weekday) -> Vec<Date> {
     let jwd = weekday.to_jiff();
     let jan1 = Date::new(year, 1, 1).unwrap();
     let jan1_wd = jan1.weekday();
-    let diff = (jwd.to_monday_zero_offset() as i64) - (jan1_wd.to_monday_zero_offset() as i64);
+    let diff = i64::from(jwd.to_monday_zero_offset()) - i64::from(jan1_wd.to_monday_zero_offset());
     let diff = if diff < 0 { diff + 7 } else { diff };
     let mut d = match jan1.checked_add(Span::new().days(diff)) {
         Ok(d) => d,
@@ -244,15 +244,15 @@ pub fn dates_in_iso_week(year: i16, week_no: i8, week_start: Weekday) -> Vec<Dat
 
     // Week 1 is the first week containing at least 4 days of the new year
     let week1_start = if jan1_offset <= 3 {
-        jan1.checked_add(Span::new().days(-(jan1_offset as i64)))
+        jan1.checked_add(Span::new().days(-i64::from(jan1_offset)))
             .unwrap()
     } else {
-        jan1.checked_add(Span::new().days((7 - jan1_offset) as i64))
+        jan1.checked_add(Span::new().days(i64::from(7 - jan1_offset)))
             .unwrap()
     };
 
     let target_start = week1_start
-        .checked_add(Span::new().days((resolved as i64 - 1) * 7))
+        .checked_add(Span::new().days((i64::from(resolved) - 1) * 7))
         .unwrap();
 
     let mut dates = Vec::with_capacity(7);
@@ -285,7 +285,7 @@ fn iso_weeks_in_year(year: i16, week_start: Weekday) -> u8 {
 
 /// Number of days from `week_start` to `day` (0..6).
 fn day_offset_from(day: jiff::civil::Weekday, week_start: Weekday) -> i32 {
-    let d = day.to_monday_zero_offset() as i32;
+    let d = i32::from(day.to_monday_zero_offset());
     let s = week_start.days_since_monday();
     (d - s).rem_euclid(7)
 }

@@ -77,13 +77,11 @@ fn dedent(s: &str) -> String {
     // 2. If the last line is whitespace-only (including empty), use its indentation as
     //    baseline and remove it.
     let baseline_indent = if let Some(last) = lines.last() {
-        if last.chars().all(|c| c == ' ' || c == '\t') {
+        last.chars().all(|c| c == ' ' || c == '\t').then(|| {
             let indent = last.len();
             lines.pop();
-            Some(indent)
-        } else {
-            None
-        }
+            indent
+        })
     } else {
         None
     };
