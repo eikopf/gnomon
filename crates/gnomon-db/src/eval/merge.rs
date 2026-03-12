@@ -45,7 +45,7 @@ pub fn validate_calendar<'db>(
         diagnostics.push(diag);
     }
 
-    // r[impl model.calendar.singular]
+    // r[impl model.calendar.singular+2]
     // Track calendar declarations for uniqueness.
     let mut calendar_count = 0usize;
     let mut first_calendar_source: Option<SourceFile> = None;
@@ -441,7 +441,7 @@ mod tests {
         );
     }
 
-    // r[verify model.calendar.singular]
+    // r[verify model.calendar.singular+2]
     #[test]
     fn no_calendar_declaration_error() {
         let db = Database::default();
@@ -449,7 +449,7 @@ mod tests {
         assert!(diags.iter().any(|d| d.contains("no calendar record")));
     }
 
-    // r[verify model.calendar.singular]
+    // r[verify model.calendar.singular+2]
     #[test]
     fn duplicate_calendar_error() {
         let db = Database::default();

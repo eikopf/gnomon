@@ -3,7 +3,7 @@ use crate::syntax_kind::SyntaxKind;
 use super::Parser;
 
 impl Parser {
-    // r[impl expr.syntax+2]
+    // r[impl expr.syntax+4]
     /// Parse an expression using a Pratt parser for operator precedence.
     pub(super) fn parse_expr(&mut self) {
         self.parse_expr_bp(0);
@@ -112,7 +112,7 @@ impl Parser {
         }
     }
 
-    // r[impl expr.literal.syntax+4]
+    // r[impl expr.literal.syntax+5]
     /// Parse a literal expression (wraps a single literal token in a LITERAL_EXPR node).
     fn parse_literal_expr(&mut self) {
         self.start_node(SyntaxKind::LITERAL_EXPR);

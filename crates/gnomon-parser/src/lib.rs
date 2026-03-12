@@ -756,14 +756,14 @@ task @cleanup "Clean""#;
 
     // ── Boolean and undefined literals ───────────────────────────
 
-    // r[verify expr.literal.syntax+4]
+    // r[verify expr.literal.syntax+5]
     // r[verify lexer.keyword.strict]
     #[test]
     fn parse_boolean_fields() {
         check_no_errors("calendar { active: true, archived: false }");
     }
 
-    // r[verify expr.literal.syntax+4]
+    // r[verify expr.literal.syntax+5]
     #[test]
     fn parse_undefined_literal() {
         check(
@@ -932,7 +932,7 @@ task @cleanup "Clean""#;
 
     // ── Expression syntax ────────────────────────────────────────
 
-    // r[verify expr.syntax+3]
+    // r[verify expr.syntax+4]
     #[test]
     fn expression_syntax_complex() {
         // Exercises let, record, list, field access, index, identifiers

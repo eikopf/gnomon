@@ -222,7 +222,7 @@ mod tests {
     // ── Event (prefix form) ──────────────────────────────────────
 
     // r[verify decl.event.desugar+2]
-    // r[verify model.entry.type.infer]
+    // r[verify model.entry.type.infer+2]
     #[test]
     fn event_prefix_form() {
         let db = Database::default();
@@ -245,7 +245,7 @@ mod tests {
 
     // ── Event (short form) ───────────────────────────────────────
 
-    // r[verify decl.short-event.desugar]
+    // r[verify decl.short-event.desugar+2]
     // r[verify record.event.duration]
     #[test]
     fn event_short_form() {
@@ -258,7 +258,7 @@ mod tests {
         assert!(matches!(get_field(r, &db, "duration"), Value::Record(_)));
     }
 
-    // r[verify decl.short-event.desugar]
+    // r[verify decl.short-event.desugar+2]
     #[test]
     fn event_short_form_with_body() {
         let db = Database::default();
@@ -271,7 +271,7 @@ mod tests {
         assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
     }
 
-    // r[verify decl.short-event.desugar]
+    // r[verify decl.short-event.desugar+2]
     // r[verify record.event.start]
     #[test]
     fn event_short_form_date_plus_time() {
@@ -290,7 +290,7 @@ mod tests {
     // ── Task ─────────────────────────────────────────────────────
 
     // r[verify decl.task.desugar+2]
-    // r[verify model.entry.type.infer]
+    // r[verify model.entry.type.infer+2]
     #[test]
     fn task_prefix_form() {
         let db = Database::default();
@@ -299,7 +299,7 @@ mod tests {
         assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
     }
 
-    // r[verify decl.short-task.desugar]
+    // r[verify decl.short-task.desugar+2]
     // r[verify record.task.due]
     #[test]
     fn task_short_form() {
@@ -314,7 +314,7 @@ mod tests {
         assert!(matches!(get_field(r, &db, "due"), Value::Record(_)));
     }
 
-    // r[verify decl.short-task.desugar]
+    // r[verify decl.short-task.desugar+2]
     #[test]
     fn task_short_form_no_datetime() {
         let db = Database::default();
@@ -611,7 +611,7 @@ mod tests {
     }
 
     // r[verify syntax.file.let]
-    // r[verify syntax.file.body]
+    // r[verify syntax.file.body+2]
     // r[verify expr.let.sequential]
     #[test]
     fn file_level_let_used_in_expr_body() {

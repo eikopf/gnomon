@@ -151,7 +151,7 @@ impl<'db> LowerCtx<'db> {
         let base_path = FieldPath::root();
 
         if ev.name().is_some() {
-            // r[impl decl.short-event.desugar]
+            // r[impl decl.short-event.desugar+2]
             // Short form: event @name datetime [duration] ["title"] [{ body }]
             let mut record = Record::new();
 
@@ -213,7 +213,7 @@ impl<'db> LowerCtx<'db> {
         let base_path = FieldPath::root();
 
         if task.name().is_some() {
-            // r[impl decl.short-task.desugar]
+            // r[impl decl.short-task.desugar+2]
             let mut record = Record::new();
 
             if let Some(name_token) = task.name() {
@@ -473,7 +473,7 @@ impl<'db> LowerCtx<'db> {
                 );
                 Value::Record(record)
             }
-            // r[impl model.entry.type.infer]
+            // r[impl model.entry.type.infer+2]
             // r[impl decl.event.desugar+2]
             ast::Expr::EventExpr(ev) => {
                 let mut record = self.lower_event(ev, decl_id);
@@ -486,7 +486,7 @@ impl<'db> LowerCtx<'db> {
                 );
                 Value::Record(record)
             }
-            // r[impl model.entry.type.infer]
+            // r[impl model.entry.type.infer+2]
             // r[impl decl.task.desugar+2]
             ast::Expr::TaskExpr(task) => {
                 let mut record = self.lower_task(task, decl_id);
