@@ -69,7 +69,7 @@ Replacing any whitespace string with any other whitespace string MUST NOT change
 
 ### Punctuation
 
-> r[lexer.punctuation+2]
+> r[lexer.punctuation+3]
 > The following characters and character sequences MUST be recognized as punctuation:
 >
 > | Token | Name |
@@ -83,7 +83,6 @@ Replacing any whitespace string with any other whitespace string MUST NOT change
 > | `:` | Colon |
 > | `,` | Comma |
 > | `.` | Dot |
-> | `-` | Hyphen |
 > | `=` | Equals |
 > | `!` | Bang |
 > | `==` | Equals-equals |
@@ -122,7 +121,7 @@ The keywords `true`, `false`, and `undefined` MUST be treated as strict.
 
 All other keywords are weak.
 
-> r[lexer.keyword.weak+3]
+> r[lexer.keyword.weak+4]
 > All keywords other than `true`, `false`, and `undefined` MUST be treated as weak; these keywords are
 >
 > - `calendar`
@@ -138,12 +137,8 @@ All other keywords are weak.
 > - `on`
 > - `until`
 > - `times`
-> - `omit`
-> - `forward`
-> - `backward`
 > - `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
 > - `gnomon`, `icalendar`, `jscalendar`
-> - `override`
 
 
 ### Names
