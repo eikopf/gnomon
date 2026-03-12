@@ -39,10 +39,7 @@ pub fn emit_jscalendar(
 // ── Record dispatch ──────────────────────────────────────────
 
 fn record_to_jscal(record: &ImportRecord) -> Result<Json, String> {
-    let entry_type = record
-        .get("type")
-        .and_then(as_str)
-        .unwrap_or("event");
+    let entry_type = record.get("type").and_then(as_str).unwrap_or("event");
 
     match entry_type {
         // r[impl model.export.jscalendar.event]
@@ -253,7 +250,10 @@ fn emit_vendor_properties(
         if key == "type" {
             continue;
         }
-        if known_fields.iter().any(|&(gnomon_key, _)| gnomon_key == key) {
+        if known_fields
+            .iter()
+            .any(|&(gnomon_key, _)| gnomon_key == key)
+        {
             continue;
         }
         // Unknown field → emit as vendor property.
@@ -278,9 +278,7 @@ fn import_value_to_json(value: &ImportValue) -> Json {
             }
             Json::Object(map)
         }
-        ImportValue::List(items) => {
-            Json::Array(items.iter().map(import_value_to_json).collect())
-        }
+        ImportValue::List(items) => Json::Array(items.iter().map(import_value_to_json).collect()),
     }
 }
 
@@ -357,17 +355,11 @@ mod tests {
         let cal = make_record(&[("type", ImportValue::String("calendar".into()))]);
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            (
-                "uid",
-                ImportValue::String("abc-123".into()),
-            ),
+            ("uid", ImportValue::String("abc-123".into())),
             ("title", ImportValue::String("Standup".into())),
             ("start", make_datetime(2026, 3, 12, 9, 0, 0)),
             ("duration", make_duration(0, 0, 1, 0, 0)),
-            (
-                "time_zone",
-                ImportValue::String("America/New_York".into()),
-            ),
+            ("time_zone", ImportValue::String("America/New_York".into())),
         ]));
 
         let result = emit_jscalendar(&cal, &[event]).unwrap();
@@ -391,14 +383,8 @@ mod tests {
             ("uid", ImportValue::String("task-1".into())),
             ("title", ImportValue::String("Review PR".into())),
             ("due", make_datetime(2026, 3, 15, 17, 0, 0)),
-            (
-                "percent_complete",
-                ImportValue::Integer(50),
-            ),
-            (
-                "progress",
-                ImportValue::String("in-process".into()),
-            ),
+            ("percent_complete", ImportValue::Integer(50)),
+            ("progress", ImportValue::String("in-process".into())),
         ]));
 
         let result = emit_jscalendar(&cal, &[task]).unwrap();
@@ -475,9 +461,7 @@ mod tests {
             ),
             (
                 "com.example:nested",
-                ImportValue::Record(make_record(&[
-                    ("key", ImportValue::String("val".into())),
-                ])),
+                ImportValue::Record(make_record(&[("key", ImportValue::String("val".into()))])),
             ),
         ]));
 
@@ -491,15 +475,30 @@ mod tests {
     #[test]
     fn duration_formats() {
         // Weeks only.
-        assert_eq!(duration_record_to_json(&make_duration(2, 0, 0, 0, 0)), json!("P2W"));
+        assert_eq!(
+            duration_record_to_json(&make_duration(2, 0, 0, 0, 0)),
+            json!("P2W")
+        );
         // Days + time.
-        assert_eq!(duration_record_to_json(&make_duration(0, 1, 2, 30, 0)), json!("P1DT2H30M"));
+        assert_eq!(
+            duration_record_to_json(&make_duration(0, 1, 2, 30, 0)),
+            json!("P1DT2H30M")
+        );
         // Time only.
-        assert_eq!(duration_record_to_json(&make_duration(0, 0, 0, 45, 0)), json!("PT45M"));
+        assert_eq!(
+            duration_record_to_json(&make_duration(0, 0, 0, 45, 0)),
+            json!("PT45M")
+        );
         // Seconds.
-        assert_eq!(duration_record_to_json(&make_duration(0, 0, 0, 0, 15)), json!("PT15S"));
+        assert_eq!(
+            duration_record_to_json(&make_duration(0, 0, 0, 0, 15)),
+            json!("PT15S")
+        );
         // Zero duration.
-        assert_eq!(duration_record_to_json(&make_duration(0, 0, 0, 0, 0)), json!("PT0S"));
+        assert_eq!(
+            duration_record_to_json(&make_duration(0, 0, 0, 0, 0)),
+            json!("PT0S")
+        );
         // Mixed weeks + days + time.
         assert_eq!(
             duration_record_to_json(&make_duration(1, 2, 3, 4, 5)),

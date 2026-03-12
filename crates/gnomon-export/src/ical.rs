@@ -6,17 +6,17 @@ use std::num::NonZero;
 use calico::model::component::{Calendar, CalendarComponent, Event, Todo};
 use calico::model::parameter::Params;
 use calico::model::primitive::{
-    Attachment, ClassValue, Date, DateTime, DateTimeOrDate, Day, Duration, ExactDuration,
-    Geo, Hour, Minute, Month, NominalDuration, Priority, Second, Sign, SignedDuration,
-    Status, TimeFormat, TimeTransparency, Token, Utc, Version, Weekday, Year,
+    Attachment, ClassValue, Date, DateTime, DateTimeOrDate, Day, Duration, ExactDuration, Geo,
+    Hour, Minute, Month, NominalDuration, Priority, Second, Sign, SignedDuration, Status,
+    TimeFormat, TimeTransparency, Token, Utc, Version, Weekday, Year,
 };
 use calico::model::property::Prop;
-use calico::model::rrule::{
-    ByMonthDayRule, ByPeriodDayRules, CoreByRules, FreqByRules, Interval, MonthDay,
-    MonthDaySet, MonthDaySetIndex, RRule, SecondSet, MinuteSet, HourSet, MonthSet,
-    Termination, WeekNoSet, WeekNoSetIndex, WeekdayNum, YearDayNum, YearlyByRules,
-};
 use calico::model::rrule::weekday_num_set::WeekdayNumSet;
+use calico::model::rrule::{
+    ByMonthDayRule, ByPeriodDayRules, CoreByRules, FreqByRules, HourSet, Interval, MinuteSet,
+    MonthDay, MonthDaySet, MonthDaySetIndex, MonthSet, RRule, SecondSet, Termination, WeekNoSet,
+    WeekNoSetIndex, WeekdayNum, YearDayNum, YearlyByRules,
+};
 use calico::model::string::{TzId, Uid};
 use calico::serializer::WriteIcal;
 
@@ -84,11 +84,17 @@ pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Resul
 
     if let Some(uid_str) = calendar.get("uid").and_then(|v| as_str(v)) {
         let uid = Uid::new(uid_str).unwrap();
-        cal.set_uid(Prop { value: uid.into(), params: Params::default() });
+        cal.set_uid(Prop {
+            value: uid.into(),
+            params: Params::default(),
+        });
     }
 
     if let Some(name_str) = calendar.get("name").and_then(|v| as_str(v)) {
-        cal.set_name(vec![Prop { value: name_str.to_string(), params: Params::default() }]);
+        cal.set_name(vec![Prop {
+            value: name_str.to_string(),
+            params: Params::default(),
+        }]);
     }
 
     if let Some(desc_str) = calendar.get("description").and_then(|v| as_str(v)) {
@@ -101,12 +107,18 @@ pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Resul
     if let Some(color_str) = calendar.get("color").and_then(|v| as_str(v))
         && let Ok(color) = color_str.parse::<calico::model::css::Css3Color>()
     {
-        cal.set_color(Prop { value: color, params: Params::default() });
+        cal.set_color(Prop {
+            value: color,
+            params: Params::default(),
+        });
     }
 
     if let Some(url_str) = calendar.get("url").and_then(|v| as_str(v)) {
         let uri = make_calico_uri(url_str);
-        cal.set_url(Prop { value: uri, params: Params::default() });
+        cal.set_url(Prop {
+            value: uri,
+            params: Params::default(),
+        });
     }
 
     if let Some(ImportValue::List(cats)) = calendar.get("categories") {
@@ -126,18 +138,27 @@ pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Resul
     if let Some(lm_val) = calendar.get("last_modified")
         && let Some(dt) = record_to_utc_datetime(lm_val)
     {
-        cal.set_last_modified(Prop { value: dt, params: Params::default() });
+        cal.set_last_modified(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     if let Some(ri_val) = calendar.get("refresh_interval")
         && let Some(sd) = record_to_signed_duration(ri_val)
     {
-        cal.set_refresh_interval(Prop { value: sd, params: Params::default() });
+        cal.set_refresh_interval(Prop {
+            value: sd,
+            params: Params::default(),
+        });
     }
 
     if let Some(source_str) = calendar.get("source").and_then(|v| as_str(v)) {
         let uri = make_calico_uri(source_str);
-        cal.set_source(Prop { value: uri, params: Params::default() });
+        cal.set_source(Prop {
+            value: uri,
+            params: Params::default(),
+        });
     }
 
     // ── X-properties ─────────────────────────────────────────
@@ -146,7 +167,10 @@ pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Resul
         if key.starts_with("x_") {
             let prop_name = field_name_to_x_property(key);
             let x_val = import_value_to_ical_value(val);
-            let prop = Prop { value: x_val, params: Params::default() };
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
             cal.insert_x_property(prop_name.into(), vec![prop]);
         }
     }
@@ -162,17 +186,26 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
     // UID
     if let Some(uid_str) = record.get("uid").and_then(|v| as_str(v)) {
         let uid = Uid::new(uid_str).unwrap();
-        event.set_uid(Prop { value: uid.into(), params: Params::default() });
+        event.set_uid(Prop {
+            value: uid.into(),
+            params: Params::default(),
+        });
     }
 
     // SUMMARY ← title
     if let Some(title) = record.get("title").and_then(|v| as_str(v)) {
-        event.set_summary(Prop { value: title.to_string(), params: Params::default() });
+        event.set_summary(Prop {
+            value: title.to_string(),
+            params: Params::default(),
+        });
     }
 
     // DESCRIPTION
     if let Some(desc) = record.get("description").and_then(|v| as_str(v)) {
-        event.set_description(Prop { value: desc.to_string(), params: Params::default() });
+        event.set_description(Prop {
+            value: desc.to_string(),
+            params: Params::default(),
+        });
     }
 
     // DTSTART ← start + time_zone
@@ -187,32 +220,47 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
     if let Some(dur_val) = record.get("duration")
         && let Some(sd) = record_to_signed_duration(dur_val)
     {
-        event.set_duration(Prop { value: sd, params: Params::default() });
+        event.set_duration(Prop {
+            value: sd,
+            params: Params::default(),
+        });
     }
 
     // STATUS
     if let Some(status_str) = record.get("status").and_then(|v| as_str(v))
         && let Some(status) = str_to_status(status_str)
     {
-        event.set_status(Prop { value: status, params: Params::default() });
+        event.set_status(Prop {
+            value: status,
+            params: Params::default(),
+        });
     }
 
     // PRIORITY
     if let Some(prio_val) = record.get("priority") {
         let prio = import_value_to_priority(prio_val);
-        event.set_priority(Prop { value: prio, params: Params::default() });
+        event.set_priority(Prop {
+            value: prio,
+            params: Params::default(),
+        });
     }
 
     // LOCATION
     if let Some(loc) = record.get("location").and_then(|v| as_str(v)) {
-        event.set_location(Prop { value: loc.to_string(), params: Params::default() });
+        event.set_location(Prop {
+            value: loc.to_string(),
+            params: Params::default(),
+        });
     }
 
     // COLOR
     if let Some(color_str) = record.get("color").and_then(|v| as_str(v))
         && let Ok(color) = color_str.parse::<calico::model::css::Css3Color>()
     {
-        event.set_color(Prop { value: color, params: Params::default() });
+        event.set_color(Prop {
+            value: color,
+            params: Params::default(),
+        });
     }
 
     // CATEGORIES
@@ -234,66 +282,96 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
     if let Some(dtstamp_val) = record.get("dtstamp")
         && let Some(dt) = record_to_utc_datetime(dtstamp_val)
     {
-        event.set_dtstamp(Prop { value: dt, params: Params::default() });
+        event.set_dtstamp(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // CLASS
     if let Some(class_str) = record.get("class").and_then(|v| as_str(v)) {
         let class_val = str_to_class(class_str);
-        event.set_class(Prop { value: class_val, params: Params::default() });
+        event.set_class(Prop {
+            value: class_val,
+            params: Params::default(),
+        });
     }
 
     // CREATED
     if let Some(created_val) = record.get("created")
         && let Some(dt) = record_to_utc_datetime(created_val)
     {
-        event.set_created(Prop { value: dt, params: Params::default() });
+        event.set_created(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // GEO
     if let Some(geo_val) = record.get("geo")
         && let Some(geo) = record_to_geo(geo_val)
     {
-        event.set_geo(Prop { value: geo, params: Params::default() });
+        event.set_geo(Prop {
+            value: geo,
+            params: Params::default(),
+        });
     }
 
     // LAST-MODIFIED
     if let Some(lm_val) = record.get("last_modified")
         && let Some(dt) = record_to_utc_datetime(lm_val)
     {
-        event.set_last_modified(Prop { value: dt, params: Params::default() });
+        event.set_last_modified(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // ORGANIZER
     if let Some(org_str) = record.get("organizer").and_then(|v| as_str(v)) {
         let uri = make_calico_uri(org_str);
-        event.set_organizer(Prop { value: uri, params: Params::default() });
+        event.set_organizer(Prop {
+            value: uri,
+            params: Params::default(),
+        });
     }
 
     // SEQUENCE
     if let Some(seq_val) = record.get("sequence")
         && let Some(seq) = import_value_to_i32(seq_val)
     {
-        event.set_sequence(Prop { value: seq, params: Params::default() });
+        event.set_sequence(Prop {
+            value: seq,
+            params: Params::default(),
+        });
     }
 
     // TRANSP ← transparency
     if let Some(transp_str) = record.get("transparency").and_then(|v| as_str(v)) {
         let transp = str_to_transp(transp_str);
-        event.set_transp(Prop { value: transp, params: Params::default() });
+        event.set_transp(Prop {
+            value: transp,
+            params: Params::default(),
+        });
     }
 
     // URL
     if let Some(url_str) = record.get("url").and_then(|v| as_str(v)) {
         let uri = make_calico_uri(url_str);
-        event.set_url(Prop { value: uri, params: Params::default() });
+        event.set_url(Prop {
+            value: uri,
+            params: Params::default(),
+        });
     }
 
     // RECURRENCE-ID
     if let Some(rid_val) = record.get("recurrence_id") {
         let tz_str = record.get("time_zone").and_then(|v| as_str(v));
         if let Some(p) = import_value_to_dtstart(rid_val, tz_str) {
-            event.set_recurrence_id(Prop { value: p.value, params: p.params });
+            event.set_recurrence_id(Prop {
+                value: p.value,
+                params: p.params,
+            });
         }
     }
 
@@ -302,7 +380,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         && let ImportValue::Record(recur_rec) = recur_val
         && let Some(rrule) = record_to_rrule(recur_rec)
     {
-        event.set_rrule(vec![Prop { value: rrule, params: Params::default() }]);
+        event.set_rrule(vec![Prop {
+            value: rrule,
+            params: Params::default(),
+        }]);
     }
 
     // EXDATE ← exdates
@@ -311,7 +392,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         let props: Vec<Prop<DateTimeOrDate, Params>> = exdates
             .iter()
             .filter_map(|v| import_value_to_dtstart(v, tz_str))
-            .map(|p| Prop { value: p.value, params: p.params })
+            .map(|p| Prop {
+                value: p.value,
+                params: p.params,
+            })
             .collect();
         if !props.is_empty() {
             event.set_exdate(props);
@@ -334,7 +418,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = attendees
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: make_calico_uri(s), params: Params::default() })
+            .map(|s| Prop {
+                value: make_calico_uri(s),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_attendee(props);
@@ -346,7 +433,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         let props: Vec<Prop<String, Params>> = comments
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: s.to_string(), params: Params::default() })
+            .map(|s| Prop {
+                value: s.to_string(),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_comment(props);
@@ -358,7 +448,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         let props: Vec<Prop<String, Params>> = contacts
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: s.to_string(), params: Params::default() })
+            .map(|s| Prop {
+                value: s.to_string(),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_contact(props);
@@ -371,7 +464,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
             .iter()
             .filter_map(|v| as_str(v))
             .filter_map(|s| Uid::new(s).ok())
-            .map(|uid| Prop { value: uid.into(), params: Params::default() })
+            .map(|uid| Prop {
+                value: uid.into(),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_related_to(props);
@@ -389,12 +485,19 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
                         .filter_map(|iv| as_str(iv))
                         .map(|s| s.to_string())
                         .collect();
-                    if strings.is_empty() { None } else { Some(strings) }
+                    if strings.is_empty() {
+                        None
+                    } else {
+                        Some(strings)
+                    }
                 } else {
                     None
                 }
             })
-            .map(|strings| Prop { value: strings, params: Params::default() })
+            .map(|strings| Prop {
+                value: strings,
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_resources(props);
@@ -417,7 +520,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = conferences
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: make_calico_uri(s), params: Params::default() })
+            .map(|s| Prop {
+                value: make_calico_uri(s),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_conference(props);
@@ -430,7 +536,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
             .iter()
             .filter_map(|v| as_str(v))
             .filter_map(str_to_request_status)
-            .map(|rs| Prop { value: rs, params: Params::default() })
+            .map(|rs| Prop {
+                value: rs,
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             event.set_request_status(props);
@@ -442,7 +551,10 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         if key.starts_with("x_") {
             let prop_name = field_name_to_x_property(key);
             let x_val = import_value_to_ical_value(val);
-            let prop = Prop { value: x_val, params: Params::default() };
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
             event.insert_x_property(prop_name.into(), vec![prop]);
         }
     }
@@ -458,17 +570,26 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
     // UID
     if let Some(uid_str) = record.get("uid").and_then(|v| as_str(v)) {
         let uid = Uid::new(uid_str).unwrap();
-        todo.set_uid(Prop { value: uid.into(), params: Params::default() });
+        todo.set_uid(Prop {
+            value: uid.into(),
+            params: Params::default(),
+        });
     }
 
     // SUMMARY ← title
     if let Some(title) = record.get("title").and_then(|v| as_str(v)) {
-        todo.set_summary(Prop { value: title.to_string(), params: Params::default() });
+        todo.set_summary(Prop {
+            value: title.to_string(),
+            params: Params::default(),
+        });
     }
 
     // DESCRIPTION
     if let Some(desc) = record.get("description").and_then(|v| as_str(v)) {
-        todo.set_description(Prop { value: desc.to_string(), params: Params::default() });
+        todo.set_description(Prop {
+            value: desc.to_string(),
+            params: Params::default(),
+        });
     }
 
     // DTSTART ← start + time_zone
@@ -491,7 +612,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
     if let Some(dur_val) = record.get("estimated_duration")
         && let Some(sd) = record_to_signed_duration(dur_val)
     {
-        todo.set_duration(Prop { value: sd, params: Params::default() });
+        todo.set_duration(Prop {
+            value: sd,
+            params: Params::default(),
+        });
     }
 
     // PERCENT-COMPLETE ← percent_complete
@@ -510,25 +634,37 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
     if let Some(status_str) = record.get("status").and_then(|v| as_str(v))
         && let Some(status) = str_to_status(status_str)
     {
-        todo.set_status(Prop { value: status, params: Params::default() });
+        todo.set_status(Prop {
+            value: status,
+            params: Params::default(),
+        });
     }
 
     // PRIORITY
     if let Some(prio_val) = record.get("priority") {
         let prio = import_value_to_priority(prio_val);
-        todo.set_priority(Prop { value: prio, params: Params::default() });
+        todo.set_priority(Prop {
+            value: prio,
+            params: Params::default(),
+        });
     }
 
     // LOCATION
     if let Some(loc) = record.get("location").and_then(|v| as_str(v)) {
-        todo.set_location(Prop { value: loc.to_string(), params: Params::default() });
+        todo.set_location(Prop {
+            value: loc.to_string(),
+            params: Params::default(),
+        });
     }
 
     // COLOR
     if let Some(color_str) = record.get("color").and_then(|v| as_str(v))
         && let Ok(color) = color_str.parse::<calico::model::css::Css3Color>()
     {
-        todo.set_color(Prop { value: color, params: Params::default() });
+        todo.set_color(Prop {
+            value: color,
+            params: Params::default(),
+        });
     }
 
     // CATEGORIES
@@ -550,67 +686,97 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
     if let Some(dtstamp_val) = record.get("dtstamp")
         && let Some(dt) = record_to_utc_datetime(dtstamp_val)
     {
-        todo.set_dtstamp(Prop { value: dt, params: Params::default() });
+        todo.set_dtstamp(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // CLASS
     if let Some(class_str) = record.get("class").and_then(|v| as_str(v)) {
         let class_val = str_to_class(class_str);
-        todo.set_class(Prop { value: class_val, params: Params::default() });
+        todo.set_class(Prop {
+            value: class_val,
+            params: Params::default(),
+        });
     }
 
     // COMPLETED
     if let Some(completed_val) = record.get("completed")
         && let Some(dt) = record_to_utc_datetime(completed_val)
     {
-        todo.set_completed(Prop { value: dt, params: Params::default() });
+        todo.set_completed(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // CREATED
     if let Some(created_val) = record.get("created")
         && let Some(dt) = record_to_utc_datetime(created_val)
     {
-        todo.set_created(Prop { value: dt, params: Params::default() });
+        todo.set_created(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // GEO
     if let Some(geo_val) = record.get("geo")
         && let Some(geo) = record_to_geo(geo_val)
     {
-        todo.set_geo(Prop { value: geo, params: Params::default() });
+        todo.set_geo(Prop {
+            value: geo,
+            params: Params::default(),
+        });
     }
 
     // LAST-MODIFIED
     if let Some(lm_val) = record.get("last_modified")
         && let Some(dt) = record_to_utc_datetime(lm_val)
     {
-        todo.set_last_modified(Prop { value: dt, params: Params::default() });
+        todo.set_last_modified(Prop {
+            value: dt,
+            params: Params::default(),
+        });
     }
 
     // ORGANIZER
     if let Some(org_str) = record.get("organizer").and_then(|v| as_str(v)) {
         let uri = make_calico_uri(org_str);
-        todo.set_organizer(Prop { value: uri, params: Params::default() });
+        todo.set_organizer(Prop {
+            value: uri,
+            params: Params::default(),
+        });
     }
 
     // SEQUENCE
     if let Some(seq_val) = record.get("sequence")
         && let Some(seq) = import_value_to_i32(seq_val)
     {
-        todo.set_sequence(Prop { value: seq, params: Params::default() });
+        todo.set_sequence(Prop {
+            value: seq,
+            params: Params::default(),
+        });
     }
 
     // URL
     if let Some(url_str) = record.get("url").and_then(|v| as_str(v)) {
         let uri = make_calico_uri(url_str);
-        todo.set_url(Prop { value: uri, params: Params::default() });
+        todo.set_url(Prop {
+            value: uri,
+            params: Params::default(),
+        });
     }
 
     // RECURRENCE-ID
     if let Some(rid_val) = record.get("recurrence_id") {
         let tz_str = record.get("time_zone").and_then(|v| as_str(v));
         if let Some(p) = import_value_to_dtstart(rid_val, tz_str) {
-            todo.set_recurrence_id(Prop { value: p.value, params: p.params });
+            todo.set_recurrence_id(Prop {
+                value: p.value,
+                params: p.params,
+            });
         }
     }
 
@@ -619,7 +785,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         && let ImportValue::Record(recur_rec) = recur_val
         && let Some(rrule) = record_to_rrule(recur_rec)
     {
-        todo.set_rrule(vec![Prop { value: rrule, params: Params::default() }]);
+        todo.set_rrule(vec![Prop {
+            value: rrule,
+            params: Params::default(),
+        }]);
     }
 
     // EXDATE ← exdates
@@ -628,7 +797,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         let props: Vec<Prop<DateTimeOrDate, Params>> = exdates
             .iter()
             .filter_map(|v| import_value_to_dtstart(v, tz_str))
-            .map(|p| Prop { value: p.value, params: p.params })
+            .map(|p| Prop {
+                value: p.value,
+                params: p.params,
+            })
             .collect();
         if !props.is_empty() {
             todo.set_exdate(props);
@@ -651,7 +823,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = attendees
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: make_calico_uri(s), params: Params::default() })
+            .map(|s| Prop {
+                value: make_calico_uri(s),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_attendee(props);
@@ -663,7 +838,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         let props: Vec<Prop<String, Params>> = comments
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: s.to_string(), params: Params::default() })
+            .map(|s| Prop {
+                value: s.to_string(),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_comment(props);
@@ -675,7 +853,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         let props: Vec<Prop<String, Params>> = contacts
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: s.to_string(), params: Params::default() })
+            .map(|s| Prop {
+                value: s.to_string(),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_contact(props);
@@ -688,7 +869,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
             .iter()
             .filter_map(|v| as_str(v))
             .filter_map(|s| Uid::new(s).ok())
-            .map(|uid| Prop { value: uid.into(), params: Params::default() })
+            .map(|uid| Prop {
+                value: uid.into(),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_related_to(props);
@@ -706,12 +890,19 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
                         .filter_map(|iv| as_str(iv))
                         .map(|s| s.to_string())
                         .collect();
-                    if strings.is_empty() { None } else { Some(strings) }
+                    if strings.is_empty() {
+                        None
+                    } else {
+                        Some(strings)
+                    }
                 } else {
                     None
                 }
             })
-            .map(|strings| Prop { value: strings, params: Params::default() })
+            .map(|strings| Prop {
+                value: strings,
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_resources(props);
@@ -734,7 +925,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = conferences
             .iter()
             .filter_map(|v| as_str(v))
-            .map(|s| Prop { value: make_calico_uri(s), params: Params::default() })
+            .map(|s| Prop {
+                value: make_calico_uri(s),
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_conference(props);
@@ -747,7 +941,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
             .iter()
             .filter_map(|v| as_str(v))
             .filter_map(str_to_request_status)
-            .map(|rs| Prop { value: rs, params: Params::default() })
+            .map(|rs| Prop {
+                value: rs,
+                params: Params::default(),
+            })
             .collect();
         if !props.is_empty() {
             todo.set_request_status(props);
@@ -759,7 +956,10 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         if key.starts_with("x_") {
             let prop_name = field_name_to_x_property(key);
             let x_val = import_value_to_ical_value(val);
-            let prop = Prop { value: x_val, params: Params::default() };
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
             todo.insert_x_property(prop_name.into(), vec![prop]);
         }
     }
@@ -771,7 +971,11 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
 
 /// Extract a string from an ImportValue.
 fn as_str(v: &ImportValue) -> Option<&str> {
-    if let ImportValue::String(s) = v { Some(s.as_str()) } else { None }
+    if let ImportValue::String(s) = v {
+        Some(s.as_str())
+    } else {
+        None
+    }
 }
 
 /// Convert an ImportValue to a u64 integer.
@@ -838,7 +1042,11 @@ fn record_to_utc_datetime(v: &ImportValue) -> Option<DateTime<Utc>> {
     let date = Date::new(y, mo, d).ok()?;
     let time = calico::model::primitive::Time::new(h, mi, s, None).ok()?;
 
-    Some(DateTime { date, time, marker: Utc })
+    Some(DateTime {
+        date,
+        time,
+        marker: Utc,
+    })
 }
 
 /// Convert an ImportValue datetime or date record to a `Prop<DateTimeOrDate, Params>`.
@@ -880,7 +1088,10 @@ fn import_value_to_dtstart(
         let d = Day::new(day_n).ok()?;
         let date = Date::new(y, mo, d).ok()?;
 
-        return Some(Prop { value: DateTimeOrDate::Date(date), params: Params::default() });
+        return Some(Prop {
+            value: DateTimeOrDate::Date(date),
+            params: Params::default(),
+        });
     }
 
     // DateTime: get date and time sub-records.
@@ -914,22 +1125,37 @@ fn import_value_to_dtstart(
 
     let dtod: DateTimeOrDate = match tz_str {
         Some(tz) if tz.eq_ignore_ascii_case("UTC") || tz.eq_ignore_ascii_case("Z") => {
-            DateTimeOrDate::DateTime(DateTime { date, time, marker: TimeFormat::Utc })
+            DateTimeOrDate::DateTime(DateTime {
+                date,
+                time,
+                marker: TimeFormat::Utc,
+            })
         }
         Some(tz) => {
             // Local datetime with TZID parameter.
             // TzId::new has a trivial invariant (infallible), so unwrap is safe.
             let tz_id = TzId::new(tz).unwrap();
             params.set_tz_id(tz_id.into());
-            DateTimeOrDate::DateTime(DateTime { date, time, marker: TimeFormat::Local })
+            DateTimeOrDate::DateTime(DateTime {
+                date,
+                time,
+                marker: TimeFormat::Local,
+            })
         }
         None => {
             // Floating local time.
-            DateTimeOrDate::DateTime(DateTime { date, time, marker: TimeFormat::Local })
+            DateTimeOrDate::DateTime(DateTime {
+                date,
+                time,
+                marker: TimeFormat::Local,
+            })
         }
     };
 
-    Some(Prop { value: dtod, params })
+    Some(Prop {
+        value: dtod,
+        params,
+    })
 }
 
 /// Convert an ImportValue duration record to a calico `SignedDuration`.
@@ -942,20 +1168,22 @@ fn record_to_signed_duration(v: &ImportValue) -> Option<SignedDuration> {
     let weeks_raw = rec.get("weeks").and_then(import_value_to_i64).unwrap_or(0);
     let days_raw = rec.get("days").and_then(import_value_to_i64).unwrap_or(0);
     let hours_raw = rec.get("hours").and_then(import_value_to_i64).unwrap_or(0);
-    let minutes_raw = rec.get("minutes").and_then(import_value_to_i64).unwrap_or(0);
-    let seconds_raw = rec.get("seconds").and_then(import_value_to_i64).unwrap_or(0);
+    let minutes_raw = rec
+        .get("minutes")
+        .and_then(import_value_to_i64)
+        .unwrap_or(0);
+    let seconds_raw = rec
+        .get("seconds")
+        .and_then(import_value_to_i64)
+        .unwrap_or(0);
 
     // If any field is negative, the whole duration is negative.
-    let sign = if weeks_raw < 0
-        || days_raw < 0
-        || hours_raw < 0
-        || minutes_raw < 0
-        || seconds_raw < 0
-    {
-        Sign::Neg
-    } else {
-        Sign::Pos
-    };
+    let sign =
+        if weeks_raw < 0 || days_raw < 0 || hours_raw < 0 || minutes_raw < 0 || seconds_raw < 0 {
+            Sign::Neg
+        } else {
+            Sign::Pos
+        };
 
     let weeks = u32::try_from(weeks_raw.unsigned_abs()).unwrap_or(u32::MAX);
     let days = u32::try_from(days_raw.unsigned_abs()).unwrap_or(u32::MAX);
@@ -964,16 +1192,28 @@ fn record_to_signed_duration(v: &ImportValue) -> Option<SignedDuration> {
     let secs = u32::try_from(seconds_raw.unsigned_abs()).unwrap_or(u32::MAX);
 
     let nominal = if hours == 0 && minutes == 0 && secs == 0 {
-        NominalDuration { weeks, days, exact: None }
+        NominalDuration {
+            weeks,
+            days,
+            exact: None,
+        }
     } else {
         NominalDuration {
             weeks,
             days,
-            exact: Some(ExactDuration { hours, minutes, seconds: secs, frac: None }),
+            exact: Some(ExactDuration {
+                hours,
+                minutes,
+                seconds: secs,
+                frac: None,
+            }),
         }
     };
 
-    Some(SignedDuration { sign, duration: Duration::Nominal(nominal) })
+    Some(SignedDuration {
+        sign,
+        duration: Duration::Nominal(nominal),
+    })
 }
 
 /// Convert an ImportValue geo record to a calico `Geo`.
@@ -1129,7 +1369,11 @@ fn str_to_request_status(s: &str) -> Option<calico::model::primitive::RequestSta
     let minor: Option<u8> = code_parts.next().and_then(|s| s.parse().ok());
 
     let class = Class::from_u8(class_u8)?;
-    let code = RequestStatusCode { class, major, minor };
+    let code = RequestStatusCode {
+        class,
+        major,
+        minor,
+    };
 
     Some(RequestStatus {
         code,
@@ -1149,7 +1393,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
         let mut set = SecondSet::default();
         for v in by_second {
             if let Some(n) = import_value_to_u64(v)
-                && let Some(sec) = u8::try_from(n).ok().and_then(calico::model::rrule::Second::from_repr)
+                && let Some(sec) = u8::try_from(n)
+                    .ok()
+                    .and_then(calico::model::rrule::Second::from_repr)
             {
                 set.set(sec);
             }
@@ -1162,7 +1408,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
         let mut set = MinuteSet::default();
         for v in by_minute {
             if let Some(n) = import_value_to_u64(v)
-                && let Some(min) = u8::try_from(n).ok().and_then(calico::model::rrule::Minute::from_repr)
+                && let Some(min) = u8::try_from(n)
+                    .ok()
+                    .and_then(calico::model::rrule::Minute::from_repr)
             {
                 set.set(min);
             }
@@ -1175,7 +1423,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
         let mut set = HourSet::default();
         for v in by_hour {
             if let Some(n) = import_value_to_u64(v)
-                && let Some(h) = u8::try_from(n).ok().and_then(calico::model::rrule::Hour::from_repr)
+                && let Some(h) = u8::try_from(n)
+                    .ok()
+                    .and_then(calico::model::rrule::Hour::from_repr)
             {
                 set.set(h);
             }
@@ -1203,7 +1453,10 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
             match v {
                 ImportValue::String(s) => {
                     if let Some(wd) = str_to_weekday(s) {
-                        set.insert(WeekdayNum { weekday: wd, ordinal: None });
+                        set.insert(WeekdayNum {
+                            weekday: wd,
+                            ordinal: None,
+                        });
                     }
                 }
                 ImportValue::Record(day_rec) => {
@@ -1217,13 +1470,20 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                         let ord = if ordinal_i64 == 0 {
                             None
                         } else {
-                            let sign = if ordinal_i64 < 0 { Sign::Neg } else { Sign::Pos };
+                            let sign = if ordinal_i64 < 0 {
+                                Sign::Neg
+                            } else {
+                                Sign::Pos
+                            };
                             u8::try_from(ordinal_i64.unsigned_abs())
                                 .ok()
                                 .and_then(calico::model::primitive::IsoWeek::from_index)
                                 .map(|w| (sign, w))
                         };
-                        set.insert(WeekdayNum { weekday: wd, ordinal: ord });
+                        set.insert(WeekdayNum {
+                            weekday: wd,
+                            ordinal: ord,
+                        });
                     }
                 }
                 _ => {}
@@ -1238,10 +1498,8 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
         for v in by_set_pos {
             if let Some(n) = import_value_to_i64(v)
                 && let Ok(abs) = u16::try_from(n.unsigned_abs())
-                && let Some(ydn) = YearDayNum::from_signed_index(
-                    if n < 0 { Sign::Neg } else { Sign::Pos },
-                    abs,
-                )
+                && let Some(ydn) =
+                    YearDayNum::from_signed_index(if n < 0 { Sign::Neg } else { Sign::Pos }, abs)
             {
                 set.insert(ydn);
             }
@@ -1253,7 +1511,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
 
     // Helper closures for frequency-specific BY rules.
     let build_month_day_set = |rec: &ImportRecord| -> Option<MonthDaySet> {
-        let ImportValue::List(by_month_day) = rec.get("by_month_day")? else { return None };
+        let ImportValue::List(by_month_day) = rec.get("by_month_day")? else {
+            return None;
+        };
         let mut set = MonthDaySet::default();
         for v in by_month_day {
             if let Some(n) = import_value_to_i64(v)
@@ -1269,15 +1529,15 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
     };
 
     let build_year_day_set = |rec: &ImportRecord| -> Option<BTreeSet<YearDayNum>> {
-        let ImportValue::List(by_year_day) = rec.get("by_year_day")? else { return None };
+        let ImportValue::List(by_year_day) = rec.get("by_year_day")? else {
+            return None;
+        };
         let mut set: BTreeSet<YearDayNum> = BTreeSet::new();
         for v in by_year_day {
             if let Some(n) = import_value_to_i64(v)
                 && let Ok(abs) = u16::try_from(n.unsigned_abs())
-                && let Some(ydn) = YearDayNum::from_signed_index(
-                    if n < 0 { Sign::Neg } else { Sign::Pos },
-                    abs,
-                )
+                && let Some(ydn) =
+                    YearDayNum::from_signed_index(if n < 0 { Sign::Neg } else { Sign::Pos }, abs)
             {
                 set.insert(ydn);
             }
@@ -1286,7 +1546,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
     };
 
     let build_week_no_set = |rec: &ImportRecord| -> Option<WeekNoSet> {
-        let ImportValue::List(by_week_no) = rec.get("by_week_no")? else { return None };
+        let ImportValue::List(by_week_no) = rec.get("by_week_no")? else {
+            return None;
+        };
         let mut set = WeekNoSet::default();
         for v in by_week_no {
             if let Some(n) = import_value_to_i64(v)
@@ -1330,9 +1592,10 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
     };
 
     // INTERVAL
-    let interval = rec.get("interval").and_then(import_value_to_u64).and_then(|n| {
-        NonZero::new(n).map(Interval::new)
-    });
+    let interval = rec
+        .get("interval")
+        .and_then(import_value_to_u64)
+        .and_then(|n| NonZero::new(n).map(Interval::new));
 
     // TERMINATION (COUNT or UNTIL)
     let termination = if let Some(count_val) = rec.get("count") {
@@ -1349,7 +1612,13 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
         .and_then(|v| as_str(v))
         .and_then(str_to_weekday);
 
-    Some(RRule { freq, core_by_rules: core, interval, termination, week_start })
+    Some(RRule {
+        freq,
+        core_by_rules: core,
+        interval,
+        termination,
+        week_start,
+    })
 }
 
 /// Convert an ImportValue to a calico x-property `Value<String>`.
@@ -1378,18 +1647,31 @@ mod tests {
             .collect()
     }
 
-    fn make_start_dt(year: u64, month: u64, day: u64, hour: u64, min: u64, sec: u64) -> ImportValue {
+    fn make_start_dt(
+        year: u64,
+        month: u64,
+        day: u64,
+        hour: u64,
+        min: u64,
+        sec: u64,
+    ) -> ImportValue {
         ImportValue::Record(make_record(&[
-            ("date", ImportValue::Record(make_record(&[
-                ("year", ImportValue::Integer(year)),
-                ("month", ImportValue::Integer(month)),
-                ("day", ImportValue::Integer(day)),
-            ]))),
-            ("time", ImportValue::Record(make_record(&[
-                ("hour", ImportValue::Integer(hour)),
-                ("minute", ImportValue::Integer(min)),
-                ("second", ImportValue::Integer(sec)),
-            ]))),
+            (
+                "date",
+                ImportValue::Record(make_record(&[
+                    ("year", ImportValue::Integer(year)),
+                    ("month", ImportValue::Integer(month)),
+                    ("day", ImportValue::Integer(day)),
+                ])),
+            ),
+            (
+                "time",
+                ImportValue::Record(make_record(&[
+                    ("hour", ImportValue::Integer(hour)),
+                    ("minute", ImportValue::Integer(min)),
+                    ("second", ImportValue::Integer(sec)),
+                ])),
+            ),
         ]))
     }
 
@@ -1406,7 +1688,10 @@ mod tests {
         let calendar = make_cal("-//Test//Test//EN");
         let result = emit_icalendar(&calendar, &[]).unwrap();
         assert!(result.contains("BEGIN:VCALENDAR"), "missing VCALENDAR");
-        assert!(result.contains("PRODID:-//Test//Test//EN"), "missing PRODID");
+        assert!(
+            result.contains("PRODID:-//Test//Test//EN"),
+            "missing PRODID"
+        );
         assert!(result.contains("VERSION:2.0"), "missing VERSION");
         assert!(result.contains("END:VCALENDAR"), "missing END:VCALENDAR");
     }
@@ -1474,8 +1759,12 @@ END:VEVENT\r\n\
 END:VCALENDAR\r\n";
 
         let import_result = translate_icalendar(ics).unwrap();
-        let ImportValue::List(calendars) = import_result else { panic!("expected list") };
-        let ImportValue::Record(cal_rec) = &calendars[0] else { panic!("expected record") };
+        let ImportValue::List(calendars) = import_result else {
+            panic!("expected list")
+        };
+        let ImportValue::Record(cal_rec) = &calendars[0] else {
+            panic!("expected record")
+        };
         let ImportValue::List(entries) = cal_rec.get("entries").unwrap() else {
             panic!("expected entries list")
         };
@@ -1498,7 +1787,10 @@ END:VCALENDAR\r\n";
 
         assert_eq!(event.uid().unwrap().value.as_str(), "roundtrip-uid-42");
         assert_eq!(event.summary().unwrap().value, "Roundtrip Test");
-        assert_eq!(event.description().unwrap().value, "An event for round-trip testing");
+        assert_eq!(
+            event.description().unwrap().value,
+            "An event for round-trip testing"
+        );
         assert_eq!(event.location().unwrap().value, "Conference Room A");
     }
 
@@ -1513,7 +1805,10 @@ END:VCALENDAR\r\n";
             ("priority", ImportValue::Integer(5)),
         ]));
         let result = emit_icalendar(&calendar, &[event]).unwrap();
-        assert!(result.contains("STATUS:TENTATIVE"), "missing STATUS: {result}");
+        assert!(
+            result.contains("STATUS:TENTATIVE"),
+            "missing STATUS: {result}"
+        );
         assert!(result.contains("PRIORITY:5"), "missing PRIORITY: {result}");
     }
 
@@ -1559,8 +1854,14 @@ END:VCALENDAR\r\n";
         ]));
         let result = emit_icalendar(&calendar, &[event]).unwrap();
         assert!(result.contains("RRULE:"), "missing RRULE: {result}");
-        assert!(result.contains("FREQ=WEEKLY"), "missing FREQ=WEEKLY: {result}");
-        assert!(result.contains("INTERVAL=2"), "missing INTERVAL=2: {result}");
+        assert!(
+            result.contains("FREQ=WEEKLY"),
+            "missing FREQ=WEEKLY: {result}"
+        );
+        assert!(
+            result.contains("INTERVAL=2"),
+            "missing INTERVAL=2: {result}"
+        );
         assert!(result.contains("COUNT=10"), "missing COUNT=10: {result}");
     }
 
@@ -1578,8 +1879,14 @@ END:VCALENDAR\r\n";
             ("x_my_extension", ImportValue::String("ext-value".into())),
         ]));
         let result = emit_icalendar(&calendar, &[event]).unwrap();
-        assert!(result.contains("X-CUSTOM-PROP:custom-value"), "missing cal x-prop: {result}");
-        assert!(result.contains("X-MY-EXTENSION:ext-value"), "missing event x-prop: {result}");
+        assert!(
+            result.contains("X-CUSTOM-PROP:custom-value"),
+            "missing cal x-prop: {result}"
+        );
+        assert!(
+            result.contains("X-MY-EXTENSION:ext-value"),
+            "missing event x-prop: {result}"
+        );
     }
 
     // r[verify model.export.icalendar.duration_negative]
@@ -1599,7 +1906,10 @@ END:VCALENDAR\r\n";
             ("duration", duration),
         ]));
         let result = emit_icalendar(&calendar, &[event]).unwrap();
-        assert!(result.contains("DURATION:-P1W"), "missing negative duration: {result}");
+        assert!(
+            result.contains("DURATION:-P1W"),
+            "missing negative duration: {result}"
+        );
     }
 
     // r[verify model.export.icalendar.utc_datetime]
@@ -1613,7 +1923,10 @@ END:VCALENDAR\r\n";
             ("time_zone", ImportValue::String("UTC".into())),
         ]));
         let result = emit_icalendar(&calendar, &[event]).unwrap();
-        assert!(result.contains("DTSTART:20260621T120000Z"), "expected UTC DTSTART: {result}");
+        assert!(
+            result.contains("DTSTART:20260621T120000Z"),
+            "expected UTC DTSTART: {result}"
+        );
     }
 
     // r[verify model.export.icalendar.date_only]
@@ -1653,7 +1966,10 @@ END:VCALENDAR\r\n";
             ),
         ]));
         let result = emit_icalendar(&calendar, &[event]).unwrap();
-        assert!(result.contains("CATEGORIES:"), "missing CATEGORIES: {result}");
+        assert!(
+            result.contains("CATEGORIES:"),
+            "missing CATEGORIES: {result}"
+        );
         assert!(result.contains("WORK"), "missing WORK: {result}");
         assert!(result.contains("MEETING"), "missing MEETING: {result}");
     }

@@ -308,9 +308,7 @@ fn malformed_utf8_produces_error() {
 // r[verify cli.subcommand.reserved+5]
 #[test]
 fn reserved_subcommands_rejected() {
-    for name in [
-        "about", "daemon", "fetch", "lsp", "merge", "query", "run",
-    ] {
+    for name in ["about", "daemon", "fetch", "lsp", "merge", "query", "run"] {
         gnomon().arg(name).assert().failure();
     }
 }
@@ -531,7 +529,11 @@ calendar {
 event @test 2026-03-15T09:00 1h "Test"
 "#,
     );
-    let _unused = write_temp_file(&dir, "unused.gnomon", "event @orphan 2026-01-01T00:00 1h \"Orphan\"");
+    let _unused = write_temp_file(
+        &dir,
+        "unused.gnomon",
+        "event @orphan 2026-01-01T00:00 1h \"Orphan\"",
+    );
     gnomon()
         .args(["compile", _root.to_str().unwrap()])
         .assert()

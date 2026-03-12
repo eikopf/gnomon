@@ -26,10 +26,7 @@ pub fn calendar_to_import_values<'db>(
 
 /// Convert a `Record<'db>` to an [`ImportRecord`], stripping blame and
 /// resolving interned field names.
-fn record_to_import_record<'db>(
-    db: &'db dyn crate::Db,
-    record: &Record<'db>,
-) -> ImportRecord {
+fn record_to_import_record<'db>(db: &'db dyn crate::Db, record: &Record<'db>) -> ImportRecord {
     let mut result = ImportRecord::new();
     for (name, blamed) in &record.0 {
         let key = name.text(db).clone();

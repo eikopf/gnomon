@@ -131,9 +131,10 @@ pub fn validate_calendar<'db>(
                 source: root_source,
                 range: rowan::TextRange::default(),
                 severity: Severity::Error,
-                message: "top-level event/task records are ambiguous when multiple calendars exist; \
+                message:
+                    "top-level event/task records are ambiguous when multiple calendars exist; \
                           nest them inside a calendar's entries field instead"
-                    .into(),
+                        .into(),
             });
         }
     }
@@ -663,12 +664,22 @@ mod tests {
             "#,
         );
         let result = check(&db, source);
-        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        assert!(
+            !result.has_errors,
+            "unexpected errors: {:?}",
+            result.diagnostics
+        );
         let uid_key = crate::eval::interned::FieldName::new(&db, "uid".to_string());
         let uid0 = result.calendars[0].properties.get(&uid_key).unwrap();
         let uid1 = result.calendars[1].properties.get(&uid_key).unwrap();
-        assert_eq!(uid0.value, Value::String("f47ac10b-58cc-4372-a567-0e02b2c3d479".into()));
-        assert_eq!(uid1.value, Value::String("a1b2c3d4-e5f6-7890-abcd-ef1234567890".into()));
+        assert_eq!(
+            uid0.value,
+            Value::String("f47ac10b-58cc-4372-a567-0e02b2c3d479".into())
+        );
+        assert_eq!(
+            uid1.value,
+            Value::String("a1b2c3d4-e5f6-7890-abcd-ef1234567890".into())
+        );
     }
 
     #[test]
