@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate, parse, validate_calendar};
+use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate_with_options, parse, validate_calendar};
+use gnomon_db::eval::EvalOptions;
 
 // r[impl cli.root]
 // r[impl cli.syntax]
@@ -27,7 +28,7 @@ struct Cli {
 // r[impl cli.subcommand.help.root]
 // r[impl cli.subcommand.help.penultimate]
 // r[impl cli.subcommand.order]
-// r[impl cli.subcommand.reserved+3]
+// r[impl cli.subcommand.reserved+4]
 #[derive(Subcommand)]
 enum Command {
     // r[impl cli.subcommand.parse]
@@ -41,6 +42,11 @@ enum Command {
     Check {
         /// Path to the root .gnomon file.
         file: PathBuf,
+
+        // r[impl cli.subcommand.check.refresh]
+        /// Force re-fetching all URI imports, bypassing the cache.
+        #[arg(long)]
+        refresh: bool,
     },
     // r[impl cli.subcommand.eval]
     /// Evaluate a .gnomon file or expression and print its lowered document.
@@ -54,7 +60,15 @@ enum Command {
         /// Evaluate an inline expression.
         #[arg(long)]
         expr: Option<String>,
+
+        // r[impl cli.subcommand.eval.refresh]
+        /// Force re-fetching all URI imports, bypassing the cache.
+        #[arg(long)]
+        refresh: bool,
     },
+    // r[impl cli.subcommand.clean]
+    /// Remove all cached URI imports.
+    Clean,
 }
 
 fn main() -> ExitCode {
@@ -148,8 +162,15 @@ fn main() -> ExitCode {
 
             ExitCode::SUCCESS
         }
-        Command::Eval { file, expr } => {
+        Command::Eval {
+            file,
+            expr,
+            refresh,
+        } => {
             let db = Database::default();
+            let options = EvalOptions {
+                force_refresh: refresh,
+            };
 
             let source = match (&file, &expr) {
                 (Some(file), None) => {
@@ -172,7 +193,7 @@ fn main() -> ExitCode {
                 }
             };
 
-            let result = evaluate(&db, source);
+            let result = evaluate_with_options(&db, source, &options);
 
             // Collect parse + validation diagnostics.
             let mut diagnostics: Vec<Diagnostic> =
@@ -197,7 +218,7 @@ fn main() -> ExitCode {
             }
         }
         // r[impl cli.subcommand.check+2]
-        Command::Check { file } => {
+        Command::Check { file, refresh } => {
             // r[impl cli.subcommand.check.no-file+2]
             let text = match std::fs::read_to_string(&file) {
                 Ok(s) => s,
@@ -210,9 +231,12 @@ fn main() -> ExitCode {
             let db = Database::default();
             let root_path = file.canonicalize().unwrap_or_else(|_| file.clone());
             let source = SourceFile::new(&db, root_path.clone(), text);
+            let options = EvalOptions {
+                force_refresh: refresh,
+            };
 
             // Evaluate the root file.
-            let eval_result = evaluate(&db, source);
+            let eval_result = evaluate_with_options(&db, source, &options);
             let imported_files = eval_result.imported_files.clone();
 
             // Validate the evaluated value as a calendar.
@@ -263,6 +287,19 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             } else {
                 ExitCode::SUCCESS
+            }
+        }
+        // r[impl cli.subcommand.clean]
+        Command::Clean => {
+            match gnomon_db::eval::cache::clean() {
+                Ok(n) => {
+                    println!("{n} cached URI import(s) removed");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: failed to clean cache: {e}");
+                    ExitCode::FAILURE
+                }
             }
         }
     }

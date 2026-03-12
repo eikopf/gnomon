@@ -583,6 +583,34 @@ Import expressions MUST be evaluated eagerly.
 r[expr.import.cycle]
 Circular imports MUST be detected and rejected with an error.
 
+#### URI Import Caching
+
+URI imports may be cached on the local filesystem to avoid redundant network requests. The cache is best-effort: failures to read or write the cache MUST NOT prevent evaluation from proceeding.
+
+r[expr.import.cache.location]
+The URI import cache MUST be stored under `$XDG_CACHE_HOME/gnomon/uri`. If `$XDG_CACHE_HOME` is not set, the implementation MUST fall back to the platform-appropriate default cache directory.
+
+r[expr.import.cache.key]
+Each cached entry MUST be keyed by the import URI. The mapping from URI to cache key MUST be deterministic.
+
+r[expr.import.cache.content]
+The cache MUST store the raw response body and enough metadata to determine freshness and to reproduce the format inference that would occur on a live fetch (at minimum: the URI, the fetch timestamp, and the `Content-Type` header value).
+
+r[expr.import.cache.freshness]
+A cached entry MUST be considered fresh if the time elapsed since it was fetched is less than the entry's refresh interval. If the source document specifies a refresh interval (e.g. the iCalendar `REFRESH-INTERVAL` property), that value MUST be used. If no refresh interval is available, the implementation MUST use a default of one day (86 400 seconds).
+
+r[expr.import.cache.miss]
+On a cache miss or stale entry, the implementation MUST fetch the URI over the network and update the cache with the response.
+
+r[expr.import.cache.hit]
+On a cache hit, the implementation MUST use the cached content and MUST NOT make a network request.
+
+r[expr.import.cache.best-effort]
+If the cache directory cannot be created or a cache entry cannot be read or written, the implementation MUST silently fall back to a network fetch. Cache failures MUST NOT produce diagnostics.
+
+r[expr.import.cache.evict]
+When writing a new cache entry, the implementation MUST remove any entries whose age exceeds 30 days (2 592 000 seconds). Eviction failures MUST be silently ignored.
+
 ### Let Expressions
 
 A `let` expression introduces a local binding that is in scope for the body expression. Let bindings are sequential: a binding may refer to earlier bindings but not to itself or later bindings.
@@ -1673,6 +1701,9 @@ If a file was successfully located, the program MUST evaluate the file (transiti
 r[cli.subcommand.check.unused]
 After evaluation, the program MUST recursively scan the root file's parent directory for files matching `*.gnomon`. Any such file that is not the root file and was not transitively imported by the root file MUST produce a warning diagnostic.
 
+r[cli.subcommand.check.refresh]
+The `check` subcommand MUST accept a `--refresh` option. When present, all URI imports MUST be re-fetched from the network, bypassing the cache. The fetched content MUST still be written to the cache.
+
 #### `eval`
 
 The `eval` subcommand is a subcommand of the root command; it takes either a file path or an inline expression as input. When executed, `gnomon eval <file>` or `gnomon eval --expr '<expression>'` will parse, validate, and evaluate the input, producing the resulting Gnomon value.
@@ -1688,6 +1719,9 @@ The `--expr` option and the file path argument MUST be mutually exclusive; exact
 
 r[cli.subcommand.eval.no-file]
 If the file path argument to the `eval` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
+
+r[cli.subcommand.eval.refresh]
+The `eval` subcommand MUST accept a `--refresh` option. When present, all URI imports MUST be re-fetched from the network, bypassing the cache. The fetched content MUST still be written to the cache.
 
 r[cli.subcommand.eval.output]
 The program MUST write a textual representation of the evaluated value to STDOUT. Any diagnostics MUST be written to STDERR.
@@ -1715,15 +1749,21 @@ A list value MUST be rendered as a comma-separated sequence of values enclosed i
 r[cli.subcommand.eval.output.record]
 A record value MUST be rendered as a brace-enclosed block with one `key: value,` pair per line, indented by 4 spaces per nesting level. Fields MUST be sorted lexicographically by key. An empty record MUST be rendered as `{}`.
 
+#### `clean`
+
+The `clean` subcommand removes all cached URI imports from the local cache directory.
+
+r[cli.subcommand.clean]
+The program MUST provide a `clean` subcommand for the root command. When executed, it MUST remove all entries from the URI import cache directory and print the number of entries removed to STDOUT.
+
 #### Reserved Subcommands
 
 We reserve some identifiers for future use as subcommands.
 
-> r[cli.subcommand.reserved+3]
+> r[cli.subcommand.reserved+4]
 > The following identifiers MUST NOT be used by any implementation:
 >
 > - `about`
-> - `clean`
 > - `compile`
 > - `daemon`
 > - `fetch`

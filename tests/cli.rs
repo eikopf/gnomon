@@ -305,12 +305,24 @@ fn malformed_utf8_produces_error() {
 
 // ── Reserved subcommands ────────────────────────────────────
 
-// r[verify cli.subcommand.reserved+3]
+// r[verify cli.subcommand.reserved+4]
 #[test]
 fn reserved_subcommands_rejected() {
     for name in [
-        "about", "clean", "compile", "daemon", "fetch", "lsp", "merge", "query", "run",
+        "about", "compile", "daemon", "fetch", "lsp", "merge", "query", "run",
     ] {
         gnomon().arg(name).assert().failure();
     }
+}
+
+// ── Clean subcommand ───────────────────────────────────────
+
+// r[verify cli.subcommand.clean]
+#[test]
+fn clean_subcommand() {
+    gnomon()
+        .arg("clean")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("cached URI import(s) removed"));
 }

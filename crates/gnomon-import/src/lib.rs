@@ -44,6 +44,38 @@ fn make_record(fields: &[(&str, ImportValue)]) -> ImportRecord {
         .collect()
 }
 
+// ── Refresh interval extraction ──────────────────────────────
+
+/// Extract the REFRESH-INTERVAL from iCalendar content as total seconds.
+///
+/// Returns `None` if the content cannot be parsed, contains no VCALENDAR
+/// objects, or lacks a REFRESH-INTERVAL property.
+pub fn extract_ical_refresh_interval_secs(content: &str) -> Option<u64> {
+    let calendars = ICalCalendar::parse(content).ok()?;
+    let cal = calendars.first()?;
+    let ri = cal.refresh_interval()?;
+    signed_duration_to_secs(&ri.value)
+}
+
+/// Convert a calico `SignedDuration` to total seconds.
+/// Returns `None` for negative durations.
+fn signed_duration_to_secs(sd: &SignedDuration) -> Option<u64> {
+    if sd.sign != Sign::Pos {
+        return None;
+    }
+    match &sd.duration {
+        Duration::Nominal(nom) => {
+            let exact_secs = nom.exact.as_ref().map_or(0u64, |e| {
+                e.hours as u64 * 3600 + e.minutes as u64 * 60 + e.seconds as u64
+            });
+            Some(nom.weeks as u64 * 604_800 + nom.days as u64 * 86_400 + exact_secs)
+        }
+        Duration::Exact(exact) => {
+            Some(exact.hours as u64 * 3600 + exact.minutes as u64 * 60 + exact.seconds as u64)
+        }
+    }
+}
+
 // ── iCalendar ────────────────────────────────────────────────
 
 // r[impl model.import.icalendar.components]
