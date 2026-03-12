@@ -1123,4 +1123,57 @@ task @cleanup "Clean""#;
             "chaining mixed comparisons should produce a parse error"
         );
     }
+
+    // ── Multi-binding let ────────────────────────────────────────
+
+    // r[verify expr.let.syntax+2]
+    #[test]
+    fn multi_binding_let_in_expr() {
+        // Inside an expression context, multi-binding let desugars to nested LET_EXPRs.
+        check(
+            "{ v: let x = 1 let y = 2 in x }",
+            expect![[r#"
+                SOURCE_FILE@0..31
+                  RECORD_EXPR@0..31
+                    L_BRACE@0..1 "{"
+                    WHITESPACE@1..2 " "
+                    FIELD@2..29
+                      IDENT@2..3 "v"
+                      COLON@3..4 ":"
+                      WHITESPACE@4..5 " "
+                      LET_EXPR@5..29
+                        LET_KW@5..8 "let"
+                        WHITESPACE@8..9 " "
+                        IDENT@9..10 "x"
+                        WHITESPACE@10..11 " "
+                        EQUALS@11..12 "="
+                        WHITESPACE@12..13 " "
+                        LITERAL_EXPR@13..14
+                          INTEGER_LITERAL@13..14 "1"
+                        WHITESPACE@14..15 " "
+                        LET_EXPR@15..29
+                          LET_KW@15..18 "let"
+                          WHITESPACE@18..19 " "
+                          IDENT@19..20 "y"
+                          WHITESPACE@20..21 " "
+                          EQUALS@21..22 "="
+                          WHITESPACE@22..23 " "
+                          LITERAL_EXPR@23..24
+                            INTEGER_LITERAL@23..24 "2"
+                          WHITESPACE@24..25 " "
+                          IN_KW@25..27 "in"
+                          WHITESPACE@27..28 " "
+                          IDENT_EXPR@28..29
+                            IDENT@28..29 "x"
+                    WHITESPACE@29..30 " "
+                    R_BRACE@30..31 "}"
+            "#]],
+        );
+    }
+
+    // r[verify expr.let.syntax+2]
+    #[test]
+    fn multi_binding_let_three_bindings_no_errors() {
+        check_no_errors("{ v: let a = 1 let b = 2 let c = 3 in a }");
+    }
 }

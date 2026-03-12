@@ -326,7 +326,7 @@ impl<'db> LowerCtx<'db> {
                     Value::Undefined
                 }
             }
-            // r[impl expr.let.scope]
+            // r[impl expr.let.scope+2]
             // r[impl expr.let.sequential]
             ast::Expr::LetExpr(let_expr) => {
                 let name = let_expr

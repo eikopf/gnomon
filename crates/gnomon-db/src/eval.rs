@@ -491,14 +491,35 @@ mod tests {
 
     // ── New expression forms ─────────────────────────────────────
 
-    // r[verify expr.let.scope]
-    // r[verify expr.let.syntax]
+    // r[verify expr.let.scope+2]
+    // r[verify expr.let.syntax+2]
     #[test]
     fn let_expression() {
         let db = Database::default();
         let result = eval(&db, r#"let x = 42 in { count: x }"#);
         let r = expect_record(&result);
         assert_eq!(get_field(r, &db, "count"), Value::Integer(42));
+    }
+
+    // r[verify expr.let.syntax+2]
+    // r[verify expr.let.scope+2]
+    #[test]
+    fn multi_binding_let_expression() {
+        let db = Database::default();
+        let result = eval(&db, r#"let x = 1 let y = 2 in { a: x, b: y }"#);
+        let r = expect_record(&result);
+        assert_eq!(get_field(r, &db, "a"), Value::Integer(1));
+        assert_eq!(get_field(r, &db, "b"), Value::Integer(2));
+    }
+
+    // r[verify expr.let.sequential]
+    // r[verify expr.let.scope+2]
+    #[test]
+    fn multi_binding_let_sequential() {
+        let db = Database::default();
+        // Each binding can reference earlier bindings.
+        let result = eval(&db, r#"let x = 1 let y = x let z = y in z"#);
+        assert_eq!(result.value, Value::Integer(1));
     }
 
     // r[verify expr.literal.identifier]
