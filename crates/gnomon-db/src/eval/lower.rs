@@ -26,6 +26,18 @@ enum ImportFormat {
     Infer,
 }
 
+fn infer_format_from_content_type(ct: &str) -> ImportFormat {
+    if ct.starts_with("text/calendar") {
+        ImportFormat::ICalendar
+    } else if ct.starts_with("application/json")
+        || ct.starts_with("application/jscalendar+json")
+    {
+        ImportFormat::JSCalendar
+    } else {
+        ImportFormat::Gnomon
+    }
+}
+
 pub struct LowerCtx<'db> {
     db: &'db dyn crate::Db,
     source: SourceFile,
@@ -36,6 +48,8 @@ pub struct LowerCtx<'db> {
     import_stack: Vec<PathBuf>,
     /// All transitively imported Gnomon file paths (canonical).
     pub imported_files: Vec<PathBuf>,
+    /// If true, bypass the URI import cache and always re-fetch.
+    pub force_refresh: bool,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -48,6 +62,7 @@ impl<'db> LowerCtx<'db> {
             env: Vec::new(),
             import_stack: vec![path],
             imported_files: Vec::new(),
+            force_refresh: false,
         }
     }
 
@@ -63,6 +78,7 @@ impl<'db> LowerCtx<'db> {
             env: Vec::new(),
             import_stack,
             imported_files: Vec::new(),
+            force_refresh: false,
         }
     }
 
@@ -641,36 +657,45 @@ impl<'db> LowerCtx<'db> {
         format: ImportFormat,
         source_range: rowan::TextRange,
     ) -> Value<'db> {
+        // Check the on-disk cache first (unless force_refresh is set).
+        if !self.force_refresh {
+            if let super::cache::CacheLookup::Hit {
+                content,
+                content_type,
+            } = super::cache::lookup(url)
+            {
+                let format = match format {
+                    ImportFormat::Infer => infer_format_from_content_type(&content_type),
+                    f => f,
+                };
+                return self.dispatch_import_content(
+                    format,
+                    content,
+                    PathBuf::from(url),
+                    source_range,
+                );
+            }
+        }
+
         // Fetch content via HTTP(S).
         let response = match ureq::get(url).call() {
             Ok(resp) => resp,
             Err(e) => {
-                self.emit_diagnostic(
-                    source_range,
-                    format!("URI import failed: {e}"),
-                );
+                self.emit_diagnostic(source_range, format!("URI import failed: {e}"));
                 return Value::Undefined;
             }
         };
 
         // If format is still Infer, try Content-Type header.
+        let content_type_str = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
         let format = match format {
-            ImportFormat::Infer => {
-                let ct = response
-                    .headers()
-                    .get("content-type")
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or("");
-                if ct.starts_with("text/calendar") {
-                    ImportFormat::ICalendar
-                } else if ct.starts_with("application/json")
-                    || ct.starts_with("application/jscalendar+json")
-                {
-                    ImportFormat::JSCalendar
-                } else {
-                    ImportFormat::Gnomon
-                }
-            }
+            ImportFormat::Infer => infer_format_from_content_type(&content_type_str),
             f => f,
         };
 
@@ -684,6 +709,14 @@ impl<'db> LowerCtx<'db> {
                 return Value::Undefined;
             }
         };
+
+        // Store in cache for future lookups.
+        let format_hint = match format {
+            ImportFormat::ICalendar => "icalendar",
+            ImportFormat::JSCalendar => "jscalendar",
+            ImportFormat::Gnomon | ImportFormat::Infer => "gnomon",
+        };
+        super::cache::store(url, &content, &content_type_str, format_hint);
 
         self.dispatch_import_content(format, content, PathBuf::from(url), source_range)
     }
@@ -753,8 +786,12 @@ impl<'db> LowerCtx<'db> {
                 let mut new_stack = self.import_stack.clone();
                 new_stack.push(source_path.clone());
 
-                let result =
-                    super::evaluate_with_import_stack(self.db, target_source, new_stack);
+                let result = super::evaluate_with_import_stack(
+                    self.db,
+                    target_source,
+                    new_stack,
+                    self.force_refresh,
+                );
 
                 self.diagnostics.extend(result.diagnostics);
                 self.imported_files.push(source_path);

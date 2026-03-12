@@ -1,0 +1,120 @@
+//! On-disk cache for URI imports.
+//!
+//! Stores fetched content and metadata under `$XDG_CACHE_HOME/gnomon/uri`
+//! (or `~/.cache/gnomon/uri` on Linux/macOS). Uses the document's
+//! `refresh_interval` (iCalendar REFRESH-INTERVAL) to determine freshness.
+//!
+//! All filesystem errors are silently ignored — the cache is best-effort.
+
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
+
+/// Default refresh interval when the document doesn't specify one: 1 day.
+const DEFAULT_REFRESH_SECS: u64 = 86_400;
+
+#[derive(Serialize, Deserialize)]
+struct CacheMeta {
+    url: String,
+    fetched_at: u64,
+    content_type: String,
+    refresh_interval_secs: Option<u64>,
+}
+
+/// Outcome of a cache lookup.
+pub enum CacheLookup {
+    /// Cached content is fresh.
+    Hit { content: String, content_type: String },
+    /// No cache entry or entry is stale.
+    Miss,
+}
+
+/// Return the cache directory: `<xdg-cache>/gnomon/uri`.
+fn cache_dir() -> Option<PathBuf> {
+    use etcetera::{BaseStrategy, choose_base_strategy};
+    let strategy = choose_base_strategy().ok()?;
+    Some(strategy.cache_dir().join("gnomon").join("uri"))
+}
+
+/// Deterministic cache key for a URL (UUID v5 with URL namespace).
+fn cache_key(url: &str) -> String {
+    uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, url.as_bytes()).to_string()
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+/// Check if a cached entry exists and is fresh.
+pub fn lookup(url: &str) -> CacheLookup {
+    let dir = match cache_dir() {
+        Some(d) => d,
+        None => return CacheLookup::Miss,
+    };
+    let key = cache_key(url);
+    let meta_path = dir.join(format!("{key}.meta.json"));
+    let content_path = dir.join(format!("{key}.content"));
+
+    let meta: CacheMeta = match std::fs::read_to_string(&meta_path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+    {
+        Some(m) => m,
+        None => return CacheLookup::Miss,
+    };
+
+    let max_age = meta.refresh_interval_secs.unwrap_or(DEFAULT_REFRESH_SECS);
+    if now_secs().saturating_sub(meta.fetched_at) >= max_age {
+        return CacheLookup::Miss;
+    }
+
+    match std::fs::read_to_string(&content_path) {
+        Ok(content) => CacheLookup::Hit {
+            content,
+            content_type: meta.content_type,
+        },
+        Err(_) => CacheLookup::Miss,
+    }
+}
+
+/// Store fetched content and metadata in the cache.
+///
+/// `format_hint` is `"icalendar"`, `"jscalendar"`, or `"gnomon"`.
+pub fn store(url: &str, content: &str, content_type: &str, format_hint: &str) {
+    let dir = match cache_dir() {
+        Some(d) => d,
+        None => return,
+    };
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+
+    let refresh_interval_secs = if format_hint == "icalendar" {
+        gnomon_import::extract_ical_refresh_interval_secs(content)
+    } else {
+        None
+    };
+
+    let meta = CacheMeta {
+        url: url.to_string(),
+        fetched_at: now_secs(),
+        content_type: content_type.to_string(),
+        refresh_interval_secs,
+    };
+
+    let key = cache_key(url);
+    let content_path = dir.join(format!("{key}.content"));
+    let meta_path = dir.join(format!("{key}.meta.json"));
+
+    // Write content first; if it fails, don't write metadata.
+    if std::fs::write(&content_path, content).is_err() {
+        return;
+    }
+    if let Ok(json) = serde_json::to_string_pretty(&meta) {
+        let _ = std::fs::write(&meta_path, json);
+    }
+}

@@ -1,3 +1,4 @@
+pub mod cache;
 pub mod desugar;
 pub mod import;
 pub mod interned;
@@ -25,18 +26,35 @@ pub struct EvalResult<'db> {
     pub imported_files: Vec<PathBuf>,
 }
 
+/// Options controlling evaluation behavior.
+#[derive(Debug, Clone, Default)]
+pub struct EvalOptions {
+    /// If true, bypass the URI import cache and always re-fetch.
+    pub force_refresh: bool,
+}
+
 /// Evaluate a source file into a value.
 ///
 /// This function calls the tracked `check_syntax` query internally to ensure
 /// parse and validation errors are accumulated. Lowering-specific diagnostics
 /// are returned in `EvalResult::diagnostics`.
 pub fn evaluate<'db>(db: &'db dyn crate::Db, source: SourceFile) -> EvalResult<'db> {
+    evaluate_with_options(db, source, &EvalOptions::default())
+}
+
+/// Evaluate a source file with the given options.
+pub fn evaluate_with_options<'db>(
+    db: &'db dyn crate::Db,
+    source: SourceFile,
+    options: &EvalOptions,
+) -> EvalResult<'db> {
     // Run parse + validation (tracked, memoized).
     let _check = crate::check_syntax(db, source);
     let parse_result = crate::parse(db, source);
     let tree = parse_result.tree(db);
 
     let mut ctx = lower::LowerCtx::new(db, source);
+    ctx.force_refresh = options.force_refresh;
     let value = ctx.lower_source_file(&tree);
 
     EvalResult {
@@ -51,12 +69,14 @@ pub(super) fn evaluate_with_import_stack<'db>(
     db: &'db dyn crate::Db,
     source: SourceFile,
     import_stack: Vec<std::path::PathBuf>,
+    force_refresh: bool,
 ) -> EvalResult<'db> {
     let _check = crate::check_syntax(db, source);
     let parse_result = crate::parse(db, source);
     let tree = parse_result.tree(db);
 
     let mut ctx = lower::LowerCtx::with_import_stack(db, source, import_stack);
+    ctx.force_refresh = force_refresh;
     let value = ctx.lower_source_file(&tree);
 
     EvalResult {

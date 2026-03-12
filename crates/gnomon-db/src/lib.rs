@@ -2,7 +2,7 @@ pub mod eval;
 pub mod input;
 pub mod queries;
 
-pub use eval::{EvalResult, evaluate};
+pub use eval::{EvalOptions, EvalResult, evaluate, evaluate_with_options};
 pub use eval::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
 pub use eval::merge::{CheckResult, validate_calendar};
 pub use eval::render::{Rendered, RenderWithDb};
