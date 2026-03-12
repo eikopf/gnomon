@@ -86,6 +86,41 @@ pub(super) fn evaluate_with_import_stack<'db>(
     }
 }
 
+/// Result of evaluating a single REPL input.
+pub struct ReplEvalResult<'db> {
+    pub value: Value<'db>,
+    pub diagnostics: Vec<Diagnostic>,
+    /// New top-level let bindings introduced by this input.
+    pub new_bindings: Vec<(String, Value<'db>)>,
+}
+
+/// Evaluate a single REPL input with a pre-existing environment.
+///
+/// `env` contains let bindings accumulated from prior inputs.
+/// Returns the evaluated value plus any new bindings introduced.
+pub fn evaluate_repl_input<'db>(
+    db: &'db dyn crate::Db,
+    source: SourceFile,
+    env: &[(String, Value<'db>)],
+) -> ReplEvalResult<'db> {
+    let _check = crate::check_syntax(db, source);
+    let parse_result = crate::parse(db, source);
+    let tree = parse_result.tree(db);
+
+    let mut ctx = lower::LowerCtx::new(db, source);
+    ctx.seed_env(env);
+
+    let env_len_before = ctx.env_len();
+    let value = ctx.lower_source_file(&tree);
+    let new_bindings = ctx.env_slice_from(env_len_before);
+
+    ReplEvalResult {
+        value,
+        diagnostics: ctx.diagnostics,
+        new_bindings,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::interned::FieldName;

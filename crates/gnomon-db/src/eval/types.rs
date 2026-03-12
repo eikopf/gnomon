@@ -44,6 +44,22 @@ pub enum Value<'db> {
     Path(String),
 }
 
+impl<'db> Value<'db> {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Value::String(_) => "string",
+            Value::Integer(_) => "integer",
+            Value::SignedInteger(_) => "signed integer",
+            Value::Bool(_) => "bool",
+            Value::Undefined => "undefined",
+            Value::Name(_) => "name",
+            Value::Record(_) => "record",
+            Value::List(_) => "list",
+            Value::Path(_) => "path",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Calendar<'db> {
     pub properties: Record<'db>,

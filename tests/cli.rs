@@ -315,6 +315,107 @@ fn reserved_subcommands_rejected() {
     }
 }
 
+// ── REPL subcommand ─────────────────────────────────────────
+
+// r[verify cli.subcommand.repl]
+// r[verify cli.subcommand.repl.eval]
+#[test]
+fn repl_evaluates_expression() {
+    gnomon()
+        .arg("repl")
+        .write_stdin("42\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("42"));
+}
+
+// r[verify cli.subcommand.repl.let-persist]
+#[test]
+fn repl_let_bindings_persist() {
+    gnomon()
+        .arg("repl")
+        .write_stdin("let x = 10\nx\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("10"));
+}
+
+// r[verify cli.subcommand.repl.diagnostics]
+#[test]
+fn repl_errors_on_stderr() {
+    gnomon()
+        .arg("repl")
+        .write_stdin("{ name: }\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("error"));
+}
+
+// r[verify cli.subcommand.repl.multiline]
+#[test]
+fn repl_multiline_input() {
+    gnomon()
+        .arg("repl")
+        .write_stdin("{\n  name: \"test\"\n}\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("name"));
+}
+
+// r[verify cli.subcommand.repl.meta.help]
+#[test]
+fn repl_meta_help() {
+    gnomon()
+        .arg("repl")
+        .write_stdin(":help\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Available commands"));
+}
+
+// r[verify cli.subcommand.repl.meta.type]
+#[test]
+fn repl_meta_type() {
+    gnomon()
+        .arg("repl")
+        .write_stdin(":type 42\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("integer"));
+}
+
+// r[verify cli.subcommand.repl.meta.parse]
+#[test]
+fn repl_meta_parse() {
+    gnomon()
+        .arg("repl")
+        .write_stdin(":parse { x: 1 }\n")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("RECORD_EXPR"));
+}
+
+// r[verify cli.subcommand.repl.meta.reset]
+#[test]
+fn repl_meta_reset() {
+    gnomon()
+        .arg("repl")
+        .write_stdin("let x = 1\n:reset\nx\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("error"));
+}
+
+// r[verify cli.subcommand.repl.meta.quit]
+#[test]
+fn repl_meta_quit() {
+    gnomon()
+        .arg("repl")
+        .write_stdin(":quit\n")
+        .assert()
+        .success();
+}
+
 // ── Clean subcommand ───────────────────────────────────────
 
 // r[verify cli.subcommand.clean]

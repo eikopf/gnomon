@@ -8,8 +8,10 @@ edition = "2024"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
+etcetera = "0.8"
 gnomon-db = { path = "crates/gnomon-db" }
 gnomon-parser = { path = "crates/gnomon-parser" }
+rustyline = "15"
 
 [dev-dependencies]
 assert_cmd = "2"
