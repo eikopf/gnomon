@@ -30,6 +30,7 @@ pub enum CacheLookup {
     Miss,
 }
 
+// r[impl expr.import.cache.location]
 /// Return the cache directory: `<xdg-cache>/gnomon/uri`.
 fn cache_dir() -> Option<PathBuf> {
     use etcetera::{BaseStrategy, choose_base_strategy};
@@ -37,6 +38,7 @@ fn cache_dir() -> Option<PathBuf> {
     Some(strategy.cache_dir().join("gnomon").join("uri"))
 }
 
+// r[impl expr.import.cache.key]
 /// Deterministic cache key for a URL (UUID v5 with URL namespace).
 fn cache_key(url: &str) -> String {
     uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, url.as_bytes()).to_string()
@@ -49,6 +51,9 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
+// r[impl expr.import.cache.freshness]
+// r[impl expr.import.cache.hit]
+// r[impl expr.import.cache.best-effort]
 /// Check if a cached entry exists and is fresh.
 pub fn lookup(url: &str) -> CacheLookup {
     let dir = match cache_dir() {
@@ -81,6 +86,8 @@ pub fn lookup(url: &str) -> CacheLookup {
     }
 }
 
+// r[impl expr.import.cache.content]
+// r[impl expr.import.cache.miss]
 /// Store fetched content and metadata in the cache.
 ///
 /// `format_hint` is `"icalendar"`, `"jscalendar"`, or `"gnomon"`.

@@ -43,6 +43,7 @@ enum Command {
         /// Path to the root .gnomon file.
         file: PathBuf,
 
+        // r[impl cli.subcommand.check.refresh]
         /// Force re-fetching all URI imports, bypassing the cache.
         #[arg(long)]
         refresh: bool,
@@ -60,6 +61,7 @@ enum Command {
         #[arg(long)]
         expr: Option<String>,
 
+        // r[impl cli.subcommand.eval.refresh]
         /// Force re-fetching all URI imports, bypassing the cache.
         #[arg(long)]
         refresh: bool,
