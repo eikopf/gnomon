@@ -55,8 +55,7 @@ pub fn advance_period(
                 .into()
         }
         Frequency::Monthly => {
-            let total_months =
-                i64::from(dtstart.year()) * 12 + i64::from(dtstart.month()) - 1 + n;
+            let total_months = i64::from(dtstart.year()) * 12 + i64::from(dtstart.month()) - 1 + n;
             let year = i16::try_from(total_months.div_euclid(12)).ok()?;
             let month = i8::try_from(total_months.rem_euclid(12) + 1).ok()?;
             let day = dtstart.day().min(days_in_month(year, month)?);
@@ -67,11 +66,19 @@ pub fn advance_period(
         }
         Frequency::Weekly => {
             let days = n.checked_mul(7)?;
-            dtstart.date().checked_add(Span::new().days(days)).ok()?.to_datetime(dtstart.time()).into()
+            dtstart
+                .date()
+                .checked_add(Span::new().days(days))
+                .ok()?
+                .to_datetime(dtstart.time())
+                .into()
         }
-        Frequency::Daily => {
-            dtstart.date().checked_add(Span::new().days(n)).ok()?.to_datetime(dtstart.time()).into()
-        }
+        Frequency::Daily => dtstart
+            .date()
+            .checked_add(Span::new().days(n))
+            .ok()?
+            .to_datetime(dtstart.time())
+            .into(),
         Frequency::Hourly => {
             let total_seconds = n.checked_mul(3600)?;
             add_seconds(dtstart, total_seconds)
@@ -123,7 +130,11 @@ pub fn days_in_month(year: i16, month: i8) -> Option<i8> {
 
 /// Number of days in the given year (365 or 366).
 pub fn days_in_year(year: i16) -> i16 {
-    if jiff::civil::Date::new(year, 2, 29).is_ok() { 366 } else { 365 }
+    if jiff::civil::Date::new(year, 2, 29).is_ok() {
+        366
+    } else {
+        365
+    }
 }
 
 /// Find the nth occurrence of a weekday in a given month.
@@ -177,8 +188,7 @@ pub fn all_weekday_in_year(year: i16, weekday: Weekday) -> Vec<Date> {
     let jwd = weekday.to_jiff();
     let jan1 = Date::new(year, 1, 1).unwrap();
     let jan1_wd = jan1.weekday();
-    let diff = (jwd.to_monday_zero_offset() as i64)
-        - (jan1_wd.to_monday_zero_offset() as i64);
+    let diff = (jwd.to_monday_zero_offset() as i64) - (jan1_wd.to_monday_zero_offset() as i64);
     let diff = if diff < 0 { diff + 7 } else { diff };
     let mut d = match jan1.checked_add(Span::new().days(diff)) {
         Ok(d) => d,
@@ -234,9 +244,11 @@ pub fn dates_in_iso_week(year: i16, week_no: i8, week_start: Weekday) -> Vec<Dat
 
     // Week 1 is the first week containing at least 4 days of the new year
     let week1_start = if jan1_offset <= 3 {
-        jan1.checked_add(Span::new().days(-(jan1_offset as i64))).unwrap()
+        jan1.checked_add(Span::new().days(-(jan1_offset as i64)))
+            .unwrap()
     } else {
-        jan1.checked_add(Span::new().days((7 - jan1_offset) as i64)).unwrap()
+        jan1.checked_add(Span::new().days((7 - jan1_offset) as i64))
+            .unwrap()
     };
 
     let target_start = week1_start
@@ -261,9 +273,10 @@ fn iso_weeks_in_year(year: i16, week_start: Weekday) -> u8 {
 
     // A year has 53 weeks if Jan 1 or Dec 31 falls on the 4th day of the week
     // (offset == 3). For leap years, also check offset == 2.
-    if jan1_off == 3 || dec31_off == 3 {
-        53
-    } else if days_in_year(year) == 366 && (jan1_off == 2 || dec31_off == 2) {
+    if jan1_off == 3
+        || dec31_off == 3
+        || (days_in_year(year) == 366 && (jan1_off == 2 || dec31_off == 2))
+    {
         53
     } else {
         52

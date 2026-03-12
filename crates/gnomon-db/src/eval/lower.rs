@@ -29,9 +29,7 @@ enum ImportFormat {
 fn infer_format_from_content_type(ct: &str) -> ImportFormat {
     if ct.starts_with("text/calendar") {
         ImportFormat::ICalendar
-    } else if ct.starts_with("application/json")
-        || ct.starts_with("application/jscalendar+json")
-    {
+    } else if ct.starts_with("application/json") || ct.starts_with("application/jscalendar+json") {
         ImportFormat::JSCalendar
     } else {
         ImportFormat::Gnomon
@@ -176,7 +174,8 @@ impl<'db> LowerCtx<'db> {
                 }
                 if let Some(dur_token) = span.duration() {
                     let blame = self.make_blame(decl_id, &base_path.field(self.intern("duration")));
-                    if let Some(value) = desugar::desugar_duration(self.db, dur_token.text(), &blame)
+                    if let Some(value) =
+                        desugar::desugar_duration(self.db, dur_token.text(), &blame)
                     {
                         self.insert_field(&mut record, "duration", value, decl_id, &base_path);
                     }
@@ -295,25 +294,19 @@ impl<'db> LowerCtx<'db> {
         path: &FieldPath<'db>,
     ) -> Value<'db> {
         match expr {
-            ast::Expr::LiteralExpr(lit) => {
-                self.lower_literal(lit, decl_id, path)
-                    .unwrap_or(Value::Undefined)
-            }
-            ast::Expr::RecordExpr(rec) => {
-                Value::Record(self.lower_record(rec, decl_id, path))
-            }
+            ast::Expr::LiteralExpr(lit) => self
+                .lower_literal(lit, decl_id, path)
+                .unwrap_or(Value::Undefined),
+            ast::Expr::RecordExpr(rec) => Value::Record(self.lower_record(rec, decl_id, path)),
             ast::Expr::ListExpr(list) => self.lower_list(list, decl_id, path),
             ast::Expr::EveryExpr(every) => {
                 let blame = self.make_blame(decl_id, path);
-                desugar::desugar_every(self.db, every, &blame)
-                    .unwrap_or(Value::Undefined)
+                desugar::desugar_every(self.db, every, &blame).unwrap_or(Value::Undefined)
             }
-            ast::Expr::ParenExpr(paren) => {
-                match paren.inner() {
-                    Some(inner) => self.lower_top_expr(&inner, decl_id, path),
-                    None => Value::Undefined,
-                }
-            }
+            ast::Expr::ParenExpr(paren) => match paren.inner() {
+                Some(inner) => self.lower_top_expr(&inner, decl_id, path),
+                None => Value::Undefined,
+            },
             // r[impl expr.literal.identifier]
             ast::Expr::IdentExpr(ident) => {
                 if let Some(name_tok) = ident.name() {
@@ -336,7 +329,10 @@ impl<'db> LowerCtx<'db> {
             // r[impl expr.let.scope]
             // r[impl expr.let.sequential]
             ast::Expr::LetExpr(let_expr) => {
-                let name = let_expr.name().map(|t| t.text().to_string()).unwrap_or_default();
+                let name = let_expr
+                    .name()
+                    .map(|t| t.text().to_string())
+                    .unwrap_or_default();
                 let bound_value = match let_expr.bound_expr() {
                     Some(e) => self.lower_top_expr(&e, decl_id, path),
                     None => Value::Undefined,
@@ -409,12 +405,8 @@ impl<'db> LowerCtx<'db> {
                         }
                     }
                     // r[impl expr.op.eq]
-                    Some(SyntaxKind::EQ_EQ) => {
-                        Value::Bool(values_equal(&lhs, &rhs))
-                    }
-                    Some(SyntaxKind::BANG_EQ) => {
-                        Value::Bool(!values_equal(&lhs, &rhs))
-                    }
+                    Some(SyntaxKind::EQ_EQ) => Value::Bool(values_equal(&lhs, &rhs)),
+                    Some(SyntaxKind::BANG_EQ) => Value::Bool(!values_equal(&lhs, &rhs)),
                     _ => Value::Undefined,
                 }
             }
@@ -431,7 +423,9 @@ impl<'db> LowerCtx<'db> {
                 match target {
                     Value::Record(r) => {
                         let key = self.intern(&field_name_str);
-                        r.get(&key).map(|b| b.value.clone()).unwrap_or(Value::Undefined)
+                        r.get(&key)
+                            .map(|b| b.value.clone())
+                            .unwrap_or(Value::Undefined)
                     }
                     _ => {
                         if let Some(name_tok) = fa.field_name() {
@@ -455,15 +449,14 @@ impl<'db> LowerCtx<'db> {
                     None => return Value::Undefined,
                 };
                 match (target, index_val) {
-                    (Value::List(items), Value::Integer(i)) => {
-                        items.get(i as usize).map(|b| b.value.clone()).unwrap_or(Value::Undefined)
-                    }
+                    (Value::List(items), Value::Integer(i)) => items
+                        .get(i as usize)
+                        .map(|b| b.value.clone())
+                        .unwrap_or(Value::Undefined),
                     _ => Value::Undefined,
                 }
             }
-            ast::Expr::ImportExpr(import) => {
-                self.lower_import(import)
-            }
+            ast::Expr::ImportExpr(import) => self.lower_import(import),
             // r[impl decl.calendar.desugar+2]
             ast::Expr::CalendarExpr(cal) => {
                 let mut record = match cal.body() {
@@ -527,42 +520,22 @@ impl<'db> LowerCtx<'db> {
                 let n = literals::eval_signed_integer(text)?;
                 Some(Value::SignedInteger(n))
             }
-            SyntaxKind::STRING_LITERAL => {
-                Some(Value::String(literals::eval_string(text)))
-            }
+            SyntaxKind::STRING_LITERAL => Some(Value::String(literals::eval_string(text))),
             SyntaxKind::TRIPLE_STRING_LITERAL => {
                 Some(Value::String(literals::eval_triple_string(text)))
             }
             SyntaxKind::TRUE_KW => Some(Value::Bool(true)),
             SyntaxKind::FALSE_KW => Some(Value::Bool(false)),
             SyntaxKind::UNDEFINED_KW => Some(Value::Undefined),
-            SyntaxKind::NAME => {
-                Some(Value::Name(literals::eval_name(text)))
-            }
-            SyntaxKind::DATE_LITERAL => {
-                desugar::desugar_date(self.db, text, &blame)
-            }
-            SyntaxKind::MONTH_DAY_LITERAL => {
-                desugar::desugar_month_day(self.db, text, &blame)
-            }
-            SyntaxKind::TIME_LITERAL => {
-                desugar::desugar_time(self.db, text, &blame)
-            }
-            SyntaxKind::DATETIME_LITERAL => {
-                desugar::desugar_datetime(self.db, text, &blame)
-            }
-            SyntaxKind::DURATION_LITERAL => {
-                desugar::desugar_duration(self.db, text, &blame)
-            }
-            SyntaxKind::URI_LITERAL => {
-                Some(Value::String(literals::eval_uri(text)))
-            }
-            SyntaxKind::ATOM_LITERAL => {
-                Some(Value::String(literals::eval_atom(text)))
-            }
-            SyntaxKind::PATH_LITERAL => {
-                Some(Value::Path(text.to_string()))
-            }
+            SyntaxKind::NAME => Some(Value::Name(literals::eval_name(text))),
+            SyntaxKind::DATE_LITERAL => desugar::desugar_date(self.db, text, &blame),
+            SyntaxKind::MONTH_DAY_LITERAL => desugar::desugar_month_day(self.db, text, &blame),
+            SyntaxKind::TIME_LITERAL => desugar::desugar_time(self.db, text, &blame),
+            SyntaxKind::DATETIME_LITERAL => desugar::desugar_datetime(self.db, text, &blame),
+            SyntaxKind::DURATION_LITERAL => desugar::desugar_duration(self.db, text, &blame),
+            SyntaxKind::URI_LITERAL => Some(Value::String(literals::eval_uri(text))),
+            SyntaxKind::ATOM_LITERAL => Some(Value::String(literals::eval_atom(text))),
+            SyntaxKind::PATH_LITERAL => Some(Value::Path(text.to_string())),
             _ => {
                 self.emit_diagnostic(
                     token.text_range(),
@@ -673,23 +646,17 @@ impl<'db> LowerCtx<'db> {
         source_range: rowan::TextRange,
     ) -> Value<'db> {
         // Check the on-disk cache first (unless force_refresh is set).
-        if !self.force_refresh {
-            if let super::cache::CacheLookup::Hit {
+        if !self.force_refresh
+            && let super::cache::CacheLookup::Hit {
                 content,
                 content_type,
             } = super::cache::lookup(url)
-            {
-                let format = match format {
-                    ImportFormat::Infer => infer_format_from_content_type(&content_type),
-                    f => f,
-                };
-                return self.dispatch_import_content(
-                    format,
-                    content,
-                    PathBuf::from(url),
-                    source_range,
-                );
-            }
+        {
+            let format = match format {
+                ImportFormat::Infer => infer_format_from_content_type(&content_type),
+                f => f,
+            };
+            return self.dispatch_import_content(format, content, PathBuf::from(url), source_range);
         }
 
         // Fetch content via HTTP(S).
@@ -916,9 +883,10 @@ fn values_equal(a: &Value, b: &Value) -> bool {
         }
         (Value::Record(a), Value::Record(b)) => {
             a.0.len() == b.0.len()
-                && a.0.iter().zip(b.0.iter()).all(|((ka, va), (kb, vb))| {
-                    ka == kb && values_equal(&va.value, &vb.value)
-                })
+                && a.0
+                    .iter()
+                    .zip(b.0.iter())
+                    .all(|((ka, va), (kb, vb))| ka == kb && values_equal(&va.value, &vb.value))
         }
         _ => false,
     }

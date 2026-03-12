@@ -64,10 +64,10 @@ fn dedent(s: &str) -> String {
     let mut lines: Vec<&str> = s.split('\n').collect();
 
     // 1. If the first line is empty, strip it.
-    if let Some(first) = lines.first() {
-        if first.is_empty() {
-            lines.remove(0);
-        }
+    if let Some(first) = lines.first()
+        && first.is_empty()
+    {
+        lines.remove(0);
     }
 
     if lines.is_empty() {

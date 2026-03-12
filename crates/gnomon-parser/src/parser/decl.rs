@@ -6,10 +6,7 @@ impl Parser {
     /// Returns true if the current position looks like the start of a declaration.
     pub(super) fn at_decl_start(&self) -> bool {
         match self.current() {
-            SyntaxKind::IDENT => matches!(
-                self.current_text(),
-                "calendar" | "event" | "task"
-            ),
+            SyntaxKind::IDENT => matches!(self.current_text(), "calendar" | "event" | "task"),
             _ => false,
         }
     }
@@ -39,8 +36,7 @@ impl Parser {
                 self.bump(); // NAME
                 self.parse_short_span();
                 // Optional title (string or triple-string literal)
-                if self.at(SyntaxKind::STRING_LITERAL)
-                    || self.at(SyntaxKind::TRIPLE_STRING_LITERAL)
+                if self.at(SyntaxKind::STRING_LITERAL) || self.at(SyntaxKind::TRIPLE_STRING_LITERAL)
                 {
                     self.bump();
                 }
@@ -77,8 +73,7 @@ impl Parser {
                     self.parse_short_dt();
                 }
                 // Optional title (string or triple-string literal)
-                if self.at(SyntaxKind::STRING_LITERAL)
-                    || self.at(SyntaxKind::TRIPLE_STRING_LITERAL)
+                if self.at(SyntaxKind::STRING_LITERAL) || self.at(SyntaxKind::TRIPLE_STRING_LITERAL)
                 {
                     self.bump();
                 }

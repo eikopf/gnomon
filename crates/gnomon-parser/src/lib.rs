@@ -975,17 +975,13 @@ task @cleanup "Clean""#;
     // r[verify lexer.triple-string]
     #[test]
     fn parse_event_with_triple_string_title() {
-        check_no_errors(
-            "event @e 2026-01-01T00:00 1h \"\"\"My Event\"\"\"",
-        );
+        check_no_errors("event @e 2026-01-01T00:00 1h \"\"\"My Event\"\"\"");
     }
 
     // r[verify lexer.triple-string]
     #[test]
     fn parse_task_with_triple_string_title() {
-        check_no_errors(
-            "task @t \"\"\"My Task\"\"\"",
-        );
+        check_no_errors("task @t \"\"\"My Task\"\"\"");
     }
 
     // ── Operator precedence and associativity ────────────────────

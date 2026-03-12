@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 
 use calico::model::component::{Calendar as ICalCalendar, CalendarComponent};
 use calico::model::primitive::{
-    Attachment, ClassValue, DateTime, DateTimeOrDate, Duration, ExactDuration, Geo, NominalDuration,
-    RDateSeq, RequestStatus, Sign, SignedDuration, Status, TimeTransparency, Token, Utc, Weekday,
+    Attachment, ClassValue, DateTime, DateTimeOrDate, Duration, ExactDuration, Geo,
+    NominalDuration, RDateSeq, RequestStatus, Sign, SignedDuration, Status, TimeTransparency,
+    Token, Utc, Weekday,
 };
 use calico::model::rrule::{FreqByRules, RRule};
 use calico::model::string::CaselessStr;
@@ -120,27 +121,21 @@ fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
     fields.push(("type", ImportValue::String("calendar".into())));
 
     // PRODID is required.
-    fields.push((
-        "prod_id",
-        ImportValue::String(cal.prod_id().value.clone()),
-    ));
+    fields.push(("prod_id", ImportValue::String(cal.prod_id().value.clone())));
 
     // Optional RFC 7986 properties.
     if let Some(uid) = cal.uid() {
         fields.push(("uid", ImportValue::String(uid.value.as_str().to_string())));
     }
-    if let Some(names) = cal.name() {
-        if let Some(first) = names.first() {
-            fields.push(("name", ImportValue::String(first.value.clone())));
-        }
+    if let Some(names) = cal.name()
+        && let Some(first) = names.first()
+    {
+        fields.push(("name", ImportValue::String(first.value.clone())));
     }
-    if let Some(descs) = cal.description() {
-        if let Some(first) = descs.first() {
-            fields.push((
-                "description",
-                ImportValue::String(first.value.clone()),
-            ));
-        }
+    if let Some(descs) = cal.description()
+        && let Some(first) = descs.first()
+    {
+        fields.push(("description", ImportValue::String(first.value.clone())));
     }
     if let Some(color) = cal.color() {
         fields.push(("color", ImportValue::String(color.value.to_string())));
@@ -161,10 +156,10 @@ fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
     if let Some(lm) = cal.last_modified() {
         fields.push(("last_modified", translate_utc_datetime(&lm.value)));
     }
-    if let Some(ri) = cal.refresh_interval() {
-        if let Some(val) = translate_signed_duration(&ri.value) {
-            fields.push(("refresh_interval", val));
-        }
+    if let Some(ri) = cal.refresh_interval()
+        && let Some(val) = translate_signed_duration(&ri.value)
+    {
+        fields.push(("refresh_interval", val));
     }
     if let Some(source) = cal.source() {
         fields.push((
@@ -201,10 +196,7 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
             fields.push(("start", val));
         }
         if let Some(tz) = dtstart.params.tz_id() {
-            fields.push((
-                "time_zone",
-                ImportValue::String(tz.as_str().to_string()),
-            ));
+            fields.push(("time_zone", ImportValue::String(tz.as_str().to_string())));
         }
     }
     if let Some(dur) = event.duration() {
@@ -212,10 +204,10 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
             fields.push(("duration", val));
         }
     // r[impl model.import.icalendar.event.duration-fallback]
-    } else if let (Some(dtstart), Some(dtend)) = (event.dtstart(), event.dtend()) {
-        if let Some(val) = compute_duration_from_endpoints(&dtstart.value, &dtend.value) {
-            fields.push(("duration", val));
-        }
+    } else if let (Some(dtstart), Some(dtend)) = (event.dtstart(), event.dtend())
+        && let Some(val) = compute_duration_from_endpoints(&dtstart.value, &dtend.value)
+    {
+        fields.push(("duration", val));
     }
     if let Some(status_prop) = event.status() {
         fields.push(("status", translate_status(&status_prop.value)));
@@ -274,15 +266,15 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
     if let Some(url) = event.url() {
         fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
     }
-    if let Some(recurrence_id) = event.recurrence_id() {
-        if let Some(val) = translate_datetime_or_date(&recurrence_id.value) {
-            fields.push(("recurrence_id", val));
-        }
+    if let Some(recurrence_id) = event.recurrence_id()
+        && let Some(val) = translate_datetime_or_date(&recurrence_id.value)
+    {
+        fields.push(("recurrence_id", val));
     }
-    if let Some(rrules) = event.rrule() {
-        if let Some(first) = rrules.first() {
-            fields.push(("recur", translate_rrule(&first.value)));
-        }
+    if let Some(rrules) = event.rrule()
+        && let Some(first) = rrules.first()
+    {
+        fields.push(("recur", translate_rrule(&first.value)));
     }
     if let Some(rdates) = event.rdate() {
         let items: Vec<ImportValue> = rdates
@@ -296,7 +288,7 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
     if let Some(exdates) = event.exdate() {
         let items: Vec<ImportValue> = exdates
             .iter()
-            .flat_map(|e| translate_datetime_or_date(&DateTimeOrDate::from(e.value.clone())))
+            .flat_map(|e| translate_datetime_or_date(&e.value))
             .collect();
         if !items.is_empty() {
             fields.push(("exdates", ImportValue::List(items)));
@@ -352,7 +344,10 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
             .iter()
             .map(|r| {
                 ImportValue::List(
-                    r.value.iter().map(|s| ImportValue::String(s.clone())).collect(),
+                    r.value
+                        .iter()
+                        .map(|s| ImportValue::String(s.clone()))
+                        .collect(),
                 )
             })
             .collect();
@@ -411,26 +406,23 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     if let Some(desc) = todo.description() {
         fields.push(("description", ImportValue::String(desc.value.clone())));
     }
-    if let Some(due_prop) = todo.due() {
-        if let Some(val) = translate_datetime_or_date(&due_prop.value) {
-            fields.push(("due", val));
-        }
+    if let Some(due_prop) = todo.due()
+        && let Some(val) = translate_datetime_or_date(&due_prop.value)
+    {
+        fields.push(("due", val));
     }
     if let Some(dtstart) = todo.dtstart() {
         if let Some(val) = translate_datetime_or_date(&dtstart.value) {
             fields.push(("start", val));
         }
         if let Some(tz) = dtstart.params.tz_id() {
-            fields.push((
-                "time_zone",
-                ImportValue::String(tz.as_str().to_string()),
-            ));
+            fields.push(("time_zone", ImportValue::String(tz.as_str().to_string())));
         }
     }
-    if let Some(dur) = todo.duration() {
-        if let Some(val) = translate_signed_duration(&dur.value) {
-            fields.push(("estimated_duration", val));
-        }
+    if let Some(dur) = todo.duration()
+        && let Some(val) = translate_signed_duration(&dur.value)
+    {
+        fields.push(("estimated_duration", val));
     }
     if let Some(pct) = todo.percent_complete() {
         fields.push((
@@ -495,15 +487,15 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     if let Some(completed) = todo.completed() {
         fields.push(("completed", translate_utc_datetime(&completed.value)));
     }
-    if let Some(recurrence_id) = todo.recurrence_id() {
-        if let Some(val) = translate_datetime_or_date(&recurrence_id.value) {
-            fields.push(("recurrence_id", val));
-        }
+    if let Some(recurrence_id) = todo.recurrence_id()
+        && let Some(val) = translate_datetime_or_date(&recurrence_id.value)
+    {
+        fields.push(("recurrence_id", val));
     }
-    if let Some(rrules) = todo.rrule() {
-        if let Some(first) = rrules.first() {
-            fields.push(("recur", translate_rrule(&first.value)));
-        }
+    if let Some(rrules) = todo.rrule()
+        && let Some(first) = rrules.first()
+    {
+        fields.push(("recur", translate_rrule(&first.value)));
     }
     if let Some(rdates) = todo.rdate() {
         let items: Vec<ImportValue> = rdates
@@ -517,7 +509,7 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     if let Some(exdates) = todo.exdate() {
         let items: Vec<ImportValue> = exdates
             .iter()
-            .flat_map(|e| translate_datetime_or_date(&DateTimeOrDate::from(e.value.clone())))
+            .flat_map(|e| translate_datetime_or_date(&e.value))
             .collect();
         if !items.is_empty() {
             fields.push(("exdates", ImportValue::List(items)));
@@ -573,7 +565,10 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
             .iter()
             .map(|r| {
                 ImportValue::List(
-                    r.value.iter().map(|s| ImportValue::String(s.clone())).collect(),
+                    r.value
+                        .iter()
+                        .map(|s| ImportValue::String(s.clone()))
+                        .collect(),
                 )
             })
             .collect();
@@ -630,14 +625,8 @@ fn translate_utc_datetime(dt: &DateTime<Utc>) -> ImportValue {
     ];
     let time_fields = [
         ("hour", ImportValue::Integer(time.hour() as u8 as u64)),
-        (
-            "minute",
-            ImportValue::Integer(time.minute() as u8 as u64),
-        ),
-        (
-            "second",
-            ImportValue::Integer(time.second() as u8 as u64),
-        ),
+        ("minute", ImportValue::Integer(time.minute() as u8 as u64)),
+        ("second", ImportValue::Integer(time.second() as u8 as u64)),
     ];
     let dt_fields = [
         ("date", ImportValue::Record(make_record(&date_fields))),
@@ -693,9 +682,8 @@ fn translate_attachment(val: &Attachment) -> ImportValue {
 
 /// Simple base64 encoder (no external dep needed — just use a manual implementation).
 fn base64_encode(data: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = if chunk.len() > 1 { chunk[1] as u32 } else { 0 };
@@ -749,10 +737,7 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
 
     // Interval.
     if let Some(interval) = rrule.interval {
-        fields.push((
-            "interval",
-            ImportValue::Integer(interval.get().get()),
-        ));
+        fields.push(("interval", ImportValue::Integer(interval.get().get())));
     }
 
     // Termination.
@@ -901,10 +886,8 @@ fn translate_by_month_day(
         // Positive days 1..=31
         for d in 1..=31u8 {
             if let Some(day) = calico::model::rrule::MonthDay::from_repr(d) {
-                let idx = calico::model::rrule::MonthDaySetIndex::from_signed_month_day(
-                    Sign::Pos,
-                    day,
-                );
+                let idx =
+                    calico::model::rrule::MonthDaySetIndex::from_signed_month_day(Sign::Pos, day);
                 if set.get(idx) {
                     items.push(ImportValue::SignedInteger(d as i64));
                 }
@@ -913,10 +896,8 @@ fn translate_by_month_day(
         // Negative days -31..=-1
         for d in 1..=31u8 {
             if let Some(day) = calico::model::rrule::MonthDay::from_repr(d) {
-                let idx = calico::model::rrule::MonthDaySetIndex::from_signed_month_day(
-                    Sign::Neg,
-                    day,
-                );
+                let idx =
+                    calico::model::rrule::MonthDaySetIndex::from_signed_month_day(Sign::Neg, day);
                 if set.get(idx) {
                     items.push(ImportValue::SignedInteger(-(d as i64)));
                 }
@@ -994,9 +975,7 @@ fn translate_rdate_seq(seq: &RDateSeq) -> Vec<ImportValue> {
     match seq {
         RDateSeq::DateTime(dts) => dts
             .iter()
-            .filter_map(|dt| {
-                translate_datetime_or_date(&DateTimeOrDate::DateTime(dt.clone()))
-            })
+            .filter_map(|dt| translate_datetime_or_date(&DateTimeOrDate::DateTime(*dt)))
             .collect(),
         RDateSeq::Date(dates) => dates
             .iter()
@@ -1009,7 +988,7 @@ fn translate_rdate_seq(seq: &RDateSeq) -> Vec<ImportValue> {
                     calico::model::primitive::Period::Explicit { start, .. } => start,
                     calico::model::primitive::Period::Start { start, .. } => start,
                 };
-                let start = DateTimeOrDate::DateTime(start_dt.clone());
+                let start = DateTimeOrDate::DateTime(*start_dt);
                 translate_datetime_or_date(&start)
             })
             .collect(),
@@ -1024,16 +1003,13 @@ fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> Import
         Value::Integer(i) => ImportValue::SignedInteger(*i as i64),
         Value::Boolean(b) => ImportValue::Bool(*b),
         Value::DateTime(dt) => {
-            let dtod = DateTimeOrDate::DateTime(dt.clone());
+            let dtod = DateTimeOrDate::DateTime(*dt);
             translate_datetime_or_date(&dtod).unwrap_or(ImportValue::Undefined)
         }
         Value::Date(d) => {
-            translate_datetime_or_date(&DateTimeOrDate::Date(*d))
-                .unwrap_or(ImportValue::Undefined)
+            translate_datetime_or_date(&DateTimeOrDate::Date(*d)).unwrap_or(ImportValue::Undefined)
         }
-        Value::Duration(sd) => {
-            translate_signed_duration(sd).unwrap_or(ImportValue::Undefined)
-        }
+        Value::Duration(sd) => translate_signed_duration(sd).unwrap_or(ImportValue::Undefined),
         Value::Uri(u) => ImportValue::String(u.as_str().to_string()),
         Value::CalAddress(u) => ImportValue::String(u.as_str().to_string()),
         Value::Float(f) => ImportValue::String(f.to_string()),
@@ -1054,9 +1030,7 @@ fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> Import
             };
             ImportValue::String(format!(
                 "{}{:02}:{:02}",
-                sign_char,
-                off.hour as u8,
-                off.minute as u8,
+                sign_char, off.hour as u8, off.minute as u8,
             ))
         }
         Value::Period(p) => {
@@ -1064,7 +1038,7 @@ fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> Import
                 calico::model::primitive::Period::Explicit { start, .. } => start,
                 calico::model::primitive::Period::Start { start, .. } => start,
             };
-            let start = DateTimeOrDate::DateTime(start_dt.clone());
+            let start = DateTimeOrDate::DateTime(*start_dt);
             translate_datetime_or_date(&start).unwrap_or(ImportValue::Undefined)
         }
         Value::Other { value, .. } => ImportValue::String(value.clone()),
@@ -1079,9 +1053,7 @@ trait HasXProperties {
 impl HasXProperties for ICalCalendar {
     fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
         self.x_property_iter()
-            .flat_map(|(k, props)| {
-                props.iter().map(move |prop| (k.as_ref(), &prop.value))
-            })
+            .flat_map(|(k, props)| props.iter().map(move |prop| (k.as_ref(), &prop.value)))
             .collect()
     }
 }
@@ -1089,9 +1061,7 @@ impl HasXProperties for ICalCalendar {
 impl HasXProperties for calico::model::component::Event {
     fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
         self.x_property_iter()
-            .flat_map(|(k, props)| {
-                props.iter().map(move |prop| (k.as_ref(), &prop.value))
-            })
+            .flat_map(|(k, props)| props.iter().map(move |prop| (k.as_ref(), &prop.value)))
             .collect()
     }
 }
@@ -1099,9 +1069,7 @@ impl HasXProperties for calico::model::component::Event {
 impl HasXProperties for calico::model::component::Todo {
     fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
         self.x_property_iter()
-            .flat_map(|(k, props)| {
-                props.iter().map(move |prop| (k.as_ref(), &prop.value))
-            })
+            .flat_map(|(k, props)| props.iter().map(move |prop| (k.as_ref(), &prop.value)))
             .collect()
     }
 }
@@ -1155,16 +1123,16 @@ fn translate_jscal_top_level(
     out: &mut Vec<ImportValue>,
 ) -> Result<(), String> {
     // Check if it's a Group first.
-    if let Some(obj) = json.as_object() {
-        if obj.get("@type").and_then(|v| v.as_str()) == Some("Group") {
-            let group = JsGroup::<serde_json::Value>::try_from_json(json)
-                .map_err(|e| format!("JSCalendar parse error: {e}"))?;
-            for entry in group.entries() {
-                let record = translate_task_or_event(entry);
-                out.push(ImportValue::Record(record));
-            }
-            return Ok(());
+    if let Some(obj) = json.as_object()
+        && obj.get("@type").and_then(|v| v.as_str()) == Some("Group")
+    {
+        let group = JsGroup::<serde_json::Value>::try_from_json(json)
+            .map_err(|e| format!("JSCalendar parse error: {e}"))?;
+        for entry in group.entries() {
+            let record = translate_task_or_event(entry);
+            out.push(ImportValue::Record(record));
         }
+        return Ok(());
     }
 
     let toe = TaskOrEvent::<serde_json::Value>::try_from_json(json)
@@ -1213,7 +1181,10 @@ fn translate_js_event(event: &JsEvent<serde_json::Value>) -> ImportRecord {
         fields.push(("status", ImportValue::String(status.to_string())));
     }
     if let Some(priority) = event.priority() {
-        fields.push(("priority", ImportValue::Integer(js_priority_to_u64(priority))));
+        fields.push((
+            "priority",
+            ImportValue::Integer(js_priority_to_u64(priority)),
+        ));
     }
     if let Some(color) = event.color() {
         fields.push(("color", ImportValue::String(color.to_string())));
@@ -1240,10 +1211,7 @@ fn translate_js_event(event: &JsEvent<serde_json::Value>) -> ImportRecord {
         }
     }
     if let Some(kw) = event.keywords() {
-        let items: Vec<ImportValue> = kw
-            .iter()
-            .map(|s| ImportValue::String(s.clone()))
-            .collect();
+        let items: Vec<ImportValue> = kw.iter().map(|s| ImportValue::String(s.clone())).collect();
         if !items.is_empty() {
             fields.push(("keywords", ImportValue::List(items)));
         }
@@ -1295,7 +1263,10 @@ fn translate_js_task(task: &JsTask<serde_json::Value>) -> ImportRecord {
         fields.push(("time_zone", ImportValue::String(tz.clone())));
     }
     if let Some(priority) = task.priority() {
-        fields.push(("priority", ImportValue::Integer(js_priority_to_u64(priority))));
+        fields.push((
+            "priority",
+            ImportValue::Integer(js_priority_to_u64(priority)),
+        ));
     }
     if let Some(color) = task.color() {
         fields.push(("color", ImportValue::String(color.to_string())));
@@ -1322,10 +1293,7 @@ fn translate_js_task(task: &JsTask<serde_json::Value>) -> ImportRecord {
         }
     }
     if let Some(kw) = task.keywords() {
-        let items: Vec<ImportValue> = kw
-            .iter()
-            .map(|s| ImportValue::String(s.clone()))
-            .collect();
+        let items: Vec<ImportValue> = kw.iter().map(|s| ImportValue::String(s.clone())).collect();
         if !items.is_empty() {
             fields.push(("keywords", ImportValue::List(items)));
         }
@@ -1437,7 +1405,7 @@ fn translate_json_value(val: &serde_json::Value) -> ImportValue {
         }
         serde_json::Value::String(s) => ImportValue::String(s.clone()),
         serde_json::Value::Array(arr) => {
-            let items: Vec<ImportValue> = arr.iter().map(|v| translate_json_value(v)).collect();
+            let items: Vec<ImportValue> = arr.iter().map(translate_json_value).collect();
             ImportValue::List(items)
         }
         serde_json::Value::Object(obj) => {
@@ -1468,14 +1436,8 @@ fn translate_datetime_or_date(dtod: &DateTimeOrDate) -> Option<ImportValue> {
             ];
             let time_fields = [
                 ("hour", ImportValue::Integer(time.hour() as u8 as u64)),
-                (
-                    "minute",
-                    ImportValue::Integer(time.minute() as u8 as u64),
-                ),
-                (
-                    "second",
-                    ImportValue::Integer(time.second() as u8 as u64),
-                ),
+                ("minute", ImportValue::Integer(time.minute() as u8 as u64)),
+                ("second", ImportValue::Integer(time.second() as u8 as u64)),
             ];
             let dt_fields = [
                 ("date", ImportValue::Record(make_record(&date_fields))),
@@ -1710,10 +1672,7 @@ END:VCALENDAR\r\n";
         // Event record.
         assert_eq!(entries.len(), 1);
         let rec = entries[0];
-        assert_eq!(
-            get_field(rec, "type"),
-            &ImportValue::String("event".into())
-        );
+        assert_eq!(get_field(rec, "type"), &ImportValue::String("event".into()));
         assert_eq!(
             get_field(rec, "uid"),
             &ImportValue::String("test-uid-123".into())
@@ -1776,14 +1735,8 @@ END:VCALENDAR\r\n";
         let (_cal, entries) = split_ical_result(&result);
         assert_eq!(entries.len(), 1);
         let rec = entries[0];
-        assert_eq!(
-            get_field(rec, "type"),
-            &ImportValue::String("task".into())
-        );
-        assert_eq!(
-            get_field(rec, "uid"),
-            &ImportValue::String("todo-1".into())
-        );
+        assert_eq!(get_field(rec, "type"), &ImportValue::String("task".into()));
+        assert_eq!(get_field(rec, "uid"), &ImportValue::String("todo-1".into()));
         assert_eq!(
             get_field(rec, "title"),
             &ImportValue::String("Buy groceries".into())
@@ -1929,10 +1882,7 @@ END:VCALENDAR\r\n";
             get_field(rec, "transparency"),
             &ImportValue::String("transparent".into())
         );
-        assert_eq!(
-            get_field(rec, "sequence"),
-            &ImportValue::SignedInteger(3)
-        );
+        assert_eq!(get_field(rec, "sequence"), &ImportValue::SignedInteger(3));
         assert_eq!(
             get_field(rec, "url"),
             &ImportValue::String("https://example.com/event".into())
@@ -2051,10 +2001,7 @@ END:VCALENDAR\r\n";
             ImportValue::Record(r) => r,
             _ => panic!("expected record"),
         };
-        assert_eq!(
-            get_field(rec, "type"),
-            &ImportValue::String("event".into())
-        );
+        assert_eq!(get_field(rec, "type"), &ImportValue::String("event".into()));
         assert_eq!(
             get_field(rec, "uid"),
             &ImportValue::String("jscal-uid-1".into())
@@ -2096,14 +2043,8 @@ END:VCALENDAR\r\n";
             ImportValue::Record(r) => r,
             _ => panic!("expected record"),
         };
-        assert_eq!(
-            get_field(rec, "type"),
-            &ImportValue::String("task".into())
-        );
-        assert_eq!(
-            get_field(rec, "uid"),
-            &ImportValue::String("task-1".into())
-        );
+        assert_eq!(get_field(rec, "type"), &ImportValue::String("task".into()));
+        assert_eq!(get_field(rec, "uid"), &ImportValue::String("task-1".into()));
         assert!(has_field(rec, "due"));
     }
 

@@ -1,7 +1,7 @@
 use crate::types::Frequency;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
+#[expect(clippy::enum_variant_names)]
 pub enum ByRule {
     ByMonth,
     ByWeekNo,
@@ -11,6 +11,7 @@ pub enum ByRule {
     ByHour,
     ByMinute,
     BySecond,
+    #[cfg_attr(not(test), expect(dead_code))]
     BySetPos,
 }
 
@@ -181,7 +182,10 @@ mod tests {
         // Without BYMONTHDAY → Expand
         assert_eq!(action(ByRule::ByDay, Monthly, &no_ctx()), Expand);
         // With BYMONTHDAY → Limit
-        let ctx = ByDayContext { has_by_month_day: true, ..no_ctx() };
+        let ctx = ByDayContext {
+            has_by_month_day: true,
+            ..no_ctx()
+        };
         assert_eq!(action(ByRule::ByDay, Monthly, &ctx), Limit);
     }
 
@@ -192,19 +196,31 @@ mod tests {
         assert_eq!(action(ByRule::ByDay, Yearly, &no_ctx()), Expand);
 
         // With BYMONTHDAY → Limit
-        let ctx = ByDayContext { has_by_month_day: true, ..no_ctx() };
+        let ctx = ByDayContext {
+            has_by_month_day: true,
+            ..no_ctx()
+        };
         assert_eq!(action(ByRule::ByDay, Yearly, &ctx), Limit);
 
         // With BYYEARDAY → Limit
-        let ctx = ByDayContext { has_by_year_day: true, ..no_ctx() };
+        let ctx = ByDayContext {
+            has_by_year_day: true,
+            ..no_ctx()
+        };
         assert_eq!(action(ByRule::ByDay, Yearly, &ctx), Limit);
 
         // With BYWEEKNO only → Expand (within weeks)
-        let ctx = ByDayContext { has_by_week_no: true, ..no_ctx() };
+        let ctx = ByDayContext {
+            has_by_week_no: true,
+            ..no_ctx()
+        };
         assert_eq!(action(ByRule::ByDay, Yearly, &ctx), Expand);
 
         // With BYMONTH only → Expand (within months)
-        let ctx = ByDayContext { has_by_month: true, ..no_ctx() };
+        let ctx = ByDayContext {
+            has_by_month: true,
+            ..no_ctx()
+        };
         assert_eq!(action(ByRule::ByDay, Yearly, &ctx), Expand);
     }
 

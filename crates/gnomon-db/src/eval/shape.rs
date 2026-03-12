@@ -633,7 +633,14 @@ pub fn check_calendar_shape<'db>(
 
         match entry_type {
             Some(Value::String(t)) if t == "event" => {
-                check_fields(db, &entry.value, &EVENT_FIELDS, source, "event", &mut diagnostics);
+                check_fields(
+                    db,
+                    &entry.value,
+                    &EVENT_FIELDS,
+                    source,
+                    "event",
+                    &mut diagnostics,
+                );
                 check_fields(
                     db,
                     &entry.value,
@@ -653,7 +660,14 @@ pub fn check_calendar_shape<'db>(
                 }
             }
             Some(Value::String(t)) if t == "task" => {
-                check_fields(db, &entry.value, &TASK_FIELDS, source, "task", &mut diagnostics);
+                check_fields(
+                    db,
+                    &entry.value,
+                    &TASK_FIELDS,
+                    source,
+                    "task",
+                    &mut diagnostics,
+                );
                 check_fields(
                     db,
                     &entry.value,
@@ -808,9 +822,16 @@ fn check_value_type<'db>(
             }
         }
         ExpectedType::ListOfStrings => {
-            check_list_elements(db, value, field_name, source, context, diagnostics, |v| {
-                matches!(v, Value::String(_))
-            }, "string");
+            check_list_elements(
+                db,
+                value,
+                field_name,
+                source,
+                context,
+                diagnostics,
+                |v| matches!(v, Value::String(_)),
+                "string",
+            );
         }
         ExpectedType::ListOfRecords(shape) => {
             if let Value::List(items) = value {
@@ -904,9 +925,16 @@ fn check_value_type<'db>(
             }
         }
         ExpectedType::ListOfSignedIntegers => {
-            check_list_elements(db, value, field_name, source, context, diagnostics, |v| {
-                matches!(v, Value::SignedInteger(_))
-            }, "signed integer");
+            check_list_elements(
+                db,
+                value,
+                field_name,
+                source,
+                context,
+                diagnostics,
+                |v| matches!(v, Value::SignedInteger(_)),
+                "signed integer",
+            );
         }
         // r[impl model.shape.enum]
         ExpectedType::Enum(variants) => {
@@ -930,30 +958,28 @@ fn check_value_type<'db>(
                 diagnostics.push(type_error(source, context, field_name, "string", value));
             }
         }
-        ExpectedType::UintRange(lo, hi) => {
-            match value {
-                Value::Integer(n) if *n >= lo && *n <= hi => {}
-                Value::Integer(n) => {
-                    diagnostics.push(Diagnostic {
-                        source,
-                        range: rowan::TextRange::default(),
-                        severity: Severity::Error,
-                        message: format!(
-                            "{context}: field `{field_name}` must be in range {lo}..={hi}, got {n}"
-                        ),
-                    });
-                }
-                _ => {
-                    diagnostics.push(type_error(
-                        source,
-                        context,
-                        field_name,
-                        "unsigned integer",
-                        value,
-                    ));
-                }
+        ExpectedType::UintRange(lo, hi) => match value {
+            Value::Integer(n) if *n >= lo && *n <= hi => {}
+            Value::Integer(n) => {
+                diagnostics.push(Diagnostic {
+                    source,
+                    range: rowan::TextRange::default(),
+                    severity: Severity::Error,
+                    message: format!(
+                        "{context}: field `{field_name}` must be in range {lo}..={hi}, got {n}"
+                    ),
+                });
             }
-        }
+            _ => {
+                diagnostics.push(type_error(
+                    source,
+                    context,
+                    field_name,
+                    "unsigned integer",
+                    value,
+                ));
+            }
+        },
         ExpectedType::PositiveUint => match value {
             Value::Integer(n) if *n > 0 => {}
             Value::Integer(0) => {
@@ -1017,6 +1043,7 @@ fn check_value_type<'db>(
 }
 
 /// Check that a value is a list and each element satisfies a predicate.
+#[expect(clippy::too_many_arguments)]
 fn check_list_elements<'db>(
     _db: &'db dyn crate::Db,
     value: &Value<'db>,
@@ -1089,7 +1116,8 @@ mod tests {
         let (path, text) = files[0];
         let source = SourceFile::new(db, PathBuf::from(path), text.into());
         let eval = crate::evaluate(db, source);
-        let result = crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
+        let result =
+            crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
         // Shape diagnostics are appended after validation diagnostics;
         // filter to only shape-related ones by re-running the check.
         let diags = check_calendar_shape(db, &result.calendar, source);
@@ -1101,8 +1129,13 @@ mod tests {
         let (path, text) = files[0];
         let source = SourceFile::new(db, PathBuf::from(path), text.into());
         let eval = crate::evaluate(db, source);
-        let result = crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
-        result.diagnostics.iter().map(|d| d.message.clone()).collect()
+        let result =
+            crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.message.clone())
+            .collect()
     }
 
     // ── Missing mandatory fields ────────────────────────────
@@ -1114,7 +1147,9 @@ mod tests {
         let db = Database::default();
         let diags = shape_diags(&db, &[("a.gnomon", "calendar {}")]);
         assert!(
-            diags.iter().any(|d| d.contains("missing required field `uid`")),
+            diags
+                .iter()
+                .any(|d| d.contains("missing required field `uid`")),
             "expected uid error, got: {diags:?}"
         );
     }
@@ -1135,7 +1170,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("must have either `name` or `uid`")),
+            diags
+                .iter()
+                .any(|d| d.contains("must have either `name` or `uid`")),
             "expected name-or-uid error, got: {diags:?}"
         );
     }
@@ -1156,7 +1193,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("event: missing required field `start`")),
+            diags
+                .iter()
+                .any(|d| d.contains("event: missing required field `start`")),
             "expected start error, got: {diags:?}"
         );
     }
@@ -1177,7 +1216,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("must have either `name` or `uid`")),
+            diags
+                .iter()
+                .any(|d| d.contains("must have either `name` or `uid`")),
             "expected name-or-uid error, got: {diags:?}"
         );
     }
@@ -1200,7 +1241,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("priority") && d.contains("unsigned integer")),
+            diags
+                .iter()
+                .any(|d| d.contains("priority") && d.contains("unsigned integer")),
             "expected priority type error, got: {diags:?}"
         );
     }
@@ -1220,7 +1263,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("priority") && d.contains("0..=9")),
+            diags
+                .iter()
+                .any(|d| d.contains("priority") && d.contains("0..=9")),
             "expected priority range error, got: {diags:?}"
         );
     }
@@ -1229,12 +1274,11 @@ mod tests {
     #[test]
     fn calendar_uid_wrong_type() {
         let db = Database::default();
-        let diags = shape_diags(
-            &db,
-            &[("a.gnomon", "calendar { uid: 42 }")],
-        );
+        let diags = shape_diags(&db, &[("a.gnomon", "calendar { uid: 42 }")]);
         assert!(
-            diags.iter().any(|d| d.contains("uid") && d.contains("string")),
+            diags
+                .iter()
+                .any(|d| d.contains("uid") && d.contains("string")),
             "expected uid type error, got: {diags:?}"
         );
     }
@@ -1257,7 +1301,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("status") && d.contains("bogus")),
+            diags
+                .iter()
+                .any(|d| d.contains("status") && d.contains("bogus")),
             "expected status enum error, got: {diags:?}"
         );
     }
@@ -1278,7 +1324,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("privacy") && d.contains("open")),
+            diags
+                .iter()
+                .any(|d| d.contains("privacy") && d.contains("open")),
             "expected privacy enum error, got: {diags:?}"
         );
     }
@@ -1326,7 +1374,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("virtual_locations") && d.contains("uri")),
+            diags
+                .iter()
+                .any(|d| d.contains("virtual_locations") && d.contains("uri")),
             "expected nested uri error, got: {diags:?}"
         );
     }
@@ -1348,9 +1398,15 @@ mod tests {
             )],
         );
         // Should report: calendar missing uid, event missing start, event missing name-or-uid
-        let has_cal_uid = diags.iter().any(|d| d.contains("calendar: missing required field `uid`"));
-        let has_start = diags.iter().any(|d| d.contains("missing required field `start`"));
-        let has_name_or_uid = diags.iter().any(|d| d.contains("must have either `name` or `uid`"));
+        let has_cal_uid = diags
+            .iter()
+            .any(|d| d.contains("calendar: missing required field `uid`"));
+        let has_start = diags
+            .iter()
+            .any(|d| d.contains("missing required field `start`"));
+        let has_name_or_uid = diags
+            .iter()
+            .any(|d| d.contains("must have either `name` or `uid`"));
         assert!(
             has_cal_uid && has_start && has_name_or_uid,
             "expected all three violations, got: {diags:?}"
@@ -1455,10 +1511,7 @@ mod tests {
                 "##,
             )],
         );
-        assert!(
-            diags.is_empty(),
-            "expected no diagnostics, got: {diags:?}"
-        );
+        assert!(diags.is_empty(), "expected no diagnostics, got: {diags:?}");
     }
 
     // r[verify record.task.progress]
@@ -1476,10 +1529,7 @@ mod tests {
                 "#,
             )],
         );
-        assert!(
-            diags.is_empty(),
-            "expected no diagnostics, got: {diags:?}"
-        );
+        assert!(diags.is_empty(), "expected no diagnostics, got: {diags:?}");
     }
 
     // r[verify record.task.progress]
@@ -1498,7 +1548,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("progress") && d.contains("done")),
+            diags
+                .iter()
+                .any(|d| d.contains("progress") && d.contains("done")),
             "expected progress enum error, got: {diags:?}"
         );
     }
@@ -1518,7 +1570,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("percent_complete") && d.contains("0..=100")),
+            diags
+                .iter()
+                .any(|d| d.contains("percent_complete") && d.contains("0..=100")),
             "expected percent_complete range error, got: {diags:?}"
         );
     }
@@ -1529,12 +1583,11 @@ mod tests {
     #[test]
     fn shape_errors_appear_in_check_diagnostics() {
         let db = Database::default();
-        let diags = all_diags(
-            &db,
-            &[("a.gnomon", "calendar {}")],
-        );
+        let diags = all_diags(&db, &[("a.gnomon", "calendar {}")]);
         assert!(
-            diags.iter().any(|d| d.contains("missing required field `uid`")),
+            diags
+                .iter()
+                .any(|d| d.contains("missing required field `uid`")),
             "expected uid error in check diagnostics, got: {diags:?}"
         );
     }

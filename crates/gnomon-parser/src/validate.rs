@@ -63,10 +63,10 @@ pub fn validate_syntax(root: &SyntaxNode) -> Vec<SyntaxError> {
             check_event_expr(&ev, &mut errors);
         } else if let Some(task) = ast::TaskExpr::cast(node.clone()) {
             check_task_expr(&task, &mut errors);
-        } else if let Some(cal) = ast::CalendarExpr::cast(node.clone()) {
-            if let Some(body) = cal.body() {
-                check_duplicate_keys(&body, &mut errors);
-            }
+        } else if let Some(cal) = ast::CalendarExpr::cast(node.clone())
+            && let Some(body) = cal.body()
+        {
+            check_duplicate_keys(&body, &mut errors);
         }
     }
 
@@ -109,14 +109,12 @@ fn check_string_no_multiline(text: &str, range: rowan::TextRange, errors: &mut V
 fn check_duration_units(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
     let mut seen = HashSet::new();
     for ch in text.chars() {
-        if matches!(ch, 'w' | 'd' | 'h' | 'm' | 's') {
-            if !seen.insert(ch) {
-                errors.push(SyntaxError {
-                    range,
-                    message: format!("duplicate duration unit `{ch}`"),
-                });
-                return;
-            }
+        if matches!(ch, 'w' | 'd' | 'h' | 'm' | 's') && !seen.insert(ch) {
+            errors.push(SyntaxError {
+                range,
+                message: format!("duplicate duration unit `{ch}`"),
+            });
+            return;
         }
     }
 }
@@ -133,17 +131,15 @@ fn check_date(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>
             parts[0].parse::<u32>(),
             parts[1].parse::<u32>(),
             parts[2].parse::<u32>(),
-        ) {
-            if (1..=12).contains(&month) && (1..=31).contains(&day) {
-                let max = max_day_in_month(month, is_leap_year(year));
-                if day > max {
-                    errors.push(SyntaxError {
-                        range,
-                        message: format!(
-                            "day {day} is invalid for month {month:02} (max {max})"
-                        ),
-                    });
-                }
+        ) && (1..=12).contains(&month)
+            && (1..=31).contains(&day)
+        {
+            let max = max_day_in_month(month, is_leap_year(year));
+            if day > max {
+                errors.push(SyntaxError {
+                    range,
+                    message: format!("day {day} is invalid for month {month:02} (max {max})"),
+                });
             }
         }
     }
@@ -158,31 +154,36 @@ fn check_month_day(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxE
         check_day_value(parts[1], range, errors);
         // Calendrical validation: reject days that are impossible for the month.
         // 02-29 is allowed because the year is unknown.
-        if let (Ok(month), Ok(day)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
-            if (1..=12).contains(&month) && (1..=31).contains(&day) {
-                let max = max_day_in_month(month, true); // assume leap year (most permissive)
-                if day > max {
-                    errors.push(SyntaxError {
-                        range,
-                        message: format!(
-                            "day {day} is invalid for month {month:02} (max {max})"
-                        ),
-                    });
-                }
+        if let (Ok(month), Ok(day)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>())
+            && (1..=12).contains(&month)
+            && (1..=31).contains(&day)
+        {
+            let max = max_day_in_month(month, true); // assume leap year (most permissive)
+            if day > max {
+                errors.push(SyntaxError {
+                    range,
+                    message: format!("day {day} is invalid for month {month:02} (max {max})"),
+                });
             }
         }
     }
 }
 
 fn is_leap_year(year: u32) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 fn max_day_in_month(month: u32, is_leap: bool) -> u32 {
     match month {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,
-        2 => if is_leap { 29 } else { 28 },
+        2 => {
+            if is_leap {
+                29
+            } else {
+                28
+            }
+        }
         _ => 31,
     }
 }
@@ -208,58 +209,58 @@ fn check_datetime(text: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxEr
 }
 
 fn check_month_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
-    if let Ok(m) = s.parse::<u32>() {
-        if !(1..=12).contains(&m) {
-            errors.push(SyntaxError {
-                range,
-                message: format!("month `{s}` out of range (01..=12)"),
-            });
-        }
+    if let Ok(m) = s.parse::<u32>()
+        && !(1..=12).contains(&m)
+    {
+        errors.push(SyntaxError {
+            range,
+            message: format!("month `{s}` out of range (01..=12)"),
+        });
     }
 }
 
 fn check_day_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
-    if let Ok(d) = s.parse::<u32>() {
-        if !(1..=31).contains(&d) {
-            errors.push(SyntaxError {
-                range,
-                message: format!("day `{s}` out of range (01..=31)"),
-            });
-        }
+    if let Ok(d) = s.parse::<u32>()
+        && !(1..=31).contains(&d)
+    {
+        errors.push(SyntaxError {
+            range,
+            message: format!("day `{s}` out of range (01..=31)"),
+        });
     }
 }
 
 fn check_hour_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
-    if let Ok(h) = s.parse::<u32>() {
-        if h > 23 {
-            errors.push(SyntaxError {
-                range,
-                message: format!("hour `{s}` out of range (00..=23)"),
-            });
-        }
+    if let Ok(h) = s.parse::<u32>()
+        && h > 23
+    {
+        errors.push(SyntaxError {
+            range,
+            message: format!("hour `{s}` out of range (00..=23)"),
+        });
     }
 }
 
 fn check_minute_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
-    if let Ok(m) = s.parse::<u32>() {
-        if m > 59 {
-            errors.push(SyntaxError {
-                range,
-                message: format!("minute `{s}` out of range (00..=59)"),
-            });
-        }
+    if let Ok(m) = s.parse::<u32>()
+        && m > 59
+    {
+        errors.push(SyntaxError {
+            range,
+            message: format!("minute `{s}` out of range (00..=59)"),
+        });
     }
 }
 
 // r[impl lexer.time.leap-second]
 fn check_second_value(s: &str, range: rowan::TextRange, errors: &mut Vec<SyntaxError>) {
-    if let Ok(sec) = s.parse::<u32>() {
-        if sec > 60 {
-            errors.push(SyntaxError {
-                range,
-                message: format!("second `{s}` out of range (00..=60)"),
-            });
-        }
+    if let Ok(sec) = s.parse::<u32>()
+        && sec > 60
+    {
+        errors.push(SyntaxError {
+            range,
+            message: format!("second `{s}` out of range (00..=60)"),
+        });
     }
 }
 
@@ -279,10 +280,10 @@ fn check_duplicate_keys(record: &RecordExpr, errors: &mut Vec<SyntaxError>) {
             }
         }
         // Recurse into nested records
-        if let Some(value) = field.value() {
-            if let ast::Expr::RecordExpr(nested) = value {
-                check_duplicate_keys(&nested, errors);
-            }
+        if let Some(value) = field.value()
+            && let ast::Expr::RecordExpr(nested) = value
+        {
+            check_duplicate_keys(&nested, errors);
         }
     }
 }
@@ -503,7 +504,10 @@ mod tests {
     fn time_leap_second_valid() {
         // Second :60 is a leap second and must be accepted.
         let errs = validate("event @e 2026-12-31T23:59:60 1h \"x\"");
-        assert!(errs.is_empty(), "second=60 should be valid (leap second), got: {errs:?}");
+        assert!(
+            errs.is_empty(),
+            "second=60 should be valid (leap second), got: {errs:?}"
+        );
     }
 
     #[test]

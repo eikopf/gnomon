@@ -5,8 +5,11 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use gnomon_db::{Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate_with_options, parse, validate_calendar};
 use gnomon_db::eval::EvalOptions;
+use gnomon_db::{
+    Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate_with_options, parse,
+    validate_calendar,
+};
 
 // r[impl cli.root]
 // r[impl cli.syntax]
@@ -17,10 +20,7 @@ use gnomon_db::eval::EvalOptions;
 // r[impl cli.option.help.xor]
 // r[impl cli.option.order]
 #[derive(Parser)]
-#[command(
-    name = "gnomon",
-    about = "A plaintext calendaring language"
-)]
+#[command(name = "gnomon", about = "A plaintext calendaring language")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -189,9 +189,7 @@ fn main() -> ExitCode {
                     };
                     SourceFile::new(&db, file.clone(), text)
                 }
-                (None, Some(expr)) => {
-                    SourceFile::new(&db, PathBuf::from("<expr>"), expr.clone())
-                }
+                (None, Some(expr)) => SourceFile::new(&db, PathBuf::from("<expr>"), expr.clone()),
                 _ => {
                     eprintln!("error: provide either a file path or --expr");
                     return ExitCode::FAILURE;
@@ -245,12 +243,8 @@ fn main() -> ExitCode {
             let imported_files = eval_result.imported_files.clone();
 
             // Validate the evaluated value as a calendar.
-            let check_result = validate_calendar(
-                &db,
-                source,
-                eval_result.value,
-                eval_result.diagnostics,
-            );
+            let check_result =
+                validate_calendar(&db, source, eval_result.value, eval_result.diagnostics);
 
             let mut diagnostics = check_result.diagnostics;
 
@@ -296,18 +290,16 @@ fn main() -> ExitCode {
         }
         Command::Repl => repl::run_repl(),
         // r[impl cli.subcommand.clean]
-        Command::Clean => {
-            match gnomon_db::eval::cache::clean() {
-                Ok(n) => {
-                    println!("{n} cached URI import(s) removed");
-                    ExitCode::SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("error: failed to clean cache: {e}");
-                    ExitCode::FAILURE
-                }
+        Command::Clean => match gnomon_db::eval::cache::clean() {
+            Ok(n) => {
+                println!("{n} cached URI import(s) removed");
+                ExitCode::SUCCESS
             }
-        }
+            Err(e) => {
+                eprintln!("error: failed to clean cache: {e}");
+                ExitCode::FAILURE
+            }
+        },
     }
 }
 
@@ -369,5 +361,3 @@ fn offset_to_line_col(text: &str, offset: usize) -> (usize, usize) {
     }
     (line, col)
 }
-
-

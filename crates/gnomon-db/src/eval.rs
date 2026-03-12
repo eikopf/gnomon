@@ -152,7 +152,10 @@ mod tests {
     }
 
     /// Extract the record from a list item (declaration mode).
-    fn expect_list_record<'a, 'db>(result: &'a super::EvalResult<'db>, index: usize) -> &'a Record<'db> {
+    fn expect_list_record<'a, 'db>(
+        result: &'a super::EvalResult<'db>,
+        index: usize,
+    ) -> &'a Record<'db> {
         match &result.value {
             Value::List(items) => match &items[index].value {
                 Value::Record(r) => r,
@@ -168,7 +171,10 @@ mod tests {
     }
 
     /// Unwrap a singleton list containing a calendar record (from iCalendar import).
-    fn unwrap_singleton_calendar<'a, 'db>(value: &'a Value<'db>, db: &'db Database) -> &'a Record<'db> {
+    fn unwrap_singleton_calendar<'a, 'db>(
+        value: &'a Value<'db>,
+        db: &'db Database,
+    ) -> &'a Record<'db> {
         match value {
             Value::List(items) => {
                 assert_eq!(items.len(), 1, "expected singleton calendar list");
@@ -226,10 +232,7 @@ mod tests {
         );
         let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("standup".into()));
-        assert_eq!(
-            get_field(r, &db, "title"),
-            Value::String("Standup".into())
-        );
+        assert_eq!(get_field(r, &db, "title"), Value::String("Standup".into()));
         // start is a desugared datetime record
         match get_field(r, &db, "start") {
             Value::Record(dt) => {
@@ -247,16 +250,10 @@ mod tests {
     #[test]
     fn event_short_form() {
         let db = Database::default();
-        let result = eval(
-            &db,
-            r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#,
-        );
+        let result = eval(&db, r#"event @meeting 2026-03-01T14:30 1h30m "Standup""#);
         let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("meeting".into()));
-        assert_eq!(
-            get_field(r, &db, "title"),
-            Value::String("Standup".into())
-        );
+        assert_eq!(get_field(r, &db, "title"), Value::String("Standup".into()));
         assert!(matches!(get_field(r, &db, "start"), Value::Record(_)));
         assert!(matches!(get_field(r, &db, "duration"), Value::Record(_)));
     }
@@ -279,10 +276,7 @@ mod tests {
     #[test]
     fn event_short_form_date_plus_time() {
         let db = Database::default();
-        let result = eval(
-            &db,
-            r#"event @meeting 2026-03-01 14:30 1h "Standup""#,
-        );
+        let result = eval(&db, r#"event @meeting 2026-03-01 14:30 1h "Standup""#);
         let r = expect_single_decl(&result);
         match get_field(r, &db, "start") {
             Value::Record(dt) => {
@@ -300,10 +294,7 @@ mod tests {
     #[test]
     fn task_prefix_form() {
         let db = Database::default();
-        let result = eval(
-            &db,
-            r#"task { name: @review, title: "Code review" }"#,
-        );
+        let result = eval(&db, r#"task { name: @review, title: "Code review" }"#);
         let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
     }
@@ -313,10 +304,7 @@ mod tests {
     #[test]
     fn task_short_form() {
         let db = Database::default();
-        let result = eval(
-            &db,
-            r#"task @review 2026-03-15T17:00 "Code review""#,
-        );
+        let result = eval(&db, r#"task @review 2026-03-15T17:00 "Code review""#);
         let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "name"), Value::Name("review".into()));
         assert_eq!(
@@ -348,10 +336,7 @@ mod tests {
         let r = expect_single_decl(&result);
         match get_field(r, &db, "location") {
             Value::Record(loc) => {
-                assert_eq!(
-                    get_field(&loc, &db, "name"),
-                    Value::String("Office".into())
-                );
+                assert_eq!(get_field(&loc, &db, "name"), Value::String("Office".into()));
             }
             _ => panic!("expected nested Record"),
         }
@@ -360,10 +345,7 @@ mod tests {
     #[test]
     fn list_of_strings() {
         let db = Database::default();
-        let result = eval(
-            &db,
-            r#"calendar { keywords: ["work", "meeting"] }"#,
-        );
+        let result = eval(&db, r#"calendar { keywords: ["work", "meeting"] }"#);
         let r = expect_single_decl(&result);
         match get_field(r, &db, "keywords") {
             Value::List(items) => {
@@ -400,10 +382,7 @@ mod tests {
     #[test]
     fn integer_and_signed_integer() {
         let db = Database::default();
-        let result = eval(
-            &db,
-            "calendar { priority: 5, offset: -3 }",
-        );
+        let result = eval(&db, "calendar { priority: 5, offset: -3 }");
         let r = expect_single_decl(&result);
         assert_eq!(get_field(r, &db, "priority"), Value::Integer(5));
         assert_eq!(get_field(r, &db, "offset"), Value::SignedInteger(-3));
@@ -693,7 +672,10 @@ mod tests {
         use super::*;
         use std::io::Write;
 
-        fn eval_file<'db>(db: &'db Database, path: &std::path::Path) -> super::super::EvalResult<'db> {
+        fn eval_file<'db>(
+            db: &'db Database,
+            path: &std::path::Path,
+        ) -> super::super::EvalResult<'db> {
             let text = std::fs::read_to_string(path).unwrap();
             let sf = SourceFile::new(db, path.to_path_buf(), text);
             super::super::evaluate(db, sf)
@@ -720,7 +702,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "x"), Value::Integer(42));
         }
@@ -739,7 +725,10 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &a_path);
             assert!(
-                result.diagnostics.iter().any(|d| d.message.contains("circular import")),
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("circular import")),
                 "expected circular import error, got: {:?}",
                 result.diagnostics,
             );
@@ -754,7 +743,10 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(
-                result.diagnostics.iter().any(|d| d.message.contains("cannot read import")),
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("cannot read import")),
                 "expected file-not-found error, got: {:?}",
                 result.diagnostics,
             );
@@ -779,7 +771,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "base_priority"), Value::Integer(5));
             assert_eq!(get_field(r, &db, "name"), Value::String("custom".into()));
@@ -798,7 +794,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "val"), Value::Integer(1));
         }
@@ -825,7 +825,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let cal = unwrap_singleton_calendar(&result.value, &db);
             match get_field(cal, &db, "entries") {
                 Value::List(items) => {
@@ -864,7 +868,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let cal = unwrap_singleton_calendar(&result.value, &db);
             match get_field(cal, &db, "entries") {
                 Value::List(items) => {
@@ -899,7 +907,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "type"), Value::String("event".into()));
             assert_eq!(get_field(r, &db, "uid"), Value::String("js1".into()));
@@ -926,7 +938,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "type"), Value::String("task".into()));
             assert_eq!(get_field(r, &db, "uid"), Value::String("t-infer".into()));
@@ -945,7 +961,10 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(
-                result.diagnostics.iter().any(|d| d.message.contains("iCalendar parse error")),
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("iCalendar parse error")),
                 "expected parse error, got: {:?}",
                 result.diagnostics,
             );
@@ -964,7 +983,10 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(
-                result.diagnostics.iter().any(|d| d.message.contains("JSCalendar JSON parse error")),
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("JSCalendar JSON parse error")),
                 "expected parse error, got: {:?}",
                 result.diagnostics,
             );
@@ -1011,7 +1033,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let cal = unwrap_singleton_calendar(&result.value, &db);
             match get_field(cal, &db, "entries") {
                 Value::List(items) => {
@@ -1019,7 +1045,10 @@ mod tests {
                     match &items[0].value {
                         Value::Record(e) => {
                             assert_eq!(get_field(e, &db, "uid"), Value::String("uri-ev1".into()));
-                            assert_eq!(get_field(e, &db, "title"), Value::String("URI Event".into()));
+                            assert_eq!(
+                                get_field(e, &db, "title"),
+                                Value::String("URI Event".into())
+                            );
                         }
                         _ => panic!("expected event record"),
                     }
@@ -1043,7 +1072,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "uid"), Value::String("uri-js1".into()));
             assert_eq!(get_field(r, &db, "title"), Value::String("URI JS".into()));
@@ -1064,7 +1097,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let r = expect_record(&result);
             assert_eq!(get_field(r, &db, "x"), Value::Integer(42));
         }
@@ -1080,15 +1117,15 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let main_path = dir.path().join("main.gnomon");
             // URL path ends in .ics — format should be inferred.
-            std::fs::write(
-                &main_path,
-                format!("import <http://{addr}/cal.ics>"),
-            )
-            .unwrap();
+            std::fs::write(&main_path, format!("import <http://{addr}/cal.ics>")).unwrap();
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let cal = unwrap_singleton_calendar(&result.value, &db);
             match get_field(cal, &db, "entries") {
                 Value::List(items) => {
@@ -1114,7 +1151,10 @@ mod tests {
             let db = Database::default();
             let result = eval_file(&db, &main_path);
             assert!(
-                result.diagnostics.iter().any(|d| d.message.contains("URI import failed")),
+                result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.message.contains("URI import failed")),
                 "expected network error, got: {:?}",
                 result.diagnostics,
             );
@@ -1131,22 +1171,25 @@ mod tests {
 
             let dir = tempfile::tempdir().unwrap();
             let main_path = dir.path().join("main.gnomon");
-            std::fs::write(
-                &main_path,
-                format!("import <http://{addr}/feed>"),
-            )
-            .unwrap();
+            std::fs::write(&main_path, format!("import <http://{addr}/feed>")).unwrap();
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             let cal = unwrap_singleton_calendar(&result.value, &db);
             match get_field(cal, &db, "entries") {
                 Value::List(items) => {
                     assert_eq!(items.len(), 1);
                     match &items[0].value {
                         Value::Record(entry) => {
-                            assert_eq!(get_field(entry, &db, "uid"), Value::String("ct-infer".into()));
+                            assert_eq!(
+                                get_field(entry, &db, "uid"),
+                                Value::String("ct-infer".into())
+                            );
                         }
                         _ => panic!("expected record"),
                     }
@@ -1169,7 +1212,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
 
             let canon = other_path.canonicalize().unwrap();
             assert!(
@@ -1195,7 +1242,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &a_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
 
             let b_canon = b_path.canonicalize().unwrap();
             let c_canon = c_path.canonicalize().unwrap();
@@ -1232,7 +1283,11 @@ mod tests {
 
             let db = Database::default();
             let result = eval_file(&db, &main_path);
-            assert!(result.diagnostics.is_empty(), "diagnostics: {:?}", result.diagnostics);
+            assert!(
+                result.diagnostics.is_empty(),
+                "diagnostics: {:?}",
+                result.diagnostics
+            );
             assert!(
                 result.imported_files.is_empty(),
                 "non-Gnomon imports should not appear in imported_files, got: {:?}",

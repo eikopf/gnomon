@@ -5,7 +5,7 @@ use std::fmt;
 /// Token kinds (leaves) and node kinds (internal) share the same enum so that
 /// `rowan` can use a single `u16` discriminant for both.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-#[allow(non_camel_case_types)]
+#[expect(non_camel_case_types)]
 #[repr(u16)]
 pub enum SyntaxKind {
     // ── Trivia ───────────────────────────────────────────────────────
@@ -13,25 +13,25 @@ pub enum SyntaxKind {
     COMMENT,
 
     // ── Punctuation ──────────────────────────────────────────────────
-    L_BRACE,      // {
-    R_BRACE,      // }
-    L_BRACKET,    // [
-    R_BRACKET,    // ]
-    L_PAREN,      // (
-    R_PAREN,      // )
-    COLON,        // :
-    COMMA,        // ,
-    EQUALS,       // =
-    EQ_EQ,        // ==
-    BANG,         // !
-    BANG_EQ,      // !=
-    DOT,          // .
-    HYPHEN,       // -
-    PLUS,         // +
-    PLUS_PLUS,    // ++
-    SLASH,        // /
-    SLASH_SLASH,  // //
-    AT,           // @
+    L_BRACE,     // {
+    R_BRACE,     // }
+    L_BRACKET,   // [
+    R_BRACKET,   // ]
+    L_PAREN,     // (
+    R_PAREN,     // )
+    COLON,       // :
+    COMMA,       // ,
+    EQUALS,      // =
+    EQ_EQ,       // ==
+    BANG,        // !
+    BANG_EQ,     // !=
+    DOT,         // .
+    HYPHEN,      // -
+    PLUS,        // +
+    PLUS_PLUS,   // ++
+    SLASH,       // /
+    SLASH_SLASH, // //
+    AT,          // @
 
     // ── Literals ─────────────────────────────────────────────────────
     INTEGER_LITERAL,
@@ -137,7 +137,11 @@ impl rowan::Language for GnomonLanguage {
     type Kind = SyntaxKind;
 
     fn kind_from_raw(raw: rowan::SyntaxKind) -> Self::Kind {
-        assert!(raw.0 <= SyntaxKind::ERROR_NODE as u16, "SyntaxKind out of range: {}", raw.0);
+        assert!(
+            raw.0 <= SyntaxKind::ERROR_NODE as u16,
+            "SyntaxKind out of range: {}",
+            raw.0
+        );
         // SAFETY: SyntaxKind is repr(u16) and we checked the range.
         unsafe { std::mem::transmute::<u16, SyntaxKind>(raw.0) }
     }

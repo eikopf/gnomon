@@ -8,11 +8,7 @@ use crate::util;
 ///
 /// This is the core expansion pipeline: seed from dtstart, then apply BY* rules
 /// in canonical order, filter invalids, sort, dedup, and apply BYSETPOS.
-pub fn expand_period(
-    rule: &RecurrenceRule,
-    dtstart: DateTime,
-    period_index: u64,
-) -> Vec<DateTime> {
+pub fn expand_period(rule: &RecurrenceRule, dtstart: DateTime, period_index: u64) -> Vec<DateTime> {
     let seed = match util::advance_period(dtstart, rule.frequency, rule.interval, period_index) {
         Some(dt) => dt,
         None => return Vec::new(),
@@ -29,11 +25,21 @@ pub fn expand_period(
 
     // Apply BY* rules in canonical order
     candidates = apply_by_month(&candidates, &rule.by_month, rule.frequency, rule.skip, &ctx);
-    candidates =
-        apply_by_week_no(&candidates, &rule.by_week_no, rule.frequency, rule.week_start, &ctx);
+    candidates = apply_by_week_no(
+        &candidates,
+        &rule.by_week_no,
+        rule.frequency,
+        rule.week_start,
+        &ctx,
+    );
     candidates = apply_by_year_day(&candidates, &rule.by_year_day, rule.frequency, &ctx);
-    candidates =
-        apply_by_month_day(&candidates, &rule.by_month_day, rule.frequency, rule.skip, &ctx);
+    candidates = apply_by_month_day(
+        &candidates,
+        &rule.by_month_day,
+        rule.frequency,
+        rule.skip,
+        &ctx,
+    );
     candidates = apply_by_day(&candidates, &rule.by_day, rule.frequency, &ctx);
     candidates = apply_by_hour(&candidates, &rule.by_hour, rule.frequency, &ctx);
     candidates = apply_by_minute(&candidates, &rule.by_minute, rule.frequency, &ctx);
@@ -128,14 +134,11 @@ fn apply_by_year_day(
             for &dt in candidates {
                 let diy = util::days_in_year(dt.year());
                 for &yd in by_year_day {
-                    if let Some(resolved) = util::resolve_year_day(yd, diy) {
-                        if let Ok(jan1) = jiff::civil::Date::new(dt.year(), 1, 1) {
-                            if let Ok(d) =
-                                jan1.checked_add(Span::new().days(i64::from(resolved) - 1))
-                            {
-                                result.push(d.to_datetime(dt.time()));
-                            }
-                        }
+                    if let Some(resolved) = util::resolve_year_day(yd, diy)
+                        && let Ok(jan1) = jiff::civil::Date::new(dt.year(), 1, 1)
+                        && let Ok(d) = jan1.checked_add(Span::new().days(i64::from(resolved) - 1))
+                    {
+                        result.push(d.to_datetime(dt.time()));
                     }
                 }
             }
@@ -175,10 +178,10 @@ fn apply_by_month_day(
                     None => continue,
                 };
                 for &md in by_month_day {
-                    if let Some(resolved) = util::resolve_month_day(md, dim) {
-                        if let Some(d) = util::apply_skip(dt.year(), dt.month(), resolved, skip) {
-                            result.push(d.to_datetime(dt.time()));
-                        }
+                    if let Some(resolved) = util::resolve_month_day(md, dim)
+                        && let Some(d) = util::apply_skip(dt.year(), dt.month(), resolved, skip)
+                    {
+                        result.push(d.to_datetime(dt.time()));
                     }
                 }
             }
@@ -215,9 +218,16 @@ fn apply_by_day(
             for &dt in candidates {
                 for nday in by_day {
                     match nday.nth {
-                        Some(nth) => {
-                            match freq {
-                                Frequency::Monthly => {
+                        Some(nth) => match freq {
+                            Frequency::Monthly => {
+                                if let Some(d) =
+                                    util::nth_weekday_in_month(dt.year(), dt.month(), nth, nday.day)
+                                {
+                                    result.push(d.to_datetime(dt.time()));
+                                }
+                            }
+                            Frequency::Yearly => {
+                                if ctx.has_by_month {
                                     if let Some(d) = util::nth_weekday_in_month(
                                         dt.year(),
                                         dt.month(),
@@ -226,82 +236,61 @@ fn apply_by_day(
                                     ) {
                                         result.push(d.to_datetime(dt.time()));
                                     }
-                                }
-                                Frequency::Yearly => {
-                                    if ctx.has_by_month {
-                                        if let Some(d) = util::nth_weekday_in_month(
-                                            dt.year(),
-                                            dt.month(),
-                                            nth,
-                                            nday.day,
-                                        ) {
-                                            result.push(d.to_datetime(dt.time()));
-                                        }
-                                    } else if ctx.has_by_week_no {
-                                        if Weekday::from_jiff(dt.date().weekday()) == nday.day {
-                                            result.push(dt);
-                                        }
-                                    } else {
-                                        if let Some(d) =
-                                            util::nth_weekday_in_year(dt.year(), nth, nday.day)
-                                        {
-                                            result.push(d.to_datetime(dt.time()));
-                                        }
-                                    }
-                                }
-                                _ => {
+                                } else if ctx.has_by_week_no {
                                     if Weekday::from_jiff(dt.date().weekday()) == nday.day {
                                         result.push(dt);
                                     }
+                                } else if let Some(d) =
+                                    util::nth_weekday_in_year(dt.year(), nth, nday.day)
+                                {
+                                    result.push(d.to_datetime(dt.time()));
                                 }
                             }
-                        }
-                        None => {
-                            match freq {
-                                Frequency::Monthly => {
+                            _ => {
+                                if Weekday::from_jiff(dt.date().weekday()) == nday.day {
+                                    result.push(dt);
+                                }
+                            }
+                        },
+                        None => match freq {
+                            Frequency::Monthly => {
+                                for d in util::all_weekday_in_month(dt.year(), dt.month(), nday.day)
+                                {
+                                    result.push(d.to_datetime(dt.time()));
+                                }
+                            }
+                            Frequency::Yearly => {
+                                if ctx.has_by_month {
                                     for d in
                                         util::all_weekday_in_month(dt.year(), dt.month(), nday.day)
                                     {
                                         result.push(d.to_datetime(dt.time()));
                                     }
-                                }
-                                Frequency::Yearly => {
-                                    if ctx.has_by_month {
-                                        for d in util::all_weekday_in_month(
-                                            dt.year(),
-                                            dt.month(),
-                                            nday.day,
-                                        ) {
-                                            result.push(d.to_datetime(dt.time()));
-                                        }
-                                    } else if ctx.has_by_week_no {
-                                        if Weekday::from_jiff(dt.date().weekday()) == nday.day {
-                                            result.push(dt);
-                                        }
-                                    } else {
-                                        for d in util::all_weekday_in_year(dt.year(), nday.day) {
-                                            result.push(d.to_datetime(dt.time()));
-                                        }
-                                    }
-                                }
-                                Frequency::Weekly => {
-                                    let current_wd = dt.date().weekday();
-                                    let target_wd = nday.day.to_jiff();
-                                    let diff = (target_wd.to_monday_zero_offset() as i64)
-                                        - (current_wd.to_monday_zero_offset() as i64);
-                                    if let Ok(d) =
-                                        dt.date().checked_add(Span::new().days(diff))
-                                    {
-                                        result.push(d.to_datetime(dt.time()));
-                                    }
-                                }
-                                _ => {
+                                } else if ctx.has_by_week_no {
                                     if Weekday::from_jiff(dt.date().weekday()) == nday.day {
                                         result.push(dt);
                                     }
+                                } else {
+                                    for d in util::all_weekday_in_year(dt.year(), nday.day) {
+                                        result.push(d.to_datetime(dt.time()));
+                                    }
                                 }
                             }
-                        }
+                            Frequency::Weekly => {
+                                let current_wd = dt.date().weekday();
+                                let target_wd = nday.day.to_jiff();
+                                let diff = (target_wd.to_monday_zero_offset() as i64)
+                                    - (current_wd.to_monday_zero_offset() as i64);
+                                if let Ok(d) = dt.date().checked_add(Span::new().days(diff)) {
+                                    result.push(d.to_datetime(dt.time()));
+                                }
+                            }
+                            _ => {
+                                if Weekday::from_jiff(dt.date().weekday()) == nday.day {
+                                    result.push(dt);
+                                }
+                            }
+                        },
                     }
                 }
             }
@@ -424,10 +413,10 @@ fn apply_by_set_pos(candidates: &[DateTime], by_set_pos: &[i32]) -> Vec<DateTime
         } else {
             continue;
         };
-        if let Some(idx) = idx {
-            if idx < len {
-                result.push(candidates[idx]);
-            }
+        if let Some(idx) = idx
+            && idx < len
+        {
+            result.push(candidates[idx]);
         }
     }
     result.sort();
@@ -444,7 +433,10 @@ mod tests {
     }
 
     fn rule(freq: Frequency) -> RecurrenceRule {
-        RecurrenceRule { frequency: freq, ..Default::default() }
+        RecurrenceRule {
+            frequency: freq,
+            ..Default::default()
+        }
     }
 
     #[test]
@@ -460,20 +452,32 @@ mod tests {
         let r = RecurrenceRule {
             frequency: Frequency::Weekly,
             by_day: vec![
-                NDay { day: Weekday::Monday, nth: None },
-                NDay { day: Weekday::Wednesday, nth: None },
-                NDay { day: Weekday::Friday, nth: None },
+                NDay {
+                    day: Weekday::Monday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Wednesday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Friday,
+                    nth: None,
+                },
             ],
             ..Default::default()
         };
         // 2024-01-01 is Monday
         let start = dt(2024, 1, 1, 9, 0, 0);
         let c = expand_period(&r, start, 0);
-        assert_eq!(c, vec![
-            dt(2024, 1, 1, 9, 0, 0),
-            dt(2024, 1, 3, 9, 0, 0),
-            dt(2024, 1, 5, 9, 0, 0),
-        ]);
+        assert_eq!(
+            c,
+            vec![
+                dt(2024, 1, 1, 9, 0, 0),
+                dt(2024, 1, 3, 9, 0, 0),
+                dt(2024, 1, 5, 9, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -493,24 +497,33 @@ mod tests {
     fn expand_monthly_by_day_expand() {
         let r = RecurrenceRule {
             frequency: Frequency::Monthly,
-            by_day: vec![NDay { day: Weekday::Friday, nth: None }],
+            by_day: vec![NDay {
+                day: Weekday::Friday,
+                nth: None,
+            }],
             ..Default::default()
         };
         let start = dt(2024, 1, 1, 10, 0, 0);
         let c = expand_period(&r, start, 0);
-        assert_eq!(c, vec![
-            dt(2024, 1, 5, 10, 0, 0),
-            dt(2024, 1, 12, 10, 0, 0),
-            dt(2024, 1, 19, 10, 0, 0),
-            dt(2024, 1, 26, 10, 0, 0),
-        ]);
+        assert_eq!(
+            c,
+            vec![
+                dt(2024, 1, 5, 10, 0, 0),
+                dt(2024, 1, 12, 10, 0, 0),
+                dt(2024, 1, 19, 10, 0, 0),
+                dt(2024, 1, 26, 10, 0, 0),
+            ]
+        );
     }
 
     #[test]
     fn expand_monthly_by_day_with_nth() {
         let r = RecurrenceRule {
             frequency: Frequency::Monthly,
-            by_day: vec![NDay { day: Weekday::Friday, nth: Some(2) }],
+            by_day: vec![NDay {
+                day: Weekday::Friday,
+                nth: Some(2),
+            }],
             ..Default::default()
         };
         let start = dt(2024, 1, 1, 10, 0, 0);
@@ -536,8 +549,14 @@ mod tests {
     fn expand_yearly_by_month_by_day() {
         let r = RecurrenceRule {
             frequency: Frequency::Yearly,
-            by_month: vec![ByMonth { month: 11, leap: false }],
-            by_day: vec![NDay { day: Weekday::Thursday, nth: Some(4) }],
+            by_month: vec![ByMonth {
+                month: 11,
+                leap: false,
+            }],
+            by_day: vec![NDay {
+                day: Weekday::Thursday,
+                nth: Some(4),
+            }],
             ..Default::default()
         };
         let start = dt(2024, 11, 1, 0, 0, 0);
@@ -550,14 +569,23 @@ mod tests {
         let r = RecurrenceRule {
             frequency: Frequency::Yearly,
             by_month: vec![
-                ByMonth { month: 3, leap: false },
-                ByMonth { month: 6, leap: false },
+                ByMonth {
+                    month: 3,
+                    leap: false,
+                },
+                ByMonth {
+                    month: 6,
+                    leap: false,
+                },
             ],
             ..Default::default()
         };
         let start = dt(2024, 1, 15, 10, 0, 0);
         let c = expand_period(&r, start, 0);
-        assert_eq!(c, vec![dt(2024, 3, 15, 10, 0, 0), dt(2024, 6, 15, 10, 0, 0)]);
+        assert_eq!(
+            c,
+            vec![dt(2024, 3, 15, 10, 0, 0), dt(2024, 6, 15, 10, 0, 0)]
+        );
     }
 
     // r[verify record.rrule.eval.by-set-pos]
@@ -565,7 +593,10 @@ mod tests {
     fn by_set_pos_first_and_last() {
         let r = RecurrenceRule {
             frequency: Frequency::Monthly,
-            by_day: vec![NDay { day: Weekday::Friday, nth: None }],
+            by_day: vec![NDay {
+                day: Weekday::Friday,
+                nth: None,
+            }],
             by_set_position: vec![1, -1],
             ..Default::default()
         };
@@ -616,8 +647,14 @@ mod tests {
         let r = RecurrenceRule {
             frequency: Frequency::Daily,
             by_day: vec![
-                NDay { day: Weekday::Monday, nth: None },
-                NDay { day: Weekday::Wednesday, nth: None },
+                NDay {
+                    day: Weekday::Monday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Wednesday,
+                    nth: None,
+                },
             ],
             ..Default::default()
         };

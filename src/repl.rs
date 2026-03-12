@@ -1,13 +1,12 @@
 use std::io::{self, BufRead, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use etcetera::BaseStrategy;
-use gnomon_db::{
-    Database, Diagnostic, RenderWithDb, Severity, SourceFile,
-    check_syntax, evaluate_repl_input,
-};
 use gnomon_db::eval::types::Value;
+use gnomon_db::{
+    Database, Diagnostic, RenderWithDb, Severity, SourceFile, check_syntax, evaluate_repl_input,
+};
 
 const PROMPT: &str = "gnomon> ";
 const CONTINUATION: &str = "  ...> ";
@@ -33,10 +32,10 @@ fn run_repl_inner<'db>(db: &'db Database) -> ExitCode {
 fn run_interactive<'db>(
     db: &'db Database,
     env: &mut Vec<(String, Value<'db>)>,
-    cwd: &PathBuf,
+    cwd: &Path,
 ) -> ExitCode {
-    use rustyline::error::ReadlineError;
     use rustyline::DefaultEditor;
+    use rustyline::error::ReadlineError;
 
     let mut editor = match DefaultEditor::new() {
         Ok(e) => e,
@@ -120,11 +119,7 @@ fn run_interactive<'db>(
 }
 
 /// Non-interactive mode for piped stdin (used in tests).
-fn run_piped<'db>(
-    db: &'db Database,
-    env: &mut Vec<(String, Value<'db>)>,
-    cwd: &PathBuf,
-) -> ExitCode {
+fn run_piped<'db>(db: &'db Database, env: &mut Vec<(String, Value<'db>)>, cwd: &Path) -> ExitCode {
     let stdin = io::stdin();
     let mut input_buf = String::new();
     let mut continuation = false;
@@ -173,7 +168,7 @@ fn eval_and_print<'db>(
     db: &'db Database,
     input: &str,
     env: &mut Vec<(String, Value<'db>)>,
-    cwd: &PathBuf,
+    cwd: &Path,
 ) {
     let source = SourceFile::new(db, cwd.join("<repl>"), input.to_string());
     let result = evaluate_repl_input(db, source, env);
@@ -215,11 +210,7 @@ fn eval_and_print<'db>(
     }
 }
 
-fn handle_meta_command<'db>(
-    cmd: &str,
-    db: &'db Database,
-    env: &mut Vec<(String, Value<'db>)>,
-) {
+fn handle_meta_command<'db>(cmd: &str, db: &'db Database, env: &mut Vec<(String, Value<'db>)>) {
     let (command, arg) = match cmd.split_once(char::is_whitespace) {
         Some((c, a)) => (c, Some(a.trim())),
         None => (cmd, None),

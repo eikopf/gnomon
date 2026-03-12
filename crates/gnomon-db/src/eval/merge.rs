@@ -126,7 +126,13 @@ pub fn validate_calendar<'db>(
 
     // r[impl model.calendar.uid.derivation]
     // Derive UUIDv5 UIDs for entries that omit an explicit uid.
-    derive_uids(db, &mut calendar, root_source, &mut diagnostics, &mut has_errors);
+    derive_uids(
+        db,
+        &mut calendar,
+        root_source,
+        &mut diagnostics,
+        &mut has_errors,
+    );
 
     // Shape-check the merged calendar.
     let shape_diags = super::shape::check_calendar_shape(db, &calendar, root_source);
@@ -202,7 +208,7 @@ fn derive_uids<'db>(
 
         let derived = Uuid::new_v5(&namespace, name_str.as_bytes());
         entry.value.insert(
-            uid_key.clone(),
+            uid_key,
             Blamed {
                 value: Value::String(derived.to_string()),
                 blame: entry.blame.clone(),
@@ -221,23 +227,23 @@ fn check_name_collision<'db>(
     diagnostics: &mut Vec<Diagnostic>,
     has_errors: &mut bool,
 ) {
-    if let Some(blamed_value) = record.get(name_key) {
-        if let Value::Name(name) = &blamed_value.value {
-            if let Some(&first_source) = seen_names.get(name) {
-                *has_errors = true;
-                diagnostics.push(Diagnostic {
-                    source,
-                    range: rowan::TextRange::default(),
-                    severity: Severity::Error,
-                    message: format!(
-                        "name @{} already defined in {}",
-                        name,
-                        first_source.path(db).display()
-                    ),
-                });
-            } else {
-                seen_names.insert(name.clone(), source);
-            }
+    if let Some(blamed_value) = record.get(name_key)
+        && let Value::Name(name) = &blamed_value.value
+    {
+        if let Some(&first_source) = seen_names.get(name) {
+            *has_errors = true;
+            diagnostics.push(Diagnostic {
+                source,
+                range: rowan::TextRange::default(),
+                severity: Severity::Error,
+                message: format!(
+                    "name @{} already defined in {}",
+                    name,
+                    first_source.path(db).display()
+                ),
+            });
+        } else {
+            seen_names.insert(name.clone(), source);
         }
     }
 }
@@ -258,12 +264,11 @@ fn flatten_to_records<'db>(
 
     match value {
         Value::Record(r) => {
-            let blame = r
-                .0
-                .values()
-                .next()
-                .map(|b| b.blame.clone())
-                .unwrap_or_else(default_blame);
+            let blame =
+                r.0.values()
+                    .next()
+                    .map(|b| b.blame.clone())
+                    .unwrap_or_else(default_blame);
             vec![(r, blame)]
         }
         Value::List(items) => {
@@ -287,8 +292,8 @@ fn flatten_to_records<'db>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::render::RenderWithDb;
     use crate::Database;
+    use crate::eval::render::RenderWithDb;
     use expect_test::{Expect, expect};
     use std::path::PathBuf;
 
@@ -312,7 +317,11 @@ mod tests {
     fn check_diagnostics(db: &Database, text: &str) -> Vec<String> {
         let source = make_source(db, "test.gnomon", text);
         let result = check(db, source);
-        result.diagnostics.iter().map(|d| d.message.clone()).collect()
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.message.clone())
+            .collect()
     }
 
     // r[verify model.calendar.entries]
@@ -436,10 +445,7 @@ mod tests {
     #[test]
     fn no_calendar_declaration_error() {
         let db = Database::default();
-        let diags = check_diagnostics(
-            &db,
-            r#"event @a 2026-01-01T09:00 1h "A""#,
-        );
+        let diags = check_diagnostics(&db, r#"event @a 2026-01-01T09:00 1h "A""#);
         assert!(diags.iter().any(|d| d.contains("no calendar record")));
     }
 
@@ -454,9 +460,11 @@ mod tests {
             calendar { uid: "b" }
             "#,
         );
-        assert!(diags
-            .iter()
-            .any(|d| d.contains("duplicate calendar record")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.contains("duplicate calendar record"))
+        );
     }
 
     // r[verify model.name.unique]
@@ -471,9 +479,11 @@ mod tests {
             event @meeting 2026-02-01T10:00 1h "B"
             "#,
         );
-        assert!(diags
-            .iter()
-            .any(|d| d.contains("name @meeting already defined")));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.contains("name @meeting already defined"))
+        );
     }
 
     // r[verify model.name.unique]
@@ -488,9 +498,7 @@ mod tests {
             task @x "Task X"
             "#,
         );
-        assert!(diags
-            .iter()
-            .any(|d| d.contains("name @x already defined")));
+        assert!(diags.iter().any(|d| d.contains("name @x already defined")));
     }
 
     #[test]
@@ -499,19 +507,18 @@ mod tests {
         let source = make_source(&db, "empty.gnomon", "");
         let result = check(&db, source);
         assert!(result.has_errors);
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("no calendar record")));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("no calendar record"))
+        );
     }
 
     #[test]
     fn file_with_parse_errors_continues() {
         let db = Database::default();
-        let diags = check_diagnostics(
-            &db,
-            r#"~~~ calendar { uid: "test" }"#,
-        );
+        let diags = check_diagnostics(&db, r#"~~~ calendar { uid: "test" }"#);
         // Should have parse errors but validation continues.
         assert!(!diags.is_empty());
     }
@@ -655,7 +662,11 @@ mod tests {
             "#,
         );
         let result = check(&db, source);
-        let messages: Vec<&str> = result.diagnostics.iter().map(|d| d.message.as_str()).collect();
+        let messages: Vec<&str> = result
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect();
         assert!(
             messages.iter().any(|m| m.contains("duplicate calendar")),
             "missing duplicate calendar error in: {messages:?}"
@@ -677,10 +688,12 @@ mod tests {
         );
         let result = check(&db, source);
         assert!(result.has_errors);
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|d| d.message.contains("duplicate field")));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("duplicate field"))
+        );
     }
 
     #[test]
@@ -802,13 +815,20 @@ mod tests {
             "#,
         );
         let result = check(&db, source);
-        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        assert!(
+            !result.has_errors,
+            "unexpected errors: {:?}",
+            result.diagnostics
+        );
         let uid_key = FieldName::new(&db, "uid".to_string());
         let entry = &result.calendar.entries[0].value;
         let uid = entry.get(&uid_key).expect("entry should have derived uid");
         match &uid.value {
             Value::String(s) => {
-                assert!(uuid::Uuid::parse_str(s).is_ok(), "derived uid is not a valid UUID: {s}");
+                assert!(
+                    uuid::Uuid::parse_str(s).is_ok(),
+                    "derived uid is not a valid UUID: {s}"
+                );
             }
             other => panic!("expected string uid, got: {other:?}"),
         }
@@ -827,8 +847,16 @@ mod tests {
         let result1 = check(&db, source1);
         let result2 = check(&db, source2);
         let uid_key = FieldName::new(&db, "uid".to_string());
-        let uid1 = &result1.calendar.entries[0].value.get(&uid_key).unwrap().value;
-        let uid2 = &result2.calendar.entries[0].value.get(&uid_key).unwrap().value;
+        let uid1 = &result1.calendar.entries[0]
+            .value
+            .get(&uid_key)
+            .unwrap()
+            .value;
+        let uid2 = &result2.calendar.entries[0]
+            .value
+            .get(&uid_key)
+            .unwrap()
+            .value;
         assert_eq!(uid1, uid2);
     }
 
@@ -846,7 +874,11 @@ mod tests {
         );
         let result = check(&db, source);
         let uid_key = FieldName::new(&db, "uid".to_string());
-        let uid = &result.calendar.entries[0].value.get(&uid_key).unwrap().value;
+        let uid = &result.calendar.entries[0]
+            .value
+            .get(&uid_key)
+            .unwrap()
+            .value;
         assert_eq!(uid, &Value::String("custom-uid".into()));
     }
 
@@ -865,9 +897,16 @@ mod tests {
         let result = check(&db, source);
         assert!(result.has_errors);
         assert!(
-            result.diagnostics.iter().any(|d| d.message.contains("not a valid UUID")),
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("not a valid UUID")),
             "expected UUID error, got: {:?}",
-            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            result
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -908,11 +947,18 @@ mod tests {
             "#,
         );
         let result = check(&db, source);
-        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        assert!(
+            !result.has_errors,
+            "unexpected errors: {:?}",
+            result.diagnostics
+        );
         // Validation should not inject an occurrences field.
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
-        assert!(entry.get(&occ_key).is_none(), "should not have occurrences field");
+        assert!(
+            entry.get(&occ_key).is_none(),
+            "should not have occurrences field"
+        );
     }
 
     #[test]
@@ -947,9 +993,16 @@ mod tests {
         let result = check(&db, source);
         assert!(result.has_errors);
         assert!(
-            result.diagnostics.iter().any(|d| d.message.contains("recurrence requires")),
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("recurrence requires")),
             "expected recurrence-requires-start error, got: {:?}",
-            result.diagnostics.iter().map(|d| &d.message).collect::<Vec<_>>()
+            result
+                .diagnostics
+                .iter()
+                .map(|d| &d.message)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -967,9 +1020,16 @@ mod tests {
         );
         let result = check(&db, source);
         // Infinite rules are valid per r[record.rrule.eval.infinite] — no warnings or errors.
-        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
         assert!(
-            !result.diagnostics.iter().any(|d| d.message.contains("infinite recurrence")),
+            !result.has_errors,
+            "unexpected errors: {:?}",
+            result.diagnostics
+        );
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|d| d.message.contains("infinite recurrence")),
             "should not warn about infinite recurrence"
         );
     }
@@ -987,10 +1047,17 @@ mod tests {
             "#,
         );
         let result = check(&db, source);
-        assert!(!result.has_errors, "unexpected errors: {:?}", result.diagnostics);
+        assert!(
+            !result.has_errors,
+            "unexpected errors: {:?}",
+            result.diagnostics
+        );
         // Validation should not inject an occurrences field.
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendar.entries[0].value;
-        assert!(entry.get(&occ_key).is_none(), "should not have occurrences field");
+        assert!(
+            entry.get(&occ_key).is_none(),
+            "should not have occurrences field"
+        );
     }
 }

@@ -81,8 +81,7 @@ impl Iterator for OccurrenceIter<'_> {
                 // Try a few more periods before giving up (sparse rules may skip periods)
                 let mut tries = 0;
                 while self.buffer.is_empty() && tries < 1000 {
-                    self.buffer =
-                        expand::expand_period(self.rule, self.dtstart, self.period_index);
+                    self.buffer = expand::expand_period(self.rule, self.dtstart, self.period_index);
                     self.buffer_pos = 0;
                     self.period_index += 1;
                     tries += 1;
@@ -233,13 +232,16 @@ mod tests {
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 1, 9, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 1, 9, 0, 0),
-            dt(2024, 1, 2, 9, 0, 0),
-            dt(2024, 1, 3, 9, 0, 0),
-            dt(2024, 1, 4, 9, 0, 0),
-            dt(2024, 1, 5, 9, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 1, 9, 0, 0),
+                dt(2024, 1, 2, 9, 0, 0),
+                dt(2024, 1, 3, 9, 0, 0),
+                dt(2024, 1, 4, 9, 0, 0),
+                dt(2024, 1, 5, 9, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -251,11 +253,14 @@ mod tests {
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 1, 9, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 1, 9, 0, 0),
-            dt(2024, 1, 2, 9, 0, 0),
-            dt(2024, 1, 3, 9, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 1, 9, 0, 0),
+                dt(2024, 1, 2, 9, 0, 0),
+                dt(2024, 1, 3, 9, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -264,23 +269,35 @@ mod tests {
             frequency: Frequency::Weekly,
             termination: Termination::Count(6),
             by_day: vec![
-                NDay { day: Weekday::Monday, nth: None },
-                NDay { day: Weekday::Wednesday, nth: None },
-                NDay { day: Weekday::Friday, nth: None },
+                NDay {
+                    day: Weekday::Monday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Wednesday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Friday,
+                    nth: None,
+                },
             ],
             ..Default::default()
         };
         // 2024-01-01 is Monday
         let occ = Occurrences::new(rule, dt(2024, 1, 1, 9, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 1, 9, 0, 0),
-            dt(2024, 1, 3, 9, 0, 0),
-            dt(2024, 1, 5, 9, 0, 0),
-            dt(2024, 1, 8, 9, 0, 0),
-            dt(2024, 1, 10, 9, 0, 0),
-            dt(2024, 1, 12, 9, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 1, 9, 0, 0),
+                dt(2024, 1, 3, 9, 0, 0),
+                dt(2024, 1, 5, 9, 0, 0),
+                dt(2024, 1, 8, 9, 0, 0),
+                dt(2024, 1, 10, 9, 0, 0),
+                dt(2024, 1, 12, 9, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -293,11 +310,14 @@ mod tests {
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 15, 10, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 15, 10, 0, 0),
-            dt(2024, 2, 15, 10, 0, 0),
-            dt(2024, 3, 15, 10, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 15, 10, 0, 0),
+                dt(2024, 2, 15, 10, 0, 0),
+                dt(2024, 3, 15, 10, 0, 0),
+            ]
+        );
     }
 
     // r[verify record.rrule.eval.negative.weekday]
@@ -306,16 +326,22 @@ mod tests {
         let rule = RecurrenceRule {
             frequency: Frequency::Monthly,
             termination: Termination::Count(3),
-            by_day: vec![NDay { day: Weekday::Friday, nth: Some(-1) }],
+            by_day: vec![NDay {
+                day: Weekday::Friday,
+                nth: Some(-1),
+            }],
             ..Default::default()
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 26, 10, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 26, 10, 0, 0),
-            dt(2024, 2, 23, 10, 0, 0),
-            dt(2024, 3, 29, 10, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 26, 10, 0, 0),
+                dt(2024, 2, 23, 10, 0, 0),
+                dt(2024, 3, 29, 10, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -323,17 +349,23 @@ mod tests {
         let rule = RecurrenceRule {
             frequency: Frequency::Yearly,
             termination: Termination::Count(3),
-            by_month: vec![ByMonth { month: 3, leap: false }],
+            by_month: vec![ByMonth {
+                month: 3,
+                leap: false,
+            }],
             by_month_day: vec![15],
             ..Default::default()
         };
         let occ = Occurrences::new(rule, dt(2024, 3, 15, 0, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 3, 15, 0, 0, 0),
-            dt(2025, 3, 15, 0, 0, 0),
-            dt(2026, 3, 15, 0, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 3, 15, 0, 0, 0),
+                dt(2025, 3, 15, 0, 0, 0),
+                dt(2026, 3, 15, 0, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -342,17 +374,26 @@ mod tests {
         let rule = RecurrenceRule {
             frequency: Frequency::Yearly,
             termination: Termination::Count(3),
-            by_month: vec![ByMonth { month: 11, leap: false }],
-            by_day: vec![NDay { day: Weekday::Thursday, nth: Some(4) }],
+            by_month: vec![ByMonth {
+                month: 11,
+                leap: false,
+            }],
+            by_day: vec![NDay {
+                day: Weekday::Thursday,
+                nth: Some(4),
+            }],
             ..Default::default()
         };
         let occ = Occurrences::new(rule, dt(2024, 11, 28, 0, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 11, 28, 0, 0, 0),
-            dt(2025, 11, 27, 0, 0, 0),
-            dt(2026, 11, 26, 0, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 11, 28, 0, 0, 0),
+                dt(2025, 11, 27, 0, 0, 0),
+                dt(2026, 11, 26, 0, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -361,17 +402,23 @@ mod tests {
             frequency: Frequency::Weekly,
             interval: 2,
             termination: Termination::Count(4),
-            by_day: vec![NDay { day: Weekday::Tuesday, nth: None }],
+            by_day: vec![NDay {
+                day: Weekday::Tuesday,
+                nth: None,
+            }],
             ..Default::default()
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 2, 9, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 2, 9, 0, 0),
-            dt(2024, 1, 16, 9, 0, 0),
-            dt(2024, 1, 30, 9, 0, 0),
-            dt(2024, 2, 13, 9, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 2, 9, 0, 0),
+                dt(2024, 1, 16, 9, 0, 0),
+                dt(2024, 1, 30, 9, 0, 0),
+                dt(2024, 2, 13, 9, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -424,13 +471,16 @@ mod tests {
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 31, 10, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 31, 10, 0, 0),
-            dt(2024, 3, 31, 10, 0, 0),
-            dt(2024, 5, 31, 10, 0, 0),
-            dt(2024, 7, 31, 10, 0, 0),
-            dt(2024, 8, 31, 10, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 31, 10, 0, 0),
+                dt(2024, 3, 31, 10, 0, 0),
+                dt(2024, 5, 31, 10, 0, 0),
+                dt(2024, 7, 31, 10, 0, 0),
+                dt(2024, 8, 31, 10, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -442,13 +492,16 @@ mod tests {
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 1, 0, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 1, 1, 0, 0, 0),
-            dt(2024, 1, 1, 0, 0, 1),
-            dt(2024, 1, 1, 0, 0, 2),
-            dt(2024, 1, 1, 0, 0, 3),
-            dt(2024, 1, 1, 0, 0, 4),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 1, 0, 0, 0),
+                dt(2024, 1, 1, 0, 0, 1),
+                dt(2024, 1, 1, 0, 0, 2),
+                dt(2024, 1, 1, 0, 0, 3),
+                dt(2024, 1, 1, 0, 0, 4),
+            ]
+        );
     }
 
     #[test]
@@ -457,18 +510,24 @@ mod tests {
         let rule = RecurrenceRule {
             frequency: Frequency::Yearly,
             termination: Termination::Count(3),
-            by_month: vec![ByMonth { month: 2, leap: false }],
+            by_month: vec![ByMonth {
+                month: 2,
+                leap: false,
+            }],
             by_month_day: vec![29],
             skip: Skip::Omit,
             ..Default::default()
         };
         let occ = Occurrences::new(rule, dt(2024, 2, 29, 0, 0, 0));
         let dates: Vec<_> = occ.iter().collect();
-        assert_eq!(dates, vec![
-            dt(2024, 2, 29, 0, 0, 0),
-            dt(2028, 2, 29, 0, 0, 0),
-            dt(2032, 2, 29, 0, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 2, 29, 0, 0, 0),
+                dt(2028, 2, 29, 0, 0, 0),
+                dt(2032, 2, 29, 0, 0, 0),
+            ]
+        );
     }
 
     #[test]
@@ -477,7 +536,10 @@ mod tests {
         let rule = RecurrenceRule {
             frequency: Frequency::Daily,
             termination: Termination::Count(5),
-            by_month: vec![ByMonth { month: 1, leap: false }],
+            by_month: vec![ByMonth {
+                month: 1,
+                leap: false,
+            }],
             ..Default::default()
         };
         let occ = Occurrences::new(rule, dt(2024, 1, 29, 0, 0, 0));
@@ -498,11 +560,26 @@ mod tests {
             frequency: Frequency::Monthly,
             termination: Termination::Count(3),
             by_day: vec![
-                NDay { day: Weekday::Monday, nth: None },
-                NDay { day: Weekday::Tuesday, nth: None },
-                NDay { day: Weekday::Wednesday, nth: None },
-                NDay { day: Weekday::Thursday, nth: None },
-                NDay { day: Weekday::Friday, nth: None },
+                NDay {
+                    day: Weekday::Monday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Tuesday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Wednesday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Thursday,
+                    nth: None,
+                },
+                NDay {
+                    day: Weekday::Friday,
+                    nth: None,
+                },
             ],
             by_set_position: vec![-1],
             ..Default::default()
@@ -512,10 +589,13 @@ mod tests {
         // Last weekday of Jan 2024 = Wed Jan 31
         // Last weekday of Feb 2024 = Thu Feb 29
         // Last weekday of Mar 2024 = Fri Mar 29
-        assert_eq!(dates, vec![
-            dt(2024, 1, 31, 10, 0, 0),
-            dt(2024, 2, 29, 10, 0, 0),
-            dt(2024, 3, 29, 10, 0, 0),
-        ]);
+        assert_eq!(
+            dates,
+            vec![
+                dt(2024, 1, 31, 10, 0, 0),
+                dt(2024, 2, 29, 10, 0, 0),
+                dt(2024, 3, 29, 10, 0, 0),
+            ]
+        );
     }
 }

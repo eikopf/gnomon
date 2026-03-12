@@ -147,8 +147,7 @@ fn lex_triple_string(lex: &mut logos::Lexer<'_, LogosToken>) -> bool {
             i += 2;
             continue;
         }
-        if i + 2 < bytes.len() && bytes[i] == b'"' && bytes[i + 1] == b'"' && bytes[i + 2] == b'"'
-        {
+        if i + 2 < bytes.len() && bytes[i] == b'"' && bytes[i + 1] == b'"' && bytes[i + 2] == b'"' {
             lex.bump(i + 3);
             return true;
         }
@@ -670,10 +669,7 @@ mod tests {
     fn triple_string_embedded_quotes() {
         let input = r#""""he said "hi" ok""""#;
         let toks = kinds(input);
-        assert_eq!(
-            toks,
-            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]
-        );
+        assert_eq!(toks, vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]);
     }
 
     // r[verify lexer.triple-string.embedded-quotes]
@@ -681,10 +677,7 @@ mod tests {
     fn triple_string_embedded_double_quotes() {
         let input = r#""""a ""b"" c""""#;
         let toks = kinds(input);
-        assert_eq!(
-            toks,
-            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]
-        );
+        assert_eq!(toks, vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]);
     }
 
     #[test]
@@ -696,10 +689,7 @@ mod tests {
     #[test]
     fn triple_string_empty() {
         let toks = kinds(r#""""""""#);
-        assert_eq!(
-            toks,
-            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, r#""""""""#)]
-        );
+        assert_eq!(toks, vec![(SyntaxKind::TRIPLE_STRING_LITERAL, r#""""""""#)]);
     }
 
     #[test]
@@ -719,10 +709,7 @@ mod tests {
         // A \" inside should not end the string
         let input = r#""""a\"b""""#;
         let toks = kinds(input);
-        assert_eq!(
-            toks,
-            vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]
-        );
+        assert_eq!(toks, vec![(SyntaxKind::TRIPLE_STRING_LITERAL, input)]);
     }
 
     // ── Complete token sequence ──────────────────────────────────

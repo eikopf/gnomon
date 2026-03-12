@@ -289,9 +289,7 @@ impl ImportExpr {
             .find(|t| {
                 matches!(
                     t.kind(),
-                    SyntaxKind::PATH_LITERAL
-                        | SyntaxKind::URI_LITERAL
-                        | SyntaxKind::STRING_LITERAL
+                    SyntaxKind::PATH_LITERAL | SyntaxKind::URI_LITERAL | SyntaxKind::STRING_LITERAL
                 )
             })
     }
@@ -304,9 +302,7 @@ impl ImportExpr {
             .find(|t| {
                 matches!(
                     t.kind(),
-                    SyntaxKind::GNOMON_KW
-                        | SyntaxKind::ICALENDAR_KW
-                        | SyntaxKind::JSCALENDAR_KW
+                    SyntaxKind::GNOMON_KW | SyntaxKind::ICALENDAR_KW | SyntaxKind::JSCALENDAR_KW
                 )
             })
     }

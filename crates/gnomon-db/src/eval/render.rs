@@ -126,10 +126,8 @@ impl<'db> RenderWithDb<'db> for PathSegment<'db> {
 impl<'db> RenderWithDb<'db> for FieldPath<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
         for (i, segment) in self.0.iter().enumerate() {
-            if i > 0 {
-                if matches!(segment, PathSegment::Field(_)) {
-                    write!(f, ".")?;
-                }
+            if i > 0 && matches!(segment, PathSegment::Field(_)) {
+                write!(f, ".")?;
             }
             segment.render_fmt(f, db)?;
         }
@@ -224,10 +222,13 @@ mod tests {
 
     #[test]
     fn empty_calendar() {
-        check("calendar {}", expect![[r#"
+        check(
+            "calendar {}",
+            expect![[r#"
             [{
                 type: "calendar",
-            }]"#]]);
+            }]"#]],
+        );
     }
 
     // r[verify cli.subcommand.eval.output.string]

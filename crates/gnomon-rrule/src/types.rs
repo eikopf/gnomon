@@ -93,17 +93,12 @@ pub enum Skip {
     Forward,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum Termination {
+    #[default]
     None,
     Count(u64),
     Until(DateTime),
-}
-
-impl Default for Termination {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone)]

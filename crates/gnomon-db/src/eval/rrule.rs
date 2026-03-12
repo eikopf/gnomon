@@ -9,11 +9,7 @@ use super::types::{Calendar, Record, Value};
 use crate::queries::{Diagnostic, Severity};
 
 /// Extract a field value from a record by name.
-fn get_field<'db>(
-    db: &'db dyn crate::Db,
-    record: &Record<'db>,
-    name: &str,
-) -> Option<Value<'db>> {
+fn get_field<'db>(db: &'db dyn crate::Db, record: &Record<'db>, name: &str) -> Option<Value<'db>> {
     let key = FieldName::new(db, name.to_string());
     record.get(&key).map(|b| b.value.clone())
 }
@@ -59,8 +55,8 @@ fn record_to_datetime(
         _ => return Err("missing or invalid 'time.second'".into()),
     };
 
-    let date = jiff::civil::Date::new(year, month, day)
-        .map_err(|e| format!("invalid date: {e}"))?;
+    let date =
+        jiff::civil::Date::new(year, month, day).map_err(|e| format!("invalid date: {e}"))?;
     let time = jiff::civil::Time::new(hour, minute, second, 0)
         .map_err(|e| format!("invalid time: {e}"))?;
     Ok(jiff::civil::DateTime::from_parts(date, time))
@@ -389,11 +385,11 @@ pub fn validate_entry_recurrences<'db>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::eval::interned::{DeclId, DeclKind, FieldPath};
+    use crate::Database;
     use crate::eval::desugar;
+    use crate::eval::interned::{DeclId, DeclKind, FieldPath};
     use crate::eval::types::{Blame, Blamed};
     use crate::input::SourceFile;
-    use crate::Database;
     use std::path::PathBuf;
 
     fn test_blame(db: &Database) -> Blame<'_> {
@@ -405,6 +401,7 @@ mod tests {
         }
     }
 
+    #[expect(clippy::too_many_arguments)]
     fn make_datetime_record<'db>(
         db: &'db Database,
         blame: &Blame<'db>,
@@ -426,8 +423,14 @@ mod tests {
             ("second", Value::Integer(second)),
         ];
         let fields: Vec<(&str, Value<'db>)> = vec![
-            ("date", Value::Record(desugar::make_record(db, &date_fields, blame))),
-            ("time", Value::Record(desugar::make_record(db, &time_fields, blame))),
+            (
+                "date",
+                Value::Record(desugar::make_record(db, &date_fields, blame)),
+            ),
+            (
+                "time",
+                Value::Record(desugar::make_record(db, &time_fields, blame)),
+            ),
         ];
         desugar::make_record(db, &fields, blame)
     }
@@ -452,9 +455,7 @@ mod tests {
     fn simple_daily_rule_conversion() {
         let db = Database::default();
         let blame = test_blame(&db);
-        let fields: Vec<(&str, Value<'_>)> = vec![
-            ("frequency", Value::String("daily".into())),
-        ];
+        let fields: Vec<(&str, Value<'_>)> = vec![("frequency", Value::String("daily".into()))];
         let record = desugar::make_record(&db, &fields, &blame);
 
         let rule = record_to_rule(&db, &record).unwrap();
@@ -470,17 +471,18 @@ mod tests {
         let db = Database::default();
         let blame = test_blame(&db);
 
-        let nday_fields: Vec<(&str, Value<'_>)> = vec![
-            ("day", Value::String("monday".into())),
-        ];
+        let nday_fields: Vec<(&str, Value<'_>)> = vec![("day", Value::String("monday".into()))];
         let nday_record = desugar::make_record(&db, &nday_fields, &blame);
 
         let fields: Vec<(&str, Value<'_>)> = vec![
             ("frequency", Value::String("weekly".into())),
-            ("by_day", Value::List(vec![Blamed {
-                value: Value::Record(nday_record),
-                blame: blame.clone(),
-            }])),
+            (
+                "by_day",
+                Value::List(vec![Blamed {
+                    value: Value::Record(nday_record),
+                    blame: blame.clone(),
+                }]),
+            ),
         ];
         let record = desugar::make_record(&db, &fields, &blame);
 
@@ -534,9 +536,7 @@ mod tests {
     fn invalid_frequency_error() {
         let db = Database::default();
         let blame = test_blame(&db);
-        let fields: Vec<(&str, Value<'_>)> = vec![
-            ("frequency", Value::String("biweekly".into())),
-        ];
+        let fields: Vec<(&str, Value<'_>)> = vec![("frequency", Value::String("biweekly".into()))];
         let record = desugar::make_record(&db, &fields, &blame);
 
         let err = record_to_rule(&db, &record).unwrap_err();

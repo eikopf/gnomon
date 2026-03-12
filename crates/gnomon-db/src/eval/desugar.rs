@@ -231,9 +231,9 @@ fn weekday_to_name(kind: SyntaxKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Database;
     use crate::eval::interned::{DeclId, DeclKind, FieldPath};
     use crate::input::SourceFile;
-    use crate::Database;
     use std::path::PathBuf;
 
     fn test_blame(db: &Database) -> Blame<'_> {
@@ -401,8 +401,11 @@ mod tests {
     fn every_day_desugar() {
         let db = Database::default();
         let blame = test_blame(&db);
-        let source =
-            SourceFile::new(&db, PathBuf::from("t.gnomon"), "event @e { rrule: every day }".into());
+        let source = SourceFile::new(
+            &db,
+            PathBuf::from("t.gnomon"),
+            "event @e { rrule: every day }".into(),
+        );
         let parse_result = crate::parse(&db, source);
         let tree = parse_result.tree(&db);
         let expr = tree.body_exprs().next().unwrap();

@@ -2,11 +2,13 @@ pub mod eval;
 pub mod input;
 pub mod queries;
 
-pub use eval::{EvalOptions, EvalResult, ReplEvalResult, evaluate, evaluate_repl_input, evaluate_with_options};
 pub use eval::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
 pub use eval::merge::{CheckResult, validate_calendar};
-pub use eval::render::{Rendered, RenderWithDb};
-pub use eval::types::{Blamed, Blame, Calendar, Record, Value};
+pub use eval::render::{RenderWithDb, Rendered};
+pub use eval::types::{Blame, Blamed, Calendar, Record, Value};
+pub use eval::{
+    EvalOptions, EvalResult, ReplEvalResult, evaluate, evaluate_repl_input, evaluate_with_options,
+};
 pub use input::SourceFile;
 pub use queries::{Diagnostic, ParseResult, Severity, SyntaxCheckResult, check_syntax, parse};
 pub use rowan::TextRange;
@@ -105,8 +107,9 @@ mod tests {
         assert!(result.parse_has_errors(&db));
         let diagnostics = check_syntax::accumulated::<Diagnostic>(&db, source);
         assert!(
-            diagnostics.iter().any(|d| d.message.contains("expected")
-                || d.message.contains("declaration")),
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("expected") || d.message.contains("declaration")),
             "should have parse error, got: {diagnostics:?}"
         );
         assert!(

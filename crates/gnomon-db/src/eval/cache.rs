@@ -29,7 +29,10 @@ struct CacheMeta {
 /// Outcome of a cache lookup.
 pub enum CacheLookup {
     /// Cached content is fresh.
-    Hit { content: String, content_type: String },
+    Hit {
+        content: String,
+        content_type: String,
+    },
     /// No cache entry or entry is stale.
     Miss,
 }
