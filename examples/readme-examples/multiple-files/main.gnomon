@@ -1,0 +1,5 @@
+calendar {
+    uid: "31169090-6d76-4774-aace-30bc978b1102",
+    time_zone: "America/New_York",
+    entries: import ./2026.gnomon
+}

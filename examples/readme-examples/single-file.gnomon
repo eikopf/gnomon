@@ -1,0 +1,16 @@
+calendar {
+    uid: "31169090-6d76-4774-aace-30bc978b1102",
+    title: "Work",
+    time_zone: "America/New_York",
+    entries: [
+        event @standup 2026-03-11T09:00 30m "Daily Standup" {
+            recur: every day until 2026-12-31,
+        },
+
+        event @board-meeting 2026-03-20T10:00 2h "Board Meeting",
+        
+        task @taxes 2026-04-15T23:59 "File Taxes" {
+            priority: 1,
+        }
+    ]
+}
