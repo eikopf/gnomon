@@ -1,6 +1,11 @@
 [workspace]
 members = ["crates/gnomon-parser", "crates/gnomon-db", "crates/gnomon-import", "crates/gnomon-rrule"]
 
+[workspace.lints.clippy]
+# RESTRICTIONS
+allow_attributes = "deny"
+mod_module_files = "deny"
+
 [package]
 name = "gnomon"
 version = "0.1.0"
@@ -17,3 +22,6 @@ rustyline = "15"
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
+
+[lints]
+workspace = true

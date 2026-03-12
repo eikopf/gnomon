@@ -8,3 +8,6 @@ jiff = "0.2"
 
 [dev-dependencies]
 expect-test = "1"
+
+[lints]
+workspace = true

@@ -19,3 +19,6 @@ etcetera = "0.8"
 [dev-dependencies]
 expect-test = "1"
 tempfile = "3"
+
+[lints]
+workspace = true
