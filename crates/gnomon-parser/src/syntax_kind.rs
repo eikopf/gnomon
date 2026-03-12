@@ -26,12 +26,10 @@ pub enum SyntaxKind {
     BANG,        // !
     BANG_EQ,     // !=
     DOT,         // .
-    HYPHEN,      // -
     PLUS,        // +
     PLUS_PLUS,   // ++
     SLASH,       // /
     SLASH_SLASH, // //
-    AT,          // @
 
     // ── Literals ─────────────────────────────────────────────────────
     INTEGER_LITERAL,
@@ -73,9 +71,6 @@ pub enum SyntaxKind {
     ON_KW,
     UNTIL_KW,
     TIMES_KW,
-    OMIT_KW,
-    FORWARD_KW,
-    BACKWARD_KW,
     MONDAY_KW,
     TUESDAY_KW,
     WEDNESDAY_KW,
@@ -83,7 +78,6 @@ pub enum SyntaxKind {
     FRIDAY_KW,
     SATURDAY_KW,
     SUNDAY_KW,
-    LOCAL_KW,
 
     // ── Error token ──────────────────────────────────────────────────
     ERROR,

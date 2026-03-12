@@ -138,12 +138,8 @@ All other keywords are weak.
 > - `on`
 > - `until`
 > - `times`
-> - `omit`
-> - `forward`
-> - `backward`
 > - `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturday`, `sunday`
 > - `gnomon`, `icalendar`, `jscalendar`
-> - `override`
 
 
 ### Names
