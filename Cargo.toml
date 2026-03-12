@@ -6,6 +6,14 @@ members = ["crates/gnomon-parser", "crates/gnomon-db", "crates/gnomon-import", "
 allow_attributes = "deny"
 mod_module_files = "deny"
 
+# PEDANTIC
+cast_lossless = "warn"
+cast_possible_truncation = "deny"
+fn_params_excessive_bools = "warn"
+if_then_some_else_none = "warn"
+ignore_without_reason = "deny"
+ignored_unit_patterns = "deny"
+
 [package]
 name = "gnomon"
 version = "0.1.0"
