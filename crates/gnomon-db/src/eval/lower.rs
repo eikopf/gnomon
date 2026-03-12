@@ -82,6 +82,21 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Seed the environment with bindings from prior REPL inputs.
+    pub fn seed_env(&mut self, bindings: &[(String, Value<'db>)]) {
+        self.env.extend(bindings.iter().cloned());
+    }
+
+    /// Return the current number of environment bindings.
+    pub fn env_len(&self) -> usize {
+        self.env.len()
+    }
+
+    /// Extract bindings added since `start_len`.
+    pub fn env_slice_from(&self, start_len: usize) -> Vec<(String, Value<'db>)> {
+        self.env[start_len..].to_vec()
+    }
+
     /// Lower a source file into a Value.
     ///
     /// File structure: optional `let` bindings, then either declarations or an expression body.

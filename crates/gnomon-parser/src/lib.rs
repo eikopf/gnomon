@@ -64,6 +64,28 @@ pub fn parse(source: &str) -> Parse {
     Parse { green_node, errors }
 }
 
+/// Check whether the input has balanced delimiters.
+///
+/// Returns `true` if all opening delimiters (`{`, `[`, `(`) are matched by
+/// closing delimiters, or if there are excess closing delimiters.
+/// Returns `false` if there are unclosed opening delimiters remaining.
+///
+/// This is intended for REPL multi-line detection: when `false`, the REPL
+/// should prompt for a continuation line.
+pub fn is_balanced(source: &str) -> bool {
+    let preprocessed = preprocess::preprocess(source);
+    let tokens = lexer::lex(&preprocessed);
+    let mut depth: i32 = 0;
+    for tok in &tokens {
+        match tok.kind {
+            SyntaxKind::L_BRACE | SyntaxKind::L_BRACKET | SyntaxKind::L_PAREN => depth += 1,
+            SyntaxKind::R_BRACE | SyntaxKind::R_BRACKET | SyntaxKind::R_PAREN => depth -= 1,
+            _ => {}
+        }
+    }
+    depth <= 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

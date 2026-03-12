@@ -1756,6 +1756,55 @@ The `clean` subcommand removes all cached URI imports from the local cache direc
 r[cli.subcommand.clean]
 The program MUST provide a `clean` subcommand for the root command. When executed, it MUST remove all entries from the URI import cache directory and print the number of entries removed to STDOUT.
 
+#### `repl`
+
+The `repl` subcommand starts an interactive read-eval-print loop. Each line of input is
+parsed and evaluated as a Gnomon expression; the resulting value is printed to STDOUT.
+Let bindings accumulate across inputs, and meta-commands prefixed with `:` control the
+session.
+
+r[cli.subcommand.repl]
+The program MUST provide a `repl` subcommand for the root command.
+
+r[cli.subcommand.repl.prompt]
+The REPL MUST display the prompt `gnomon> ` when waiting for input.
+
+r[cli.subcommand.repl.prompt.continuation]
+When the input is incomplete (unclosed delimiters), the REPL MUST display the continuation prompt `  ...> ` and wait for additional input.
+
+r[cli.subcommand.repl.eval]
+Each complete input MUST be parsed and evaluated as a Gnomon source file body (supporting expressions, let bindings, and declarations). The resulting value MUST be printed to STDOUT using the same rendering rules as the `eval` subcommand.
+
+r[cli.subcommand.repl.let-persist]
+Top-level `let` bindings from previous inputs MUST remain in scope for subsequent inputs.
+
+r[cli.subcommand.repl.import-cwd]
+Import paths in REPL input MUST be resolved relative to the current working directory.
+
+r[cli.subcommand.repl.diagnostics]
+Parse errors and evaluation diagnostics MUST be printed to STDERR. An input that produces errors MUST NOT modify the persistent let-binding environment.
+
+r[cli.subcommand.repl.meta.reset]
+The REPL MUST support a `:reset` meta-command that clears all persistent let bindings.
+
+r[cli.subcommand.repl.meta.type]
+The REPL MUST support a `:type <expr>` meta-command that evaluates the expression and prints its type name (e.g. `string`, `integer`, `record`, `list`) to STDOUT.
+
+r[cli.subcommand.repl.meta.parse]
+The REPL MUST support a `:parse <expr>` meta-command that parses the expression and prints the debug syntax tree to STDOUT without evaluating it.
+
+r[cli.subcommand.repl.meta.help]
+The REPL MUST support a `:help` meta-command that prints a list of available meta-commands.
+
+r[cli.subcommand.repl.meta.quit]
+The REPL MUST support `:quit` and `:q` meta-commands to exit the REPL. Pressing Ctrl-D (EOF) MUST also exit.
+
+r[cli.subcommand.repl.multiline]
+The REPL MUST detect incomplete input by tracking unmatched opening delimiters (`{`, `[`, `(`) in the token stream and continue reading on the next line.
+
+r[cli.subcommand.repl.history]
+The REPL MUST support line-editing history across the session.
+
 #### Reserved Subcommands
 
 We reserve some identifiers for future use as subcommands.

@@ -1,3 +1,5 @@
+mod repl;
+
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -69,6 +71,9 @@ enum Command {
     // r[impl cli.subcommand.clean]
     /// Remove all cached URI imports.
     Clean,
+    // r[impl cli.subcommand.repl]
+    /// Start an interactive REPL session.
+    Repl,
 }
 
 fn main() -> ExitCode {
@@ -289,6 +294,7 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
         }
+        Command::Repl => repl::run_repl(),
         // r[impl cli.subcommand.clean]
         Command::Clean => {
             match gnomon_db::eval::cache::clean() {
