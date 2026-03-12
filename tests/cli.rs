@@ -305,11 +305,11 @@ fn malformed_utf8_produces_error() {
 
 // ── Reserved subcommands ────────────────────────────────────
 
-// r[verify cli.subcommand.reserved+4]
+// r[verify cli.subcommand.reserved+5]
 #[test]
 fn reserved_subcommands_rejected() {
     for name in [
-        "about", "compile", "daemon", "fetch", "lsp", "merge", "query", "run",
+        "about", "daemon", "fetch", "lsp", "merge", "query", "run",
     ] {
         gnomon().arg(name).assert().failure();
     }
@@ -426,4 +426,115 @@ fn clean_subcommand() {
         .assert()
         .success()
         .stdout(predicates::str::contains("cached URI import(s) removed"));
+}
+
+// ── Compile subcommand ──────────────────────────────────────
+
+// r[verify cli.subcommand.compile]
+// r[verify cli.subcommand.compile.output]
+#[test]
+fn compile_ical_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "project.gnomon",
+        r#"
+calendar {
+    uid: "550e8400-e29b-41d4-a716-446655440000"
+}
+event @standup 2026-03-15T09:00 1h "Standup"
+"#,
+    );
+    gnomon()
+        .args(["compile", file.to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("BEGIN:VCALENDAR"))
+        .stdout(predicate::str::contains("BEGIN:VEVENT"))
+        .stdout(predicate::str::contains("SUMMARY:Standup"))
+        .stdout(predicate::str::contains("END:VEVENT"))
+        .stdout(predicate::str::contains("END:VCALENDAR"));
+}
+
+// r[verify cli.subcommand.compile.format]
+#[test]
+fn compile_jscal_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "project.gnomon",
+        r#"
+calendar {
+    uid: "550e8400-e29b-41d4-a716-446655440000"
+}
+event @meeting 2026-03-15T14:00 1h "Meeting"
+"#,
+    );
+    gnomon()
+        .args(["compile", file.to_str().unwrap(), "--format", "jscal"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\"@type\": \"Event\""))
+        .stdout(predicate::str::contains("Meeting"));
+}
+
+// r[verify cli.subcommand.compile.no-file]
+#[test]
+fn compile_missing_file() {
+    gnomon()
+        .args(["compile", "/nonexistent/path.gnomon"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("could not read"));
+}
+
+// r[verify cli.subcommand.compile.validate]
+#[test]
+fn compile_validation_error_exits_nonzero() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write_temp_file(
+        &dir,
+        "project.gnomon",
+        r#"
+event @orphan 2026-03-15T09:00 1h "No Calendar"
+"#,
+    );
+    gnomon()
+        .args(["compile", file.to_str().unwrap()])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("error"));
+}
+
+// r[verify cli.subcommand.compile.format]
+#[test]
+fn compile_invalid_format_rejected() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = write_temp_file(&dir, "project.gnomon", "calendar { uid: \"abc\" }");
+    gnomon()
+        .args(["compile", file.to_str().unwrap(), "--format", "xml"])
+        .assert()
+        .failure();
+}
+
+// r[verify cli.subcommand.compile.unused]
+#[test]
+fn compile_unused_file_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    let _root = write_temp_file(
+        &dir,
+        "project.gnomon",
+        r#"
+calendar {
+    uid: "550e8400-e29b-41d4-a716-446655440000"
+}
+event @test 2026-03-15T09:00 1h "Test"
+"#,
+    );
+    let _unused = write_temp_file(&dir, "unused.gnomon", "event @orphan 2026-01-01T00:00 1h \"Orphan\"");
+    gnomon()
+        .args(["compile", _root.to_str().unwrap()])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("not imported"));
 }

@@ -7,9 +7,10 @@ use std::process::ExitCode;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use gnomon_db::eval::EvalOptions;
 use gnomon_db::{
-    Database, Diagnostic, RenderWithDb, SourceFile, check_syntax, evaluate_with_options, parse,
-    validate_calendar,
+    Database, Diagnostic, RenderWithDb, SourceFile, calendar_to_import_values, check_syntax,
+    evaluate_with_options, parse, validate_calendar,
 };
+use gnomon_export::{emit_icalendar, emit_jscalendar};
 
 // r[impl cli.root]
 // r[impl cli.syntax]
@@ -30,7 +31,7 @@ struct Cli {
 // r[impl cli.subcommand.help.root]
 // r[impl cli.subcommand.help.penultimate]
 // r[impl cli.subcommand.order]
-// r[impl cli.subcommand.reserved+4]
+// r[impl cli.subcommand.reserved+5]
 #[derive(Subcommand)]
 enum Command {
     // r[impl cli.subcommand.parse]
@@ -68,12 +69,45 @@ enum Command {
         #[arg(long)]
         refresh: bool,
     },
+    // r[impl cli.subcommand.compile]
+    /// Compile a .gnomon calendar project to iCalendar or JSCalendar.
+    Compile {
+        /// Path to the root .gnomon file.
+        file: PathBuf,
+
+        // r[impl cli.subcommand.compile.format]
+        /// Output format: ical (default) or jscal.
+        #[arg(long, default_value = "ical")]
+        format: ExportFormat,
+
+        // r[impl cli.subcommand.compile.refresh]
+        /// Force re-fetching all URI imports, bypassing the cache.
+        #[arg(long)]
+        refresh: bool,
+    },
     // r[impl cli.subcommand.clean]
     /// Remove all cached URI imports.
     Clean,
     // r[impl cli.subcommand.repl]
     /// Start an interactive REPL session.
     Repl,
+}
+
+#[derive(Clone, Debug)]
+enum ExportFormat {
+    Ical,
+    Jscal,
+}
+
+impl std::str::FromStr for ExportFormat {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ical" => Ok(ExportFormat::Ical),
+            "jscal" => Ok(ExportFormat::Jscal),
+            _ => Err(format!("unknown format '{s}': expected 'ical' or 'jscal'")),
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -287,6 +321,128 @@ fn main() -> ExitCode {
             } else {
                 ExitCode::SUCCESS
             }
+        }
+        // r[impl cli.subcommand.compile]
+        Command::Compile {
+            file,
+            format,
+            refresh,
+        } => {
+            // r[impl cli.subcommand.compile.no-file]
+            let text = match std::fs::read_to_string(&file) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: could not read {}: {e}", file.display());
+                    return ExitCode::FAILURE;
+                }
+            };
+
+            let db = Database::default();
+            let root_path = file.canonicalize().unwrap_or_else(|_| file.clone());
+            let source = SourceFile::new(&db, root_path.clone(), text);
+            let options = EvalOptions {
+                force_refresh: refresh,
+            };
+
+            // r[impl cli.subcommand.compile.validate]
+            // Run the full check pipeline.
+            let eval_result = evaluate_with_options(&db, source, &options);
+            let imported_files = eval_result.imported_files.clone();
+
+            let check_result =
+                validate_calendar(&db, source, eval_result.value, eval_result.diagnostics);
+
+            let mut diagnostics = check_result.diagnostics;
+
+            // r[impl cli.subcommand.compile.unused]
+            // Detect unused .gnomon files in the project directory.
+            if let Some(project_dir) = root_path.parent() {
+                let mut known: HashSet<PathBuf> = HashSet::new();
+                known.insert(root_path.clone());
+                for p in &imported_files {
+                    if let Ok(canon) = p.canonicalize() {
+                        known.insert(canon);
+                    } else {
+                        known.insert(p.clone());
+                    }
+                }
+
+                for found in find_gnomon_files(project_dir) {
+                    let canon = found.canonicalize().unwrap_or_else(|_| found.clone());
+                    if !known.contains(&canon) {
+                        diagnostics.push(Diagnostic {
+                            source,
+                            range: gnomon_db::TextRange::default(),
+                            severity: gnomon_db::Severity::Warning,
+                            message: format!(
+                                "file {} is not imported (directly or indirectly) by the root file",
+                                found.display()
+                            ),
+                        });
+                    }
+                }
+            }
+
+            diagnostics.sort_by_key(|d| (d.source.path(&db).clone(), d.range.start()));
+
+            let has_errors = print_diagnostics(&db, &diagnostics);
+
+            if has_errors {
+                return ExitCode::FAILURE;
+            }
+
+            // r[impl cli.subcommand.compile.output]
+            // Compile each calendar and write output to STDOUT.
+            let mut outputs: Vec<String> = Vec::new();
+            for calendar in &check_result.calendars {
+                let (cal_record, entries) = calendar_to_import_values(&db, calendar);
+                let result = match format {
+                    ExportFormat::Ical => emit_icalendar(&cal_record, &entries),
+                    ExportFormat::Jscal => emit_jscalendar(&cal_record, &entries),
+                };
+                match result {
+                    Ok(s) => outputs.push(s),
+                    Err(e) => {
+                        eprintln!("error: export failed: {e}");
+                        return ExitCode::FAILURE;
+                    }
+                }
+            }
+
+            use std::io::Write;
+            let out = std::io::stdout();
+            let mut lock = out.lock();
+            match format {
+                ExportFormat::Ical => {
+                    // For iCal: concatenate VCALENDAR outputs.
+                    for s in &outputs {
+                        let _ = write!(lock, "{s}");
+                    }
+                }
+                ExportFormat::Jscal => {
+                    // For JSCal with multiple calendars: wrap in outer array.
+                    if outputs.len() == 1 {
+                        let _ = writeln!(lock, "{}", outputs[0]);
+                    } else {
+                        // Parse each calendar's JSON, combine into single array.
+                        let mut all: Vec<serde_json::Value> = Vec::new();
+                        for s in &outputs {
+                            match serde_json::from_str::<serde_json::Value>(s) {
+                                Ok(serde_json::Value::Array(arr)) => all.extend(arr),
+                                Ok(val) => all.push(val),
+                                Err(e) => {
+                                    eprintln!("error: invalid JSON output: {e}");
+                                    return ExitCode::FAILURE;
+                                }
+                            }
+                        }
+                        let combined = serde_json::to_string_pretty(&all).unwrap();
+                        let _ = writeln!(lock, "{combined}");
+                    }
+                }
+            }
+
+            ExitCode::SUCCESS
         }
         Command::Repl => repl::run_repl(),
         // r[impl cli.subcommand.clean]

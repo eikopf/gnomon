@@ -1120,7 +1120,7 @@ mod tests {
             crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
         // Shape diagnostics are appended after validation diagnostics;
         // filter to only shape-related ones by re-running the check.
-        let diags = check_calendar_shape(db, &result.calendar, source);
+        let diags = check_calendar_shape(db, &result.calendars[0], source);
         diags.iter().map(|d| d.message.clone()).collect()
     }
 

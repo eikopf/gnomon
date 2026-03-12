@@ -1,0 +1,16 @@
+[package]
+name = "gnomon-export"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gnomon-import = { path = "../gnomon-import" }
+calico = "0.5"
+calendar-types = "0.1"
+serde_json = "1"
+
+[dev-dependencies]
+expect-test = "1"
+
+[lints]
+workspace = true

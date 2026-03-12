@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/gnomon-parser", "crates/gnomon-db", "crates/gnomon-import", "crates/gnomon-rrule"]
+members = ["crates/gnomon-parser", "crates/gnomon-db", "crates/gnomon-import", "crates/gnomon-rrule", "crates/gnomon-export"]
 
 [workspace.lints.clippy]
 # RESTRICTIONS
@@ -23,7 +23,9 @@ edition = "2024"
 clap = { version = "4", features = ["derive"] }
 etcetera = "0.8"
 gnomon-db = { path = "crates/gnomon-db" }
+gnomon-export = { path = "crates/gnomon-export" }
 gnomon-parser = { path = "crates/gnomon-parser" }
+serde_json = "1"
 rustyline = "15"
 
 [dev-dependencies]

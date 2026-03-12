@@ -1350,8 +1350,8 @@ The `uid` field follows RFC 5545 in accepting any string. However, implementatio
 
 A calendar may have additional optional metadata fields such as `title`, `description`, `time_zone`, `color`, or other properties. These are not enumerated exhaustively; as with all Gnomon records, calendars are open.
 
-> r[model.calendar.singular+2]
-> A calendar project MUST contain exactly one record with `type` set to `"calendar"` among its top-level values. It is an error if no such record is found. It is an error if more than one is found.
+> r[model.calendar.singular+3]
+> A calendar project MUST contain at least one record with `type` set to `"calendar"` among its top-level values. It is an error if no such record is found.
 
 ### Calendar Entries
 
@@ -1571,6 +1571,53 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 
 > r[model.import.jscalendar.priority]
 > JSCalendar priority values MUST be translated to integers in the range 0–9, using the same mapping as iCalendar priorities.
+
+#### Foreign Format Export
+
+When compiling a Gnomon calendar to a foreign format, each validated `Calendar` value MUST be translated according to the rules in this section. Export mappings are the inverse of the import mappings defined above.
+
+> r[model.export.preserve]
+> Foreign format export MUST NOT silently discard properties that have a defined mapping. All mapped properties present on the source record MUST be translated into the output.
+
+##### iCalendar Export
+
+> r[model.export.icalendar.calendar]
+> An iCalendar export MUST produce one VCALENDAR object per calendar record. The calendar record's properties MUST be mapped to VCALENDAR properties using the inverse of the iCalendar import mapping table. If no `prod_id` field is present, the PRODID MUST be set to `-//gnomon//EN`.
+
+> r[model.export.icalendar.version]
+> Each exported VCALENDAR object MUST include `VERSION:2.0`.
+
+> r[model.export.icalendar.entries]
+> Each entry in the calendar's `entries` list MUST be emitted as a VEVENT component (if `type` is `"event"`) or a VTODO component (if `type` is `"task"`). Entries with unrecognized type values MUST be silently skipped.
+
+> r[model.export.icalendar.event]
+> An event record MUST be translated to a VEVENT component using the inverse of the iCalendar import event mapping table.
+
+> r[model.export.icalendar.task]
+> A task record MUST be translated to a VTODO component using the inverse of the iCalendar import task mapping table.
+
+> r[model.export.icalendar.status]
+> Gnomon status strings MUST be translated to their uppercase iCalendar equivalents: `"tentative"` → `TENTATIVE`, `"confirmed"` → `CONFIRMED`, `"cancelled"` → `CANCELLED`, `"needs-action"` → `NEEDS-ACTION`, `"completed"` → `COMPLETED`, `"in-process"` → `IN-PROCESS`, `"draft"` → `DRAFT`, `"final"` → `FINAL`.
+
+> r[model.export.icalendar.extension]
+> Record fields whose names begin with `x_` MUST be emitted as iCalendar extension properties (X-properties). The field name MUST be uppercased and underscores replaced with hyphens (e.g. `x_custom_field` → `X-CUSTOM-FIELD`).
+
+> r[model.export.icalendar.unknown]
+> Record fields that do not correspond to any defined mapping and do not begin with `x_` MUST be silently skipped.
+
+##### JSCalendar Export
+
+> r[model.export.jscalendar.calendar]
+> A JSCalendar export MUST produce a JSON value. If the calendar has a single entry, the output MUST be a single JSCalendar object. Otherwise, the output MUST be a JSON array of JSCalendar objects.
+
+> r[model.export.jscalendar.event]
+> An event record MUST be translated to a JSCalendar Event object (with `@type` set to `"Event"`) using the inverse of the JSCalendar import event mapping table. Gnomon field names MUST be converted to their camelCase JSCalendar equivalents (e.g. `time_zone` → `timeZone`, `free_busy_status` → `freeBusyStatus`).
+
+> r[model.export.jscalendar.task]
+> A task record MUST be translated to a JSCalendar Task object (with `@type` set to `"Task"`) using the inverse of the JSCalendar import task mapping table.
+
+> r[model.export.jscalendar.vendor]
+> Record fields that do not correspond to any defined JSCalendar property MUST be emitted as vendor-specific properties in the JSON output. Values MUST be translated recursively using the inverse of the import JSON value translation.
 
 ### Shape-checking
 
@@ -1801,15 +1848,39 @@ The REPL MUST detect incomplete input by tracking unmatched opening delimiters (
 r[cli.subcommand.repl.history]
 The REPL MUST support line-editing history across the session.
 
+#### `compile`
+
+The `compile` subcommand is a subcommand of the root command; it takes a single file path as a parameter, treated as the root of a calendar project. When executed, `gnomon compile <file>` will parse, evaluate, and validate the file as a calendar, then serialize each validated calendar to a foreign format.
+
+r[cli.subcommand.compile]
+The program MUST provide a `compile` subcommand for the root command which takes a single parameter describing a file path.
+
+r[cli.subcommand.compile.no-file]
+If the file path argument to the `compile` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
+
+r[cli.subcommand.compile.format]
+The `compile` subcommand MUST accept a `--format` option whose value is one of `ical` or `jscal`. If the `--format` option is omitted, the default format MUST be `ical`.
+
+r[cli.subcommand.compile.refresh]
+The `compile` subcommand MUST accept a `--refresh` option. When present, all URI imports MUST be re-fetched from the network, bypassing the cache.
+
+r[cli.subcommand.compile.validate]
+Before compiling, the program MUST perform the full check pipeline (parse, evaluate, validate as calendar). If any errors are found, the program MUST report diagnostics to STDERR and exit with a non-zero exit code without producing compiled output.
+
+r[cli.subcommand.compile.output]
+If validation succeeds, the program MUST write the compiled output to STDOUT. Diagnostics (warnings) MUST be written to STDERR.
+
+r[cli.subcommand.compile.unused]
+The `compile` subcommand MUST perform unused-file detection, identical to the `check` subcommand.
+
 #### Reserved Subcommands
 
 We reserve some identifiers for future use as subcommands.
 
-> r[cli.subcommand.reserved+4]
+> r[cli.subcommand.reserved+5]
 > The following identifiers MUST NOT be used by any implementation:
 >
 > - `about`
-> - `compile`
 > - `daemon`
 > - `fetch`
 > - `lsp`
