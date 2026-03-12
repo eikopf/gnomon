@@ -8,11 +8,15 @@
 
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, io};
 
 use serde::{Deserialize, Serialize};
 
 /// Default refresh interval when the document doesn't specify one: 1 day.
 const DEFAULT_REFRESH_SECS: u64 = 86_400;
+
+/// Hard ceiling: entries older than 30 days are always evicted.
+const MAX_CACHE_AGE_SECS: u64 = 30 * 86_400;
 
 #[derive(Serialize, Deserialize)]
 struct CacheMeta {
@@ -118,10 +122,71 @@ pub fn store(url: &str, content: &str, content_type: &str, format_hint: &str) {
     let meta_path = dir.join(format!("{key}.meta.json"));
 
     // Write content first; if it fails, don't write metadata.
-    if std::fs::write(&content_path, content).is_err() {
+    if fs::write(&content_path, content).is_err() {
         return;
     }
     if let Ok(json) = serde_json::to_string_pretty(&meta) {
-        let _ = std::fs::write(&meta_path, json);
+        let _ = fs::write(&meta_path, json);
     }
+
+    // r[impl expr.import.cache.evict]
+    evict_expired(&dir);
+}
+
+/// Remove cache entries older than `MAX_CACHE_AGE_SECS`.
+fn evict_expired(dir: &PathBuf) {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    let now = now_secs();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if !name.ends_with(".meta.json") {
+            continue;
+        }
+        let meta: CacheMeta = match fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+        {
+            Some(m) => m,
+            None => continue,
+        };
+        if now.saturating_sub(meta.fetched_at) >= MAX_CACHE_AGE_SECS {
+            let stem = name.trim_end_matches(".meta.json");
+            let _ = fs::remove_file(&path);
+            let _ = fs::remove_file(dir.join(format!("{stem}.content")));
+        }
+    }
+}
+
+// r[impl cli.subcommand.clean]
+/// Remove all cached URI import entries. Returns the number of entries removed.
+pub fn clean() -> io::Result<usize> {
+    let dir = match cache_dir() {
+        Some(d) => d,
+        None => return Ok(0),
+    };
+    let entries = match fs::read_dir(&dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(e) => return Err(e),
+    };
+    let mut count = 0usize;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if name.ends_with(".meta.json") {
+            count += 1;
+        }
+        fs::remove_file(&path)?;
+    }
+    Ok(count)
 }

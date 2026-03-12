@@ -28,7 +28,7 @@ struct Cli {
 // r[impl cli.subcommand.help.root]
 // r[impl cli.subcommand.help.penultimate]
 // r[impl cli.subcommand.order]
-// r[impl cli.subcommand.reserved+3]
+// r[impl cli.subcommand.reserved+4]
 #[derive(Subcommand)]
 enum Command {
     // r[impl cli.subcommand.parse]
@@ -66,6 +66,9 @@ enum Command {
         #[arg(long)]
         refresh: bool,
     },
+    // r[impl cli.subcommand.clean]
+    /// Remove all cached URI imports.
+    Clean,
 }
 
 fn main() -> ExitCode {
@@ -284,6 +287,19 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             } else {
                 ExitCode::SUCCESS
+            }
+        }
+        // r[impl cli.subcommand.clean]
+        Command::Clean => {
+            match gnomon_db::eval::cache::clean() {
+                Ok(n) => {
+                    println!("{n} cached URI import(s) removed");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: failed to clean cache: {e}");
+                    ExitCode::FAILURE
+                }
             }
         }
     }

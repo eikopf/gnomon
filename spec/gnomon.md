@@ -608,6 +608,9 @@ On a cache hit, the implementation MUST use the cached content and MUST NOT make
 r[expr.import.cache.best-effort]
 If the cache directory cannot be created or a cache entry cannot be read or written, the implementation MUST silently fall back to a network fetch. Cache failures MUST NOT produce diagnostics.
 
+r[expr.import.cache.evict]
+When writing a new cache entry, the implementation MUST remove any entries whose age exceeds 30 days (2 592 000 seconds). Eviction failures MUST be silently ignored.
+
 ### Let Expressions
 
 A `let` expression introduces a local binding that is in scope for the body expression. Let bindings are sequential: a binding may refer to earlier bindings but not to itself or later bindings.
@@ -1746,15 +1749,21 @@ A list value MUST be rendered as a comma-separated sequence of values enclosed i
 r[cli.subcommand.eval.output.record]
 A record value MUST be rendered as a brace-enclosed block with one `key: value,` pair per line, indented by 4 spaces per nesting level. Fields MUST be sorted lexicographically by key. An empty record MUST be rendered as `{}`.
 
+#### `clean`
+
+The `clean` subcommand removes all cached URI imports from the local cache directory.
+
+r[cli.subcommand.clean]
+The program MUST provide a `clean` subcommand for the root command. When executed, it MUST remove all entries from the URI import cache directory and print the number of entries removed to STDOUT.
+
 #### Reserved Subcommands
 
 We reserve some identifiers for future use as subcommands.
 
-> r[cli.subcommand.reserved+3]
+> r[cli.subcommand.reserved+4]
 > The following identifiers MUST NOT be used by any implementation:
 >
 > - `about`
-> - `clean`
 > - `compile`
 > - `daemon`
 > - `fetch`
