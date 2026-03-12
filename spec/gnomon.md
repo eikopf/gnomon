@@ -1859,7 +1859,7 @@ r[cli.subcommand.compile.no-file]
 If the file path argument to the `compile` subcommand cannot be resolved to a file for any reason, the program MUST produce an error.
 
 r[cli.subcommand.compile.format]
-The `compile` subcommand MUST accept a `--format` option whose value is one of `ical` or `jscal`. If the `--format` option is omitted, the default format MUST be `ical`.
+The `compile` subcommand MUST accept a `--format` option whose value is one of `icalendar` or `jscalendar`. If the `--format` option is omitted, the default format MUST be `icalendar`.
 
 r[cli.subcommand.compile.refresh]
 The `compile` subcommand MUST accept a `--refresh` option. When present, all URI imports MUST be re-fetched from the network, bypassing the cache.

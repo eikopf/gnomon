@@ -76,8 +76,8 @@ enum Command {
         file: PathBuf,
 
         // r[impl cli.subcommand.compile.format]
-        /// Output format: ical (default) or jscal.
-        #[arg(long, default_value = "ical")]
+        /// Output format: icalendar (default) or jscalendar.
+        #[arg(long, default_value = "icalendar")]
         format: ExportFormat,
 
         // r[impl cli.subcommand.compile.refresh]
@@ -95,17 +95,19 @@ enum Command {
 
 #[derive(Clone, Debug)]
 enum ExportFormat {
-    Ical,
-    Jscal,
+    Icalendar,
+    Jscalendar,
 }
 
 impl std::str::FromStr for ExportFormat {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "ical" => Ok(ExportFormat::Ical),
-            "jscal" => Ok(ExportFormat::Jscal),
-            _ => Err(format!("unknown format '{s}': expected 'ical' or 'jscal'")),
+            "icalendar" => Ok(ExportFormat::Icalendar),
+            "jscalendar" => Ok(ExportFormat::Jscalendar),
+            _ => Err(format!(
+                "unknown format '{s}': expected 'icalendar' or 'jscalendar'"
+            )),
         }
     }
 }
@@ -397,8 +399,8 @@ fn main() -> ExitCode {
             for calendar in &check_result.calendars {
                 let (cal_record, entries) = calendar_to_import_values(&db, calendar);
                 let result = match format {
-                    ExportFormat::Ical => emit_icalendar(&cal_record, &entries),
-                    ExportFormat::Jscal => emit_jscalendar(&cal_record, &entries),
+                    ExportFormat::Icalendar => emit_icalendar(&cal_record, &entries),
+                    ExportFormat::Jscalendar => emit_jscalendar(&cal_record, &entries),
                 };
                 match result {
                     Ok(s) => outputs.push(s),
@@ -413,14 +415,14 @@ fn main() -> ExitCode {
             let out = std::io::stdout();
             let mut lock = out.lock();
             match format {
-                ExportFormat::Ical => {
-                    // For iCal: concatenate VCALENDAR outputs.
+                ExportFormat::Icalendar => {
+                    // For iCalendar: concatenate VCALENDAR outputs.
                     for s in &outputs {
                         let _ = write!(lock, "{s}");
                     }
                 }
-                ExportFormat::Jscal => {
-                    // For JSCal with multiple calendars: wrap in outer array.
+                ExportFormat::Jscalendar => {
+                    // For JSCalendar with multiple calendars: wrap in outer array.
                     if outputs.len() == 1 {
                         let _ = writeln!(lock, "{}", outputs[0]);
                     } else {
