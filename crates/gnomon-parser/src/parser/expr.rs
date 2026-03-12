@@ -210,16 +210,24 @@ impl Parser {
         self.finish_node();
     }
 
-    /// Parse a let expression: `let ident = expr in expr`
-    // r[impl expr.let.syntax]
+    /// Parse a let expression: `let ident = expr (let ... | in expr)`
+    ///
+    /// Multiple bindings desugar into nested `LET_EXPR` nodes:
+    /// `let x = 1 let y = 2 in body` → `LET_EXPR(x=1, LET_EXPR(y=2, body))`
+    // r[impl expr.let.syntax+2]
     fn parse_let_expr(&mut self) {
         self.start_node(SyntaxKind::LET_EXPR);
         self.bump_remap(SyntaxKind::LET_KW);
         self.expect(SyntaxKind::IDENT);
         self.expect(SyntaxKind::EQUALS);
         self.parse_expr();
-        self.expect_keyword("in", SyntaxKind::IN_KW);
-        self.parse_expr();
+        if self.at_keyword("let") {
+            // Multi-binding: next binding becomes the body (nested LET_EXPR).
+            self.parse_let_expr();
+        } else {
+            self.expect_keyword("in", SyntaxKind::IN_KW);
+            self.parse_expr();
+        }
         self.finish_node();
     }
 

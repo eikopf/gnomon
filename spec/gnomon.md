@@ -613,20 +613,21 @@ When writing a new cache entry, the implementation MUST remove any entries whose
 
 ### Let Expressions
 
-A `let` expression introduces a local binding that is in scope for the body expression. Let bindings are sequential: a binding may refer to earlier bindings but not to itself or later bindings.
+A `let` expression introduces one or more local bindings that are in scope for the body expression. Multiple bindings may appear before a single `in` keyword; each binding is introduced by its own `let` keyword. Multiple bindings desugar into nested single-binding let expressions.
 
-> r[expr.let.syntax]
+> r[expr.let.syntax+2]
 > The grammar for let expressions is as follows:
 >
 > ```ebnf
-> let expr = "let", identifier, "=", expr, "in", expr ;
+> let binding = "let", identifier, "=", expr ;
+> let expr = let binding, { let binding }, "in", expr ;
 > ```
 
 r[expr.let.sequential]
 Let bindings MUST be sequential: the bound expression may reference variables from enclosing or preceding `let` bindings, but MUST NOT reference the variable being bound or any later bindings.
 
-r[expr.let.scope]
-The variable introduced by a `let` binding MUST be in scope for the body expression (the expression after `in`).
+r[expr.let.scope+2]
+Each variable introduced by a `let` binding MUST be in scope for all subsequent bindings and for the body expression (the expression after `in`).
 
 ### Operator Precedence and Associativity
 
