@@ -379,6 +379,111 @@ mod tests {
     }
 
     #[test]
+    fn duration_desugar_overflow_weeks_exceeds_i64_max() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // i64::MAX = 9223372036854775807
+        // Test negative duration with weeks component exceeding i64::MAX
+        assert!(desugar_duration(&db, "-9223372036854775808w", &blame).is_none());
+    }
+
+    #[test]
+    fn duration_desugar_overflow_days_exceeds_i64_max() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // Test negative duration with days component exceeding i64::MAX
+        assert!(desugar_duration(&db, "-1d9223372036854775808d", &blame).is_none());
+    }
+
+    #[test]
+    fn duration_desugar_overflow_hours_exceeds_i64_max() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // Test negative duration with hours component exceeding i64::MAX
+        assert!(desugar_duration(&db, "-9223372036854775808h", &blame).is_none());
+    }
+
+    #[test]
+    fn duration_desugar_overflow_minutes_exceeds_i64_max() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // Test negative duration with minutes component exceeding i64::MAX
+        assert!(desugar_duration(&db, "-9223372036854775808m", &blame).is_none());
+    }
+
+    #[test]
+    fn duration_desugar_overflow_seconds_exceeds_i64_max() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // Test negative duration with seconds component exceeding i64::MAX
+        assert!(desugar_duration(&db, "-9223372036854775808s", &blame).is_none());
+    }
+
+    #[test]
+    fn duration_desugar_at_i64_max_boundary() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // i64::MAX = 9223372036854775807
+        // Test that exactly i64::MAX (positive) works
+        let value = desugar_duration(&db, "9223372036854775807w", &blame).unwrap();
+        match value {
+            Value::Record(r) => {
+                assert_eq!(
+                    get_field(&r, &db, "weeks"),
+                    Value::Integer(9223372036854775807)
+                );
+            }
+            _ => panic!("expected Record"),
+        }
+    }
+
+    #[test]
+    fn duration_desugar_at_i64_max_negative_boundary() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // i64::MAX = 9223372036854775807
+        // Test that negating i64::MAX works (should produce -(i64::MAX))
+        let value = desugar_duration(&db, "-9223372036854775807w", &blame).unwrap();
+        match value {
+            Value::Record(r) => {
+                assert_eq!(
+                    get_field(&r, &db, "weeks"),
+                    Value::SignedInteger(-9223372036854775807)
+                );
+            }
+            _ => panic!("expected Record"),
+        }
+    }
+
+    #[test]
+    fn duration_desugar_overflow_multiple_components_with_overflow() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // Test negative duration with multiple components where one exceeds i64::MAX
+        // The function should return None as soon as any component fails to convert
+        assert!(desugar_duration(&db, "-1w9223372036854775808d3h", &blame).is_none());
+    }
+
+    #[test]
+    fn duration_desugar_negative_at_i64_min_successor() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // i64::MIN = -9223372036854775808
+        // When we try to negate i64::MAX (9223372036854775807), we get -(9223372036854775807)
+        // which is in the valid i64 range and should succeed
+        let value = desugar_duration(&db, "-9223372036854775807s", &blame).unwrap();
+        match value {
+            Value::Record(r) => {
+                assert_eq!(
+                    get_field(&r, &db, "seconds"),
+                    Value::SignedInteger(-9223372036854775807)
+                );
+            }
+            _ => panic!("expected Record"),
+        }
+    }
+
+    #[test]
     fn month_day_to_year_day_jan_1() {
         assert_eq!(month_day_to_year_day(1, 1), Some(1));
     }
