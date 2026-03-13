@@ -109,7 +109,7 @@ pub fn apply_skip(year: i16, month: i8, day: i8, skip: Skip) -> Option<Date> {
         Skip::Forward => {
             // Move to the 1st of the next month
             if month == 12 {
-                Date::new(year + 1, 1, 1).ok()
+                Date::new(year.checked_add(1)?, 1, 1).ok()
             } else {
                 Date::new(year, month + 1, 1).ok()
             }
@@ -469,5 +469,10 @@ mod tests {
     fn days_in_year_leap() {
         assert_eq!(days_in_year(2024), 366);
         assert_eq!(days_in_year(2023), 365);
+    }
+
+    #[test]
+    fn apply_skip_forward_year_overflow() {
+        assert_eq!(apply_skip(i16::MAX, 12, 32, Skip::Forward), None);
     }
 }
