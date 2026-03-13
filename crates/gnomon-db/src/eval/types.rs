@@ -71,9 +71,14 @@ impl<'db> Record<'db> {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+}
 
-    /// Consume the record and iterate over owned pairs.
-    pub fn into_iter(self) -> impl Iterator<Item = (FieldName<'db>, Blamed<'db, Value<'db>>)> {
+impl<'db> IntoIterator for Record<'db> {
+    type Item = (FieldName<'db>, Blamed<'db, Value<'db>>);
+
+    type IntoIter = std::vec::IntoIter<(FieldName<'db>, Blamed<'db, Value<'db>>)>;
+
+    fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
 }
