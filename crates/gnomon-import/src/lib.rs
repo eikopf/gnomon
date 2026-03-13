@@ -1567,12 +1567,14 @@ fn compute_duration_from_endpoints(
             let s_secs = datetime_to_total_seconds(s);
             let e_secs = datetime_to_total_seconds(e);
             let diff = e_secs.saturating_sub(s_secs);
-            let hours = diff / 3600;
-            let minutes = (diff % 3600) / 60;
-            let seconds = diff % 60;
+            let days = diff / 86400;
+            let remainder = diff % 86400;
+            let hours = remainder / 3600;
+            let minutes = (remainder % 3600) / 60;
+            let seconds = remainder % 60;
             let fields = [
                 ("weeks", ImportValue::Integer(0)),
-                ("days", ImportValue::Integer(0)),
+                ("days", ImportValue::Integer(days)),
                 ("hours", ImportValue::Integer(hours)),
                 ("minutes", ImportValue::Integer(minutes)),
                 ("seconds", ImportValue::Integer(seconds)),
@@ -1583,18 +1585,32 @@ fn compute_duration_from_endpoints(
     }
 }
 
+/// Compute the number of days from a civil date using the algorithm from
+/// <https://howardhinnant.github.io/date_algorithms.html>.
+fn days_from_civil(y: i64, m: u64, d: u64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let m = if m <= 2 { m + 9 } else { m - 3 } as i64;
+    let era = y.div_euclid(400);
+    let yoe = y.rem_euclid(400);
+    let doy = (153 * m + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146097 + doe
+}
+
 fn datetime_to_total_seconds<M>(dt: &DateTime<M>) -> u64 {
     let date = dt.date;
-    // Approximate: just convert to a day count + time seconds.
-    let y = u64::from(date.year().get());
+    let y = i64::from(date.year().get());
     let m = u64::from(date.month().number().get());
     let d = u64::from(date.day() as u8);
-    // Rough day count (exact isn't needed — we just want the difference).
-    let days = y * 365 + y / 4 + m * 30 + d;
+    let days = days_from_civil(y, m, d);
     let time_secs = u64::from(dt.time.hour() as u8) * 3600
         + u64::from(dt.time.minute() as u8) * 60
         + u64::from(dt.time.second() as u8);
-    days * 86400 + time_secs
+    // days_from_civil can be negative for dates before the epoch, but all
+    // practical calendar dates (year >= 1) produce positive values.  We only
+    // use the result for computing differences between two dates in the same
+    // era, so the unsigned cast is safe.
+    (days as u64) * 86400 + time_secs
 }
 
 // r[impl model.import.icalendar.status]
@@ -2170,6 +2186,133 @@ END:VCALENDAR\r\n";
                 assert_eq!(*get_field(r, "priority"), ImportValue::Integer(3));
             }
             _ => panic!("expected record"),
+        }
+    }
+
+    // ── days_from_civil / compute_duration_from_endpoints accuracy tests ──
+
+    #[test]
+    fn days_from_civil_known_values() {
+        // Consecutive days differ by 1.
+        assert_eq!(days_from_civil(2000, 3, 2) - days_from_civil(2000, 3, 1), 1);
+        // 1970-01-01 to 2000-03-01 = 11017 days.
+        assert_eq!(
+            days_from_civil(2000, 3, 1) - days_from_civil(1970, 1, 1),
+            11017
+        );
+        // Full year (non-leap): 2025-01-01 to 2026-01-01 = 365 days.
+        assert_eq!(
+            days_from_civil(2026, 1, 1) - days_from_civil(2025, 1, 1),
+            365
+        );
+        // Full year (leap): 2024-01-01 to 2025-01-01 = 366 days.
+        assert_eq!(
+            days_from_civil(2025, 1, 1) - days_from_civil(2024, 1, 1),
+            366
+        );
+    }
+
+    #[test]
+    fn days_from_civil_month_lengths() {
+        // Jan has 31 days: 2026-01-01 to 2026-02-01 = 31 days.
+        let jan1 = days_from_civil(2026, 1, 1);
+        let feb1 = days_from_civil(2026, 2, 1);
+        assert_eq!(feb1 - jan1, 31);
+
+        // Feb 2026 is not a leap year: 2026-02-01 to 2026-03-01 = 28 days.
+        let mar1 = days_from_civil(2026, 3, 1);
+        assert_eq!(mar1 - feb1, 28);
+
+        // Feb 2024 IS a leap year: 2024-02-01 to 2024-03-01 = 29 days.
+        let feb1_leap = days_from_civil(2024, 2, 1);
+        let mar1_leap = days_from_civil(2024, 3, 1);
+        assert_eq!(mar1_leap - feb1_leap, 29);
+    }
+
+    #[test]
+    fn duration_across_month_boundary_non_leap() {
+        // 2026-01-31 00:00 to 2026-03-01 00:00 = 29 days (Jan has 31, Feb has 28).
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:cross-month-1\r\n\
+SUMMARY:Cross Month\r\n\
+DTSTART:20260131T000000\r\n\
+DTEND:20260301T000000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(29));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
+        }
+    }
+
+    #[test]
+    fn duration_across_month_boundary_leap_year() {
+        // 2024-01-31 00:00 to 2024-03-01 00:00 = 30 days (Jan has 31, Feb has 29 in leap year).
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:cross-month-leap\r\n\
+SUMMARY:Leap Year Cross Month\r\n\
+DTSTART:20240131T000000\r\n\
+DTEND:20240301T000000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(30));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
+        }
+    }
+
+    #[test]
+    fn duration_multi_day_with_time() {
+        // 2026-03-15 14:00:00 to 2026-03-17 09:30:00 = 1 day, 19h, 30m.
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:multi-day-time\r\n\
+SUMMARY:Multi-Day\r\n\
+DTSTART:20260315T140000\r\n\
+DTEND:20260317T093000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(1));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(19));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(30));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
         }
     }
 }
