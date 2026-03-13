@@ -468,17 +468,33 @@ fn main() -> ExitCode {
 /// Recursively find all .gnomon files under a directory.
 fn find_gnomon_files(dir: &std::path::Path) -> Vec<PathBuf> {
     let mut result = Vec::new();
+    let mut visited = HashSet::new();
+    find_gnomon_files_inner(dir, &mut result, &mut visited);
+    result
+}
+
+fn find_gnomon_files_inner(
+    dir: &std::path::Path,
+    result: &mut Vec<PathBuf>,
+    visited: &mut HashSet<PathBuf>,
+) {
+    let canon = match dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+    if !visited.insert(canon) {
+        return; // Already visited — cycle detected
+    }
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.filter_map(|e| e.ok()) {
             let path = entry.path();
             if path.is_dir() {
-                result.extend(find_gnomon_files(&path));
+                find_gnomon_files_inner(&path, result, visited);
             } else if path.extension().is_some_and(|ext| ext == "gnomon") {
                 result.push(path);
             }
         }
     }
-    result
 }
 
 /// Print diagnostics to stderr. Returns true if any errors were found.
