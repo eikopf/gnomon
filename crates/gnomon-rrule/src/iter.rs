@@ -552,6 +552,23 @@ mod tests {
         assert_eq!(dates[4], dt(2025, 1, 2, 0, 0, 0));
     }
 
+    #[test]
+    fn interval_zero_treated_as_one() {
+        let rule = RecurrenceRule {
+            frequency: Frequency::Daily,
+            interval: 0,
+            termination: Termination::Count(3),
+            ..Default::default()
+        };
+        let occ = Occurrences::new(rule, dt(2024, 1, 1, 0, 0, 0));
+        let dates: Vec<_> = occ.iter().collect();
+        assert_eq!(dates.len(), 3);
+        // Should behave like interval=1
+        assert_eq!(dates[0], dt(2024, 1, 1, 0, 0, 0));
+        assert_eq!(dates[1], dt(2024, 1, 2, 0, 0, 0));
+        assert_eq!(dates[2], dt(2024, 1, 3, 0, 0, 0));
+    }
+
     // r[verify record.rrule.eval.by-set-pos]
     #[test]
     fn by_set_pos_last_weekday_of_month() {

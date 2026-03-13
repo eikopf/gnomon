@@ -152,7 +152,11 @@ fn record_to_rule(
 
     let interval = match get_field(db, record, "interval") {
         Some(Value::Integer(n)) => {
-            u32::try_from(n).map_err(|_| format!("interval out of range: {n}"))?
+            let v = u32::try_from(n).map_err(|_| format!("interval out of range: {n}"))?;
+            if v == 0 {
+                return Err("interval must be at least 1".into());
+            }
+            v
         }
         None => 1,
         _ => return Err("invalid 'interval' field: expected integer".into()),
@@ -569,6 +573,23 @@ mod tests {
             }
             other => panic!("expected Until, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn interval_zero_rejected() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        let fields: Vec<(&str, Value<'_>)> = vec![
+            ("frequency", Value::String("daily".into())),
+            ("interval", Value::Integer(0)),
+        ];
+        let record = desugar::make_record(&db, &fields, &blame);
+
+        let err = record_to_rule(&db, &record).unwrap_err();
+        assert!(
+            err.contains("interval must be at least 1"),
+            "got: {err}"
+        );
     }
 
     #[test]

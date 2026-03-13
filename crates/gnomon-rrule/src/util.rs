@@ -43,7 +43,7 @@ pub fn advance_period(
     interval: u32,
     period_index: u64,
 ) -> Option<DateTime> {
-    let n = i64::try_from(period_index).ok()? * i64::from(interval);
+    let n = i64::try_from(period_index).ok()? * i64::from(interval.max(1));
     match freq {
         Frequency::Yearly => {
             let year = i16::try_from(i64::from(dtstart.year()) + n).ok()?;
