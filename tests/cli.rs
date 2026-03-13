@@ -589,16 +589,9 @@ fn find_gnomon_files_deep_nesting() {
 
     // Build a 5-level-deep nested directory and place a .gnomon file at the
     // bottom.
-    let deep = dir
-        .path()
-        .join("a")
-        .join("b")
-        .join("c")
-        .join("d")
-        .join("e");
+    let deep = dir.path().join("a").join("b").join("c").join("d").join("e");
     std::fs::create_dir_all(&deep).unwrap();
-    let mut f =
-        std::fs::File::create(deep.join("deep.gnomon")).unwrap();
+    let mut f = std::fs::File::create(deep.join("deep.gnomon")).unwrap();
     std::io::Write::write_all(&mut f, b"event @deep { name: @x }").unwrap();
 
     // The deeply-nested file is not imported, so we expect an "not imported"
@@ -713,10 +706,7 @@ fn find_gnomon_files_permission_error_on_subdir() {
     impl Drop for RestorePerms {
         fn drop(&mut self) {
             use std::os::unix::fs::PermissionsExt as _;
-            let _ = std::fs::set_permissions(
-                &self.0,
-                std::fs::Permissions::from_mode(0o755),
-            );
+            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
         }
     }
     let _restore = RestorePerms(locked.clone());
