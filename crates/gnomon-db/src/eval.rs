@@ -136,12 +136,12 @@ mod tests {
 
     fn get_field<'db>(record: &Record<'db>, db: &'db Database, name: &str) -> Value<'db> {
         let field_name = FieldName::new(db, name.to_string());
-        record.get(&field_name).unwrap().value.clone()
+        record.get(db, &field_name).unwrap().value.clone()
     }
 
     fn has_field<'db>(record: &Record<'db>, db: &'db Database, name: &str) -> bool {
         let field_name = FieldName::new(db, name.to_string());
-        record.get(&field_name).is_some()
+        record.get(db, &field_name).is_some()
     }
 
     /// Extract a record from an expression-mode file (not declaration mode).
@@ -453,7 +453,7 @@ mod tests {
         let result = eval(&db, r#"calendar { uid: "test" }"#);
         let r = expect_single_decl(&result);
         let uid_name = FieldName::new(&db, "uid".to_string());
-        let blamed_value = r.get(&uid_name).unwrap();
+        let blamed_value = r.get(&db, &uid_name).unwrap();
         assert_eq!(blamed_value.blame.path.0.len(), 1);
     }
 

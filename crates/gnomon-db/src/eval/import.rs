@@ -42,6 +42,7 @@ fn import_record_to_record<'db>(
     for (key, val) in map {
         let field_name = FieldName::new(db, key);
         record.insert(
+            db,
             field_name,
             Blamed {
                 value: import_value_to_value(db, val, blame),

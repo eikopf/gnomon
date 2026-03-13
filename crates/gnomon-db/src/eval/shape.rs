@@ -642,7 +642,7 @@ pub fn check_calendar_shape<'db>(
     let uid_key = FieldName::new(db, "uid".to_string());
     for entry in &calendar.entries {
         let source = entry.blame.decl.source(db);
-        let entry_type = entry.value.get(&type_key).map(|v| &v.value);
+        let entry_type = entry.value.get(db, &type_key).map(|v| &v.value);
 
         match entry_type {
             Some(Value::String(t)) if t == "event" => {
@@ -663,7 +663,7 @@ pub fn check_calendar_shape<'db>(
                     &mut diagnostics,
                 );
                 // r[impl record.event.name+2]
-                if entry.value.get(&name_key).is_none() && entry.value.get(&uid_key).is_none() {
+                if entry.value.get(db, &name_key).is_none() && entry.value.get(db, &uid_key).is_none() {
                     diagnostics.push(Diagnostic {
                         source,
                         range: rowan::TextRange::default(),
@@ -690,7 +690,7 @@ pub fn check_calendar_shape<'db>(
                     &mut diagnostics,
                 );
                 // r[impl record.task.name+2]
-                if entry.value.get(&name_key).is_none() && entry.value.get(&uid_key).is_none() {
+                if entry.value.get(db, &name_key).is_none() && entry.value.get(db, &uid_key).is_none() {
                     diagnostics.push(Diagnostic {
                         source,
                         range: rowan::TextRange::default(),
@@ -742,7 +742,7 @@ fn check_fields<'db>(
 ) {
     for field_def in fields {
         let field_name = FieldName::new(db, field_def.name.to_string());
-        match record.get(&field_name) {
+        match record.get(db, &field_name) {
             // r[impl model.shape.required]
             None if field_def.required => {
                 diagnostics.push(Diagnostic {

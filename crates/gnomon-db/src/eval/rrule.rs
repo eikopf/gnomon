@@ -11,7 +11,7 @@ use crate::queries::{Diagnostic, Severity};
 /// Extract a field value from a record by name.
 fn get_field<'db>(db: &'db dyn crate::Db, record: &Record<'db>, name: &str) -> Option<Value<'db>> {
     let key = FieldName::new(db, name.to_string());
-    record.get(&key).map(|b| b.value.clone())
+    record.get(db, &key).map(|b| b.value.clone())
 }
 
 /// Convert a datetime or date record into a `jiff::civil::DateTime`.
@@ -356,7 +356,7 @@ pub fn validate_entry_recurrences<'db>(
     let start_key = FieldName::new(db, "start".to_string());
 
     for entry in &calendar.entries {
-        let recur_record = match entry.value.get(&recur_key) {
+        let recur_record = match entry.value.get(db, &recur_key) {
             Some(blamed) => match &blamed.value {
                 Value::Record(r) => r.clone(),
                 _ => continue, // Not a record — shape-check already reported.
@@ -368,7 +368,7 @@ pub fn validate_entry_recurrences<'db>(
 
         // r[impl record.rrule.eval.start-required+2]
         // Extract start datetime.
-        let start_record = match entry.value.get(&start_key) {
+        let start_record = match entry.value.get(db, &start_key) {
             Some(blamed) => match &blamed.value {
                 Value::Record(r) => r,
                 _ => {

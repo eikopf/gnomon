@@ -76,15 +76,12 @@ fn write_record<'db>(
     db: &'db dyn Db,
     indent: usize,
 ) -> fmt::Result {
-    let mut entries: Vec<_> = record.0.iter().collect();
-    entries.sort_by(|(a, _), (b, _)| a.text(db).cmp(b.text(db)));
-
-    if entries.is_empty() {
+    if record.is_empty() {
         return write!(w, "{{}}");
     }
 
     writeln!(w, "{{")?;
-    for (name, blamed) in &entries {
+    for (name, blamed) in record.iter() {
         write_indent(w, indent + 4)?;
         write!(w, "{}: ", name.text(db))?;
         write_value(w, &blamed.value, db, indent + 4)?;
@@ -341,6 +338,23 @@ mod tests {
                 [{
                     optional: undefined,
                     type: "calendar",
+                }]"#]],
+        );
+    }
+
+    /// Fields are rendered in lexicographic order regardless of source order.
+    #[test]
+    fn fields_in_alphabetical_order() {
+        // Source has fields in reverse-alphabetical order (z, m, a),
+        // but rendered output must sort them (a, m, type, z).
+        check(
+            r#"calendar { z_last: 3, m_middle: 2, a_first: 1 }"#,
+            expect![[r#"
+                [{
+                    a_first: 1,
+                    m_middle: 2,
+                    type: "calendar",
+                    z_last: 3,
                 }]"#]],
         );
     }

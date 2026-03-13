@@ -59,7 +59,7 @@ pub fn validate_calendar<'db>(
 
     for (record, blame) in records {
         let source = blame.decl.source(db);
-        let type_val = record.get(&type_key).map(|v| &v.value);
+        let type_val = record.get(db, &type_key).map(|v| &v.value);
 
         match type_val {
             Some(Value::String(s)) if s == "event" || s == "task" => {
@@ -89,7 +89,7 @@ pub fn validate_calendar<'db>(
                 };
 
                 // Extract nested entries from the calendar record's `entries` field.
-                if let Some(entries_blamed) = record.get(&entries_key)
+                if let Some(entries_blamed) = record.get(db, &entries_key)
                     && let Value::List(items) = &entries_blamed.value
                 {
                     for item in items {
@@ -198,7 +198,7 @@ fn derive_uids<'db>(
     let name_key = FieldName::new(db, "name".to_string());
 
     // Extract and parse the calendar uid as a UUID namespace.
-    let namespace = match calendar.properties.get(&uid_key) {
+    let namespace = match calendar.properties.get(db, &uid_key) {
         Some(blamed) => match &blamed.value {
             Value::String(s) => match Uuid::parse_str(s) {
                 Ok(uuid) => uuid,
@@ -222,12 +222,12 @@ fn derive_uids<'db>(
 
     for entry in &mut calendar.entries {
         // Skip entries that already have a uid.
-        if entry.value.get(&uid_key).is_some() {
+        if entry.value.get(db, &uid_key).is_some() {
             continue;
         }
 
         // Extract the name to use as the UUIDv5 key.
-        let name_str = match entry.value.get(&name_key) {
+        let name_str = match entry.value.get(db, &name_key) {
             Some(blamed) => match &blamed.value {
                 Value::Name(s) => s.clone(),
                 _ => continue, // Non-name value; shape-check will report this.
@@ -237,6 +237,7 @@ fn derive_uids<'db>(
 
         let derived = Uuid::new_v5(&namespace, name_str.as_bytes());
         entry.value.insert(
+            db,
             uid_key,
             Blamed {
                 value: Value::String(derived.to_string()),
@@ -256,7 +257,7 @@ fn check_name_collision<'db>(
     diagnostics: &mut Vec<Diagnostic>,
     has_errors: &mut bool,
 ) {
-    if let Some(blamed_value) = record.get(name_key)
+    if let Some(blamed_value) = record.get(db, name_key)
         && let Value::Name(name) = &blamed_value.value
     {
         if let Some(&first_source) = seen_names.get(name) {
@@ -294,7 +295,7 @@ fn flatten_to_records<'db>(
     match value {
         Value::Record(r) => {
             let blame =
-                r.0.values()
+                r.values()
                     .next()
                     .map(|b| b.blame.clone())
                     .unwrap_or_else(default_blame);
@@ -676,8 +677,8 @@ mod tests {
             result.diagnostics
         );
         let uid_key = crate::eval::interned::FieldName::new(&db, "uid".to_string());
-        let uid0 = result.calendars[0].properties.get(&uid_key).unwrap();
-        let uid1 = result.calendars[1].properties.get(&uid_key).unwrap();
+        let uid0 = result.calendars[0].properties.get(&db, &uid_key).unwrap();
+        let uid1 = result.calendars[1].properties.get(&db, &uid_key).unwrap();
         assert_eq!(
             uid0.value,
             Value::String("f47ac10b-58cc-4372-a567-0e02b2c3d479".into())
@@ -863,7 +864,7 @@ mod tests {
         );
         let uid_key = FieldName::new(&db, "uid".to_string());
         let entry = &result.calendars[0].entries[0].value;
-        let uid = entry.get(&uid_key).expect("entry should have derived uid");
+        let uid = entry.get(&db, &uid_key).expect("entry should have derived uid");
         match &uid.value {
             Value::String(s) => {
                 assert!(
@@ -890,12 +891,12 @@ mod tests {
         let uid_key = FieldName::new(&db, "uid".to_string());
         let uid1 = &result1.calendars[0].entries[0]
             .value
-            .get(&uid_key)
+            .get(&db, &uid_key)
             .unwrap()
             .value;
         let uid2 = &result2.calendars[0].entries[0]
             .value
-            .get(&uid_key)
+            .get(&db, &uid_key)
             .unwrap()
             .value;
         assert_eq!(uid1, uid2);
@@ -917,7 +918,7 @@ mod tests {
         let uid_key = FieldName::new(&db, "uid".to_string());
         let uid = &result.calendars[0].entries[0]
             .value
-            .get(&uid_key)
+            .get(&db, &uid_key)
             .unwrap()
             .value;
         assert_eq!(uid, &Value::String("custom-uid".into()));
@@ -993,7 +994,7 @@ mod tests {
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendars[0].entries[0].value;
         assert!(
-            entry.get(&occ_key).is_none(),
+            entry.get(&db, &occ_key).is_none(),
             "should not have occurrences field"
         );
     }
@@ -1012,7 +1013,7 @@ mod tests {
         let result = check(&db, source);
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendars[0].entries[0].value;
-        assert!(entry.get(&occ_key).is_none(), "should not have occurrences");
+        assert!(entry.get(&db, &occ_key).is_none(), "should not have occurrences");
     }
 
     // r[verify record.rrule.eval.start-required+2]
@@ -1093,7 +1094,7 @@ mod tests {
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendars[0].entries[0].value;
         assert!(
-            entry.get(&occ_key).is_none(),
+            entry.get(&db, &occ_key).is_none(),
             "should not have occurrences field"
         );
     }

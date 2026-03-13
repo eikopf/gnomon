@@ -195,8 +195,8 @@ impl<'db> LowerCtx<'db> {
 
             if let Some(body) = ev.body() {
                 let body_record = self.lower_record(&body, decl_id, &base_path);
-                for (name, value) in body_record.0 {
-                    record.0.insert(name, value);
+                for (name, value) in body_record.into_iter() {
+                    record.insert(self.db, name, value);
                 }
             }
 
@@ -246,8 +246,8 @@ impl<'db> LowerCtx<'db> {
 
             if let Some(body) = task.body() {
                 let body_record = self.lower_record(&body, decl_id, &base_path);
-                for (name, value) in body_record.0 {
-                    record.0.insert(name, value);
+                for (name, value) in body_record.into_iter() {
+                    record.insert(self.db, name, value);
                 }
             }
 
@@ -281,7 +281,7 @@ impl<'db> LowerCtx<'db> {
             let blame = self.make_blame(decl_id, &field_path);
 
             let value = self.lower_top_expr(&value_expr, decl_id, &field_path);
-            result.insert(field_name, Blamed { value, blame });
+            result.insert(self.db, field_name, Blamed { value, blame });
         }
         result
     }
@@ -384,8 +384,8 @@ impl<'db> LowerCtx<'db> {
                         // Record merge (right wins)
                         match (lhs, rhs) {
                             (Value::Record(mut a), Value::Record(b)) => {
-                                for (k, v) in b.0 {
-                                    a.0.insert(k, v);
+                                for (k, v) in b.into_iter() {
+                                    a.insert(self.db, k, v);
                                 }
                                 Value::Record(a)
                             }
@@ -423,7 +423,7 @@ impl<'db> LowerCtx<'db> {
                 match target {
                     Value::Record(r) => {
                         let key = self.intern(&field_name_str);
-                        r.get(&key)
+                        r.get(self.db, &key)
                             .map(|b| b.value.clone())
                             .unwrap_or(Value::Undefined)
                     }
@@ -841,7 +841,7 @@ impl<'db> LowerCtx<'db> {
     ) {
         let field_name = self.intern(name);
         let blame = self.make_blame(decl_id, &base_path.field(field_name));
-        record.insert(field_name, Blamed { value, blame });
+        record.insert(self.db, field_name, Blamed { value, blame });
     }
 
     fn emit_diagnostic(&mut self, range: rowan::TextRange, message: String) {
@@ -883,10 +883,9 @@ fn values_equal(a: &Value, b: &Value) -> bool {
                     .all(|(x, y)| values_equal(&x.value, &y.value))
         }
         (Value::Record(a), Value::Record(b)) => {
-            a.0.len() == b.0.len()
-                && a.0
-                    .iter()
-                    .zip(b.0.iter())
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
                     .all(|((ka, va), (kb, vb))| ka == kb && values_equal(&va.value, &vb.value))
         }
         _ => false,

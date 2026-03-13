@@ -15,19 +15,6 @@ impl fmt::Debug for FieldName<'_> {
     }
 }
 
-impl PartialOrd for FieldName<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for FieldName<'_> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        let self_id: salsa::Id = salsa::plumbing::AsId::as_id(self);
-        let other_id: salsa::Id = salsa::plumbing::AsId::as_id(other);
-        self_id.cmp(&other_id)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PathSegment<'db> {
