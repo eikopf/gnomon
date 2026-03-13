@@ -77,7 +77,7 @@ pub fn validate_calendar<'db>(
                     blame,
                 });
             }
-            // r[impl model.calendar.singular+3]
+            // r[impl model.calendar.singular+4]
             Some(Value::String(s)) if s == "calendar" => {
                 let mut calendar = Calendar::default();
 
@@ -465,7 +465,7 @@ mod tests {
         );
     }
 
-    // r[verify model.calendar.singular+2]
+    // r[verify model.calendar.singular+4]
     #[test]
     fn no_calendar_declaration_error() {
         let db = Database::default();
@@ -473,7 +473,7 @@ mod tests {
         assert!(diags.iter().any(|d| d.contains("no calendar record")));
     }
 
-    // r[verify model.calendar.singular+3]
+    // r[verify model.calendar.singular+4]
     #[test]
     fn multiple_calendars_accepted() {
         let db = Database::default();

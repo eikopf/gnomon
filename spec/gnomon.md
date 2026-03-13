@@ -1350,8 +1350,8 @@ The `uid` field follows RFC 5545 in accepting any string. However, implementatio
 
 A calendar may have additional optional metadata fields such as `title`, `description`, `time_zone`, `color`, or other properties. These are not enumerated exhaustively; as with all Gnomon records, calendars are open.
 
-> r[model.calendar.singular+3]
-> A calendar project MUST contain at least one record with `type` set to `"calendar"` among its top-level values. It is an error if no such record is found.
+> r[model.calendar.singular+4]
+> A Gnomon file evaluates to a single value. The `compile` subcommand can produce output only when this value is a calendar record (a record with `type` set to `"calendar"`) or a list of calendar records. It is an error if the evaluated value is neither a calendar record nor a list containing at least one calendar record.
 
 ### Calendar Entries
 
@@ -1576,8 +1576,8 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 
 When compiling a Gnomon calendar to a foreign format, each validated `Calendar` value MUST be translated according to the rules in this section. Export mappings are the inverse of the import mappings defined above.
 
-> r[model.export.preserve]
-> Foreign format export MUST NOT silently discard properties that have a defined mapping. All mapped properties present on the source record MUST be translated into the output.
+> r[model.export.preserve+2]
+> Foreign format export MUST preserve all properties. Mapped properties MUST be translated into their target-format equivalents (and MAY be altered to satisfy stricter target-format requirements). Unmapped properties MUST be losslessly translated into the output.
 
 ##### iCalendar Export
 
@@ -1602,8 +1602,8 @@ When compiling a Gnomon calendar to a foreign format, each validated `Calendar` 
 > r[model.export.icalendar.extension]
 > Record fields whose names begin with `x_` MUST be emitted as iCalendar extension properties (X-properties). The field name MUST be uppercased and underscores replaced with hyphens (e.g. `x_custom_field` → `X-CUSTOM-FIELD`).
 
-> r[model.export.icalendar.unknown]
-> Record fields that do not correspond to any defined mapping and do not begin with `x_` MUST be silently skipped.
+> r[model.export.icalendar.unknown+2]
+> Record fields that do not correspond to any defined mapping and do not begin with `x_` MUST still be emitted as X-properties (using an implementation-defined name mapping) and SHOULD produce a warning, since the field may be a misspelling of a mapped property.
 
 ##### JSCalendar Export
 

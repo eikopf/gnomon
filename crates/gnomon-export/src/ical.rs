@@ -44,7 +44,12 @@ fn make_calico_uri(s: &str) -> Box<calico::model::string::Uri> {
 /// The `calendar` parameter is the calendar-level properties (uid, prod_id, etc.).
 /// The `entries` parameter is the list of event/task records.
 // r[impl model.export.icalendar.calendar]
-pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Result<String, String> {
+pub fn emit_icalendar(
+    w: &mut impl std::fmt::Write,
+    calendar: &ImportRecord,
+    entries: &[ImportValue],
+    warnings: &mut Vec<String>,
+) -> Result<(), String> {
     let prod_id = calendar
         .get("prod_id")
         .and_then(|v| as_str(v))
@@ -66,11 +71,11 @@ pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Resul
         if let ImportValue::Record(record) = entry {
             match record.get("type").and_then(|v| as_str(v)) {
                 Some("event") => {
-                    let event = build_event(record)?;
+                    let event = build_event(record, warnings)?;
                     components.push(CalendarComponent::Event(event));
                 }
                 Some("task") => {
-                    let todo = build_todo(record)?;
+                    let todo = build_todo(record, warnings)?;
                     components.push(CalendarComponent::Todo(todo));
                 }
                 _ => {}
@@ -161,26 +166,50 @@ pub fn emit_icalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Resul
         });
     }
 
-    // ── X-properties ─────────────────────────────────────────
+    // ── X-properties and unknown fields ─────────────────────
 
+    // r[impl model.export.icalendar.extension]
+    // r[impl model.export.icalendar.unknown+2]
     for (key, val) in calendar {
-        if key.starts_with("x_") {
-            let prop_name = field_name_to_x_property(key);
-            let x_val = import_value_to_ical_value(val);
-            let prop = Prop {
-                value: x_val,
-                params: Params::default(),
-            };
-            cal.insert_x_property(prop_name.into(), vec![prop]);
+        if CALENDAR_KNOWN.contains(&key.as_str()) {
+            continue;
         }
+        if !key.starts_with("x_") {
+            warnings.push(format!(
+                "unknown calendar field '{key}' emitted as X-property"
+            ));
+        }
+        let prop_name = field_name_to_x_property(key);
+        let x_val = import_value_to_ical_value(val);
+        let prop = Prop {
+            value: x_val,
+            params: Params::default(),
+        };
+        cal.insert_x_property(prop_name.into(), vec![prop]);
     }
 
-    Ok(cal.to_ical_string())
+    w.write_str(&cal.to_ical_string())
+        .map_err(|e| e.to_string())
 }
+
+const CALENDAR_KNOWN: &[&str] = &[
+    "type",
+    "entries",
+    "prod_id",
+    "uid",
+    "name",
+    "description",
+    "color",
+    "url",
+    "categories",
+    "last_modified",
+    "refresh_interval",
+    "source",
+];
 
 // ── Event builder ─────────────────────────────────────────────
 
-fn build_event(record: &ImportRecord) -> Result<Event, String> {
+fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Event, String> {
     let mut event = Event::new(vec![], vec![], vec![], vec![]);
 
     // UID
@@ -546,25 +575,66 @@ fn build_event(record: &ImportRecord) -> Result<Event, String> {
         }
     }
 
-    // X-properties
+    // X-properties and unknown fields
     for (key, val) in record {
-        if key.starts_with("x_") {
-            let prop_name = field_name_to_x_property(key);
-            let x_val = import_value_to_ical_value(val);
-            let prop = Prop {
-                value: x_val,
-                params: Params::default(),
-            };
-            event.insert_x_property(prop_name.into(), vec![prop]);
+        if EVENT_KNOWN.contains(&key.as_str()) {
+            continue;
         }
+        if !key.starts_with("x_") {
+            warnings.push(format!("unknown event field '{key}' emitted as X-property"));
+        }
+        let prop_name = field_name_to_x_property(key);
+        let x_val = import_value_to_ical_value(val);
+        let prop = Prop {
+            value: x_val,
+            params: Params::default(),
+        };
+        event.insert_x_property(prop_name.into(), vec![prop]);
     }
 
     Ok(event)
 }
 
+const EVENT_KNOWN: &[&str] = &[
+    "type",
+    "name",
+    "uid",
+    "title",
+    "description",
+    "start",
+    "duration",
+    "time_zone",
+    "status",
+    "priority",
+    "location",
+    "color",
+    "categories",
+    "dtstamp",
+    "class",
+    "created",
+    "geo",
+    "last_modified",
+    "organizer",
+    "sequence",
+    "transparency",
+    "url",
+    "recurrence_id",
+    "recur",
+    "exdates",
+    "attachments",
+    "attendees",
+    "comments",
+    "contacts",
+    "related_to",
+    "resources",
+    "images",
+    "conferences",
+    "request_statuses",
+];
+
 // ── Todo builder ──────────────────────────────────────────────
 
-fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
+fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo, String> {
     let mut todo = Todo::new(vec![], vec![], vec![], vec![]);
 
     // UID
@@ -951,21 +1021,65 @@ fn build_todo(record: &ImportRecord) -> Result<Todo, String> {
         }
     }
 
-    // X-properties
+    // X-properties and unknown fields
     for (key, val) in record {
-        if key.starts_with("x_") {
-            let prop_name = field_name_to_x_property(key);
-            let x_val = import_value_to_ical_value(val);
-            let prop = Prop {
-                value: x_val,
-                params: Params::default(),
-            };
-            todo.insert_x_property(prop_name.into(), vec![prop]);
+        if TODO_KNOWN.contains(&key.as_str()) {
+            continue;
         }
+        if !key.starts_with("x_") {
+            warnings.push(format!("unknown task field '{key}' emitted as X-property"));
+        }
+        let prop_name = field_name_to_x_property(key);
+        let x_val = import_value_to_ical_value(val);
+        let prop = Prop {
+            value: x_val,
+            params: Params::default(),
+        };
+        todo.insert_x_property(prop_name.into(), vec![prop]);
     }
 
     Ok(todo)
 }
+
+const TODO_KNOWN: &[&str] = &[
+    "type",
+    "name",
+    "uid",
+    "title",
+    "description",
+    "start",
+    "due",
+    "completed",
+    "duration",
+    "estimated_duration",
+    "time_zone",
+    "status",
+    "priority",
+    "location",
+    "color",
+    "categories",
+    "percent_complete",
+    "dtstamp",
+    "class",
+    "created",
+    "geo",
+    "last_modified",
+    "organizer",
+    "sequence",
+    "url",
+    "recurrence_id",
+    "recur",
+    "exdates",
+    "attachments",
+    "attendees",
+    "comments",
+    "contacts",
+    "related_to",
+    "resources",
+    "images",
+    "conferences",
+    "request_statuses",
+];
 
 // ── Primitive conversion helpers ──────────────────────────────
 
@@ -1686,7 +1800,8 @@ mod tests {
     #[test]
     fn emit_empty_calendar() {
         let calendar = make_cal("-//Test//Test//EN");
-        let result = emit_icalendar(&calendar, &[]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[], &mut vec![]).unwrap();
         assert!(result.contains("BEGIN:VCALENDAR"), "missing VCALENDAR");
         assert!(
             result.contains("PRODID:-//Test//Test//EN"),
@@ -1714,7 +1829,8 @@ mod tests {
             ("start", make_start_dt(2026, 3, 15, 14, 0, 0)),
             ("duration", duration),
         ]));
-        let result = emit_icalendar(&calendar, &[entry]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[entry], &mut vec![]).unwrap();
         assert!(result.contains("BEGIN:VEVENT"), "missing VEVENT");
         assert!(result.contains("UID:test-event-uid"), "missing UID");
         assert!(result.contains("SUMMARY:Team Meeting"), "missing SUMMARY");
@@ -1732,7 +1848,8 @@ mod tests {
             ("uid", ImportValue::String("test-task-uid".into())),
             ("title", ImportValue::String("Buy groceries".into())),
         ]));
-        let result = emit_icalendar(&calendar, &[entry]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[entry], &mut vec![]).unwrap();
         assert!(result.contains("BEGIN:VTODO"), "missing VTODO");
         assert!(result.contains("UID:test-task-uid"), "missing UID");
         assert!(result.contains("SUMMARY:Buy groceries"), "missing SUMMARY");
@@ -1769,7 +1886,8 @@ END:VCALENDAR\r\n";
             panic!("expected entries list")
         };
 
-        let emitted = emit_icalendar(cal_rec, entries).unwrap();
+        let mut emitted = String::new();
+        emit_icalendar(&mut emitted, cal_rec, entries, &mut vec![]).unwrap();
         let re_parsed =
             calico::model::component::Calendar::parse(&emitted).expect("re-parse failed");
         let cal = &re_parsed[0];
@@ -1804,7 +1922,8 @@ END:VCALENDAR\r\n";
             ("status", ImportValue::String("tentative".into())),
             ("priority", ImportValue::Integer(5)),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(
             result.contains("STATUS:TENTATIVE"),
             "missing STATUS: {result}"
@@ -1825,7 +1944,8 @@ END:VCALENDAR\r\n";
             ("uid", ImportValue::String("geo-uid".into())),
             ("geo", geo),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(result.contains("GEO:"), "missing GEO: {result}");
         assert!(result.contains("37.7749"), "missing latitude: {result}");
     }
@@ -1852,7 +1972,8 @@ END:VCALENDAR\r\n";
             ("start", make_start_dt(2026, 1, 5, 9, 0, 0)),
             ("recur", recur),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(result.contains("RRULE:"), "missing RRULE: {result}");
         assert!(
             result.contains("FREQ=WEEKLY"),
@@ -1878,7 +1999,8 @@ END:VCALENDAR\r\n";
             ("uid", ImportValue::String("x-prop-uid".into())),
             ("x_my_extension", ImportValue::String("ext-value".into())),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(
             result.contains("X-CUSTOM-PROP:custom-value"),
             "missing cal x-prop: {result}"
@@ -1905,7 +2027,8 @@ END:VCALENDAR\r\n";
             ("uid", ImportValue::String("neg-dur-uid".into())),
             ("duration", duration),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(
             result.contains("DURATION:-P1W"),
             "missing negative duration: {result}"
@@ -1922,7 +2045,8 @@ END:VCALENDAR\r\n";
             ("start", make_start_dt(2026, 6, 21, 12, 0, 0)),
             ("time_zone", ImportValue::String("UTC".into())),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(
             result.contains("DTSTART:20260621T120000Z"),
             "expected UTC DTSTART: {result}"
@@ -1943,7 +2067,8 @@ END:VCALENDAR\r\n";
             ("uid", ImportValue::String("date-uid".into())),
             ("start", start),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(
             result.contains("DTSTART;VALUE=DATE:20261225"),
             "expected date-only DTSTART: {result}"
@@ -1965,7 +2090,8 @@ END:VCALENDAR\r\n";
                 ]),
             ),
         ]));
-        let result = emit_icalendar(&calendar, &[event]).unwrap();
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
         assert!(
             result.contains("CATEGORIES:"),
             "missing CATEGORIES: {result}"

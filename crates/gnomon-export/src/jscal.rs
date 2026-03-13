@@ -27,10 +27,15 @@ use calendar_types::string::Uid;
 ///
 /// The output is a single JSCalendar Group object containing the entries.
 // r[impl model.export.jscalendar.calendar+2]
-pub fn emit_jscalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Result<String, String> {
+pub fn emit_jscalendar(
+    w: &mut impl std::fmt::Write,
+    calendar: &ImportRecord,
+    entries: &[ImportValue],
+) -> Result<(), String> {
     let group = build_group(calendar, entries)?;
     let json: Json = group.into_json();
-    serde_json::to_string_pretty(&json).map_err(|e| e.to_string())
+    let s = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
+    w.write_str(&s).map_err(|e| e.to_string())
 }
 
 // ── Group builder ────────────────────────────────────────────
@@ -517,7 +522,8 @@ mod tests {
             ("time_zone", ImportValue::String("America/New_York".into())),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         assert_eq!(parsed["@type"], "Group");
@@ -549,7 +555,8 @@ mod tests {
             ("progress", ImportValue::String("in-process".into())),
         ]));
 
-        let result = emit_jscalendar(&cal, &[task]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[task]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         assert_eq!(parsed["@type"], "Group");
@@ -581,7 +588,8 @@ mod tests {
             ),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event, task]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event, task]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         assert_eq!(parsed["@type"], "Group");
@@ -614,7 +622,8 @@ mod tests {
             ),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         let entries = parsed["entries"].as_array().unwrap();
@@ -643,7 +652,8 @@ mod tests {
             ),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         let entries = parsed["entries"].as_array().unwrap();
@@ -664,7 +674,8 @@ mod tests {
             ("show_without_time", ImportValue::Bool(true)),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         let entries = parsed["entries"].as_array().unwrap();
@@ -684,7 +695,8 @@ mod tests {
             ("priority", ImportValue::Integer(5)),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         let entries = parsed["entries"].as_array().unwrap();
@@ -737,7 +749,8 @@ mod tests {
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
         ]));
 
-        let result = emit_jscalendar(&cal, &[event]).unwrap();
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event]).unwrap();
         let parsed: Json = serde_json::from_str(&result).unwrap();
 
         assert_eq!(parsed["@type"], "Group");
@@ -771,7 +784,13 @@ mod tests {
 
         // Wrap in a calendar and re-emit.
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
-        let emitted = emit_jscalendar(&cal, &[ImportValue::Record(event_rec.clone())]).unwrap();
+        let mut emitted = String::new();
+        emit_jscalendar(
+            &mut emitted,
+            &cal,
+            &[ImportValue::Record(event_rec.clone())],
+        )
+        .unwrap();
 
         // Re-parse via the jscalendar crate to validate structure.
         let re_parsed: Json = serde_json::from_str(&emitted).unwrap();
@@ -829,7 +848,8 @@ mod tests {
 
         // Wrap in a calendar and re-emit.
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
-        let emitted = emit_jscalendar(&cal, &[ImportValue::Record(task_rec.clone())]).unwrap();
+        let mut emitted = String::new();
+        emit_jscalendar(&mut emitted, &cal, &[ImportValue::Record(task_rec.clone())]).unwrap();
 
         // Re-parse via the jscalendar crate to validate structure.
         let re_parsed: Json = serde_json::from_str(&emitted).unwrap();

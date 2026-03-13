@@ -394,21 +394,26 @@ fn main() -> ExitCode {
             }
 
             // r[impl cli.subcommand.compile.output]
-            // Compile each calendar and write output to STDOUT.
+            // Compile each calendar and write output to a buffer.
             let mut outputs: Vec<String> = Vec::new();
+            let mut export_warnings: Vec<String> = Vec::new();
             for calendar in &check_result.calendars {
                 let (cal_record, entries) = calendar_to_import_values(&db, calendar);
+                let mut buf = String::new();
                 let result = match format {
-                    ExportFormat::Icalendar => emit_icalendar(&cal_record, &entries),
-                    ExportFormat::Jscalendar => emit_jscalendar(&cal_record, &entries),
-                };
-                match result {
-                    Ok(s) => outputs.push(s),
-                    Err(e) => {
-                        eprintln!("error: export failed: {e}");
-                        return ExitCode::FAILURE;
+                    ExportFormat::Icalendar => {
+                        emit_icalendar(&mut buf, &cal_record, &entries, &mut export_warnings)
                     }
+                    ExportFormat::Jscalendar => emit_jscalendar(&mut buf, &cal_record, &entries),
+                };
+                if let Err(e) = result {
+                    eprintln!("error: export failed: {e}");
+                    return ExitCode::FAILURE;
                 }
+                outputs.push(buf);
+            }
+            for w in &export_warnings {
+                eprintln!("warning: {w}");
             }
 
             use std::io::Write;
