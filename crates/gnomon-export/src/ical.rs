@@ -1054,7 +1054,6 @@ const TODO_KNOWN: &[&str] = &[
     "start",
     "due",
     "completed",
-    "duration",
     "estimated_duration",
     "time_zone",
     "status",
