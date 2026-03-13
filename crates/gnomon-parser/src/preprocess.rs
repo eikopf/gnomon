@@ -90,4 +90,29 @@ mod tests {
     fn bom_only() {
         assert_eq!(preprocess("\u{FEFF}"), "");
     }
+
+    // r[verify lexer.input-format.rule-order]
+    #[test]
+    fn whitespace_only_after_preprocessing() {
+        assert_eq!(preprocess("   \n\t\n  "), "   \n\t\n  ");
+    }
+
+    // r[verify lexer.input-format.crlf-normalization]
+    #[test]
+    fn mixed_crlf_and_lf() {
+        assert_eq!(preprocess("a\r\nb\nc\r\nd"), "a\nb\nc\nd");
+    }
+
+    // r[verify lexer.input-format.rule-order]
+    #[test]
+    fn shebang_with_crlf_followed_by_whitespace() {
+        assert_eq!(preprocess("#!/usr/bin/env gnomon\r\n   \n\t"), "   \n\t");
+    }
+
+    // r[verify lexer.input-format.rule-order]
+    #[test]
+    fn bom_crlf_shebang_combined() {
+        let input = "\u{FEFF}#!/usr/bin/env gnomon\r\n\r\nhello\r\nworld";
+        assert_eq!(preprocess(input), "\nhello\nworld");
+    }
 }
