@@ -7,8 +7,8 @@ use calico::model::component::{Calendar, CalendarComponent, Event, Todo};
 use calico::model::parameter::Params;
 use calico::model::primitive::{
     Attachment, ClassValue, Date, DateTime, DateTimeOrDate, Day, Duration, ExactDuration, Geo,
-    Hour, Minute, Month, NominalDuration, Priority, RDateSeq, Second, Sign, SignedDuration,
-    Status, TimeFormat, TimeTransparency, Token, Utc, Version, Weekday, Year,
+    Hour, Minute, Month, NominalDuration, Priority, RDateSeq, Second, Sign, SignedDuration, Status,
+    TimeFormat, TimeTransparency, Token, Utc, Version, Weekday, Year,
 };
 use calico::model::property::Prop;
 use calico::model::rrule::weekday_num_set::WeekdayNumSet;
