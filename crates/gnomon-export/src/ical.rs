@@ -27,12 +27,29 @@ use gnomon_import::{ImportRecord, ImportValue};
 // calico::model::string::Uri has `pub(crate) new` so it cannot be constructed
 // from outside the crate. However it is repr(transparent) over str with a
 // trivial (always-succeeding) invariant, so the transmutation is sound.
+//
+// The const block below asserts that `&Uri` and `&str` have the same size and
+// alignment, catching any future change to Uri's layout at compile time.
+const _: () = {
+    use calico::model::string::Uri;
+    assert!(
+        std::mem::size_of::<&Uri>() == std::mem::size_of::<&str>(),
+        "calico::model::string::Uri no longer has the same pointer size as str; \
+         the transmute in make_calico_uri is unsound and must be revisited",
+    );
+    assert!(
+        std::mem::align_of::<&Uri>() == std::mem::align_of::<&str>(),
+        "calico::model::string::Uri no longer has the same pointer alignment as str; \
+         the transmute in make_calico_uri is unsound and must be revisited",
+    );
+};
 
 fn make_calico_uri(s: &str) -> Box<calico::model::string::Uri> {
     // SAFETY: calico::model::string::Uri is repr(transparent) over str with
     // a trivial invariant (the constructor is pub(crate) only for API reasons,
     // not because any str value is invalid). Transmuting Box<str> → Box<Uri>
     // is sound since both are repr(transparent) over str with the same memory layout.
+    // The layout assumption is verified by the const assertions above.
     let b: Box<str> = s.into();
     unsafe { Box::from_raw(Box::into_raw(b) as *mut calico::model::string::Uri) }
 }
