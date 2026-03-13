@@ -541,3 +541,197 @@ event @test 2026-03-15T09:00 1h "Test"
         .success()
         .stderr(predicate::str::contains("not imported"));
 }
+
+// ── find_gnomon_files edge cases ─────────────────────────────
+
+// Verifies that find_gnomon_files does not loop infinitely when the directory
+// tree contains a symlink cycle (e.g. subdir/loop -> parent). The check
+// command should terminate and produce at most a warning for the unused file,
+// not hang or crash.
+#[test]
+#[cfg(unix)]
+fn find_gnomon_files_symlink_loop_does_not_hang() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Create a root gnomon file so `check` has something valid to process.
+    let root = write_temp_file(
+        &dir,
+        "root.gnomon",
+        r#"calendar { uid: "550e8400-e29b-41d4-a716-446655440000" }"#,
+    );
+
+    // Create a subdirectory and inside it a symlink that points back to the
+    // parent directory, forming a cycle.
+    let subdir = dir.path().join("sub");
+    std::fs::create_dir(&subdir).unwrap();
+    std::os::unix::fs::symlink(dir.path(), subdir.join("loop")).unwrap();
+
+    // The command must finish (i.e. not loop forever) and succeed or warn.
+    gnomon()
+        .args(["check", root.to_str().unwrap()])
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success();
+}
+
+// Verifies that find_gnomon_files discovers .gnomon files in a deeply nested
+// directory hierarchy (5 levels deep) and reports them as unused.
+#[test]
+fn find_gnomon_files_deep_nesting() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Root file that check is run against.
+    let root = write_temp_file(
+        &dir,
+        "root.gnomon",
+        r#"calendar { uid: "550e8400-e29b-41d4-a716-446655440000" }"#,
+    );
+
+    // Build a 5-level-deep nested directory and place a .gnomon file at the
+    // bottom.
+    let deep = dir
+        .path()
+        .join("a")
+        .join("b")
+        .join("c")
+        .join("d")
+        .join("e");
+    std::fs::create_dir_all(&deep).unwrap();
+    let mut f =
+        std::fs::File::create(deep.join("deep.gnomon")).unwrap();
+    std::io::Write::write_all(&mut f, b"event @deep { name: @x }").unwrap();
+
+    // The deeply-nested file is not imported, so we expect an "not imported"
+    // warning.
+    gnomon()
+        .args(["check", root.to_str().unwrap()])
+        .assert()
+        .stderr(predicate::str::contains("not imported"));
+}
+
+// Verifies that a symlink pointing directly to a .gnomon file is found and
+// reported as unused.
+#[test]
+#[cfg(unix)]
+fn find_gnomon_files_symlink_to_file() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Root file.
+    let root = write_temp_file(
+        &dir,
+        "root.gnomon",
+        r#"calendar { uid: "550e8400-e29b-41d4-a716-446655440000" }"#,
+    );
+
+    // A real .gnomon file in a subdirectory.
+    let subdir = dir.path().join("sub");
+    std::fs::create_dir(&subdir).unwrap();
+    let real_file = subdir.join("real.gnomon");
+    std::fs::write(&real_file, b"event @real { name: @x }").unwrap();
+
+    // A symlink at the top level that points to the real file.
+    let link = dir.path().join("link.gnomon");
+    std::os::unix::fs::symlink(&real_file, &link).unwrap();
+
+    // Both the real file and the symlink target resolve to files, so at least
+    // one of them should be reported as unused.
+    gnomon()
+        .args(["check", root.to_str().unwrap()])
+        .assert()
+        .stderr(predicate::str::contains("not imported"));
+}
+
+// Verifies that a symlink pointing to a directory containing .gnomon files is
+// followed and the files inside are found and reported as unused.
+#[test]
+#[cfg(unix)]
+fn find_gnomon_files_symlink_to_directory() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Root file.
+    let root = write_temp_file(
+        &dir,
+        "root.gnomon",
+        r#"calendar { uid: "550e8400-e29b-41d4-a716-446655440000" }"#,
+    );
+
+    // A real directory (outside the project) containing a .gnomon file.
+    let real_dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        real_dir.path().join("inside.gnomon"),
+        b"event @inside { name: @x }",
+    )
+    .unwrap();
+
+    // A symlink inside the project directory pointing to that external real
+    // directory.
+    let link_dir = dir.path().join("linked");
+    std::os::unix::fs::symlink(real_dir.path(), &link_dir).unwrap();
+
+    // The file inside the symlinked directory should be discovered and reported
+    // as unused.
+    gnomon()
+        .args(["check", root.to_str().unwrap()])
+        .assert()
+        .stderr(predicate::str::contains("not imported"));
+}
+
+// Verifies that find_gnomon_files handles a subdirectory with no read
+// permission gracefully: it should not panic or crash, and the overall command
+// should still succeed (or at most warn about other issues).
+#[test]
+#[cfg(unix)]
+fn find_gnomon_files_permission_error_on_subdir() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = tempfile::tempdir().unwrap();
+
+    // Root file.
+    let root = write_temp_file(
+        &dir,
+        "root.gnomon",
+        r#"calendar { uid: "550e8400-e29b-41d4-a716-446655440000" }"#,
+    );
+
+    // A subdirectory with no read/execute permissions.
+    let locked = dir.path().join("locked");
+    std::fs::create_dir(&locked).unwrap();
+    // Place a .gnomon file inside so there would be something to find if
+    // permissions allowed it.
+    std::fs::write(locked.join("hidden.gnomon"), b"event @hidden { name: @x }").unwrap();
+    // Remove all permissions from the directory.
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    // If setting permissions had no effect (e.g. running as root), the
+    // hidden file would be found and the test would fail because it expects
+    // no "not imported" warning. Detect this by checking whether we can still
+    // read the directory.
+    let running_as_root = std::fs::read_dir(&locked).is_ok();
+
+    // Restore permissions on drop so tempdir cleanup does not fail.
+    struct RestorePerms(std::path::PathBuf);
+    impl Drop for RestorePerms {
+        fn drop(&mut self) {
+            use std::os::unix::fs::PermissionsExt as _;
+            let _ = std::fs::set_permissions(
+                &self.0,
+                std::fs::Permissions::from_mode(0o755),
+            );
+        }
+    }
+    let _restore = RestorePerms(locked.clone());
+
+    if running_as_root {
+        // Can't meaningfully test permission errors as root; skip.
+        return;
+    }
+
+    // The command must not panic or crash. It should succeed (no error about
+    // the locked directory itself) and should not report the hidden file as
+    // unused because it cannot be seen.
+    gnomon()
+        .args(["check", root.to_str().unwrap()])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("not imported").not());
+}
