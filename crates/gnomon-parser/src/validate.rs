@@ -289,7 +289,7 @@ fn check_duplicate_keys(record: &RecordExpr, errors: &mut Vec<SyntaxError>) {
 }
 
 // r[impl record.event.name+2]
-// r[impl record.event.start]
+// r[impl record.event.start+2]
 fn check_event_expr(ev: &EventExpr, errors: &mut Vec<SyntaxError>) {
     if let Some(body) = ev.body() {
         check_duplicate_keys(&body, errors);

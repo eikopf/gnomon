@@ -86,7 +86,7 @@ fn shape_fields(shape: Shape) -> &'static [FieldDef] {
 
 // ── Calendar fields ────────────────────────────────────────
 
-// r[impl model.calendar.uid]
+// r[impl model.calendar.uid+2]
 // r[impl field.uid.type]
 const CALENDAR_FIELDS: [FieldDef; 1] = [FieldDef {
     name: "uid",
@@ -94,10 +94,18 @@ const CALENDAR_FIELDS: [FieldDef; 1] = [FieldDef {
     expected: ExpectedType::String,
 }];
 
+// r[impl model.calendar.uid+2]
+// For foreign imports, uid is optional.
+const CALENDAR_FIELDS_FOREIGN: [FieldDef; 1] = [FieldDef {
+    name: "uid",
+    required: false,
+    expected: ExpectedType::String,
+}];
+
 // ── Event-specific fields ──────────────────────────────────
 
 // r[impl record.event.name+2]
-// r[impl record.event.start]
+// r[impl record.event.start+2]
 // r[impl record.event.uid+2]
 // r[impl record.event.duration]
 // r[impl record.event.status]
@@ -613,10 +621,15 @@ pub fn check_calendar_shape<'db>(
     let calendar_source = root_source;
 
     // Check calendar properties.
+    let cal_fields = if calendar.foreign_import {
+        &CALENDAR_FIELDS_FOREIGN[..]
+    } else {
+        &CALENDAR_FIELDS[..]
+    };
     check_fields(
         db,
         &calendar.properties,
-        &CALENDAR_FIELDS,
+        cal_fields,
         calendar_source,
         "calendar",
         &mut diagnostics,
@@ -1120,7 +1133,7 @@ mod tests {
             crate::eval::merge::validate_calendar(db, source, eval.value, eval.diagnostics);
         // Shape diagnostics are appended after validation diagnostics;
         // filter to only shape-related ones by re-running the check.
-        let diags = check_calendar_shape(db, &result.calendar, source);
+        let diags = check_calendar_shape(db, &result.calendars[0], source);
         diags.iter().map(|d| d.message.clone()).collect()
     }
 
@@ -1141,7 +1154,7 @@ mod tests {
     // ── Missing mandatory fields ────────────────────────────
 
     // r[verify model.shape.required]
-    // r[verify model.calendar.uid]
+    // r[verify model.calendar.uid+2]
     #[test]
     fn calendar_missing_uid() {
         let db = Database::default();

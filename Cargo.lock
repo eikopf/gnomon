@@ -500,9 +500,11 @@ dependencies = [
  "clap",
  "etcetera",
  "gnomon-db",
+ "gnomon-export",
  "gnomon-parser",
  "predicates",
  "rustyline",
+ "serde_json",
  "tempfile",
 ]
 
@@ -523,6 +525,18 @@ dependencies = [
  "tempfile",
  "ureq",
  "uuid",
+]
+
+[[package]]
+name = "gnomon-export"
+version = "0.1.0"
+dependencies = [
+ "calendar-types",
+ "calico",
+ "expect-test",
+ "gnomon-import",
+ "jscalendar",
+ "serde_json",
 ]
 
 [[package]]
