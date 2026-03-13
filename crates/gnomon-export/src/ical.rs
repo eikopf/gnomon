@@ -53,7 +53,7 @@ pub fn emit_icalendar(
     let prod_id = calendar
         .get("prod_id")
         .and_then(|v| as_str(v))
-        .unwrap_or("-//Gnomon//Gnomon//EN")
+        .unwrap_or("-//gnomon//EN")
         .to_string();
 
     let version_prop: Prop<Token<Version, String>, Params> = Prop {
@@ -88,7 +88,7 @@ pub fn emit_icalendar(
     // ── Optional VCALENDAR properties ────────────────────────
 
     if let Some(uid_str) = calendar.get("uid").and_then(|v| as_str(v)) {
-        let uid = Uid::new(uid_str).unwrap();
+        let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in calendar: {}", e))?;
         cal.set_uid(Prop {
             value: uid.into(),
             params: Params::default(),
@@ -1054,7 +1054,6 @@ const TODO_KNOWN: &[&str] = &[
     "start",
     "due",
     "completed",
-    "duration",
     "estimated_duration",
     "time_zone",
     "status",
