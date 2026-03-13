@@ -7,7 +7,7 @@ use calico::model::component::{Calendar, CalendarComponent, Event, Todo};
 use calico::model::parameter::Params;
 use calico::model::primitive::{
     Attachment, ClassValue, Date, DateTime, DateTimeOrDate, Day, Duration, ExactDuration, Geo,
-    Hour, Minute, Month, NominalDuration, Priority, Second, Sign, SignedDuration, Status,
+    Hour, Minute, Month, NominalDuration, Priority, RDateSeq, Second, Sign, SignedDuration, Status,
     TimeFormat, TimeTransparency, Token, Utc, Version, Weekday, Year,
 };
 use calico::model::property::Prop;
@@ -448,6 +448,51 @@ fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Even
         }
     }
 
+    // RDATE ← rdates
+    if let Some(ImportValue::List(rdates)) = record.get("rdates") {
+        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
+        let converted: Vec<Prop<DateTimeOrDate, Params>> = rdates
+            .iter()
+            .filter_map(|v| import_value_to_dtstart(v, tz_str))
+            .collect();
+        let mut rdate_props: Vec<Prop<RDateSeq, Params>> = Vec::new();
+        let datetimes: Vec<DateTime<TimeFormat>> = converted
+            .iter()
+            .filter_map(|p| {
+                if let DateTimeOrDate::DateTime(dt) = p.value {
+                    Some(dt)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !datetimes.is_empty() {
+            rdate_props.push(Prop {
+                value: RDateSeq::DateTime(datetimes),
+                params: Params::default(),
+            });
+        }
+        let dates: Vec<Date> = converted
+            .iter()
+            .filter_map(|p| {
+                if let DateTimeOrDate::Date(d) = p.value {
+                    Some(d)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !dates.is_empty() {
+            rdate_props.push(Prop {
+                value: RDateSeq::Date(dates),
+                params: Params::default(),
+            });
+        }
+        if !rdate_props.is_empty() {
+            event.set_rdate(rdate_props);
+        }
+    }
+
     // ATTACH ← attachments
     if let Some(ImportValue::List(attaches)) = record.get("attachments") {
         let props: Vec<Prop<Attachment, Params>> = attaches
@@ -640,6 +685,7 @@ const EVENT_KNOWN: &[&str] = &[
     "recurrence_id",
     "recur",
     "exdates",
+    "rdates",
     "attachments",
     "attendees",
     "comments",
@@ -896,6 +942,51 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
         }
     }
 
+    // RDATE ← rdates
+    if let Some(ImportValue::List(rdates)) = record.get("rdates") {
+        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
+        let converted: Vec<Prop<DateTimeOrDate, Params>> = rdates
+            .iter()
+            .filter_map(|v| import_value_to_dtstart(v, tz_str))
+            .collect();
+        let mut rdate_props: Vec<Prop<RDateSeq, Params>> = Vec::new();
+        let datetimes: Vec<DateTime<TimeFormat>> = converted
+            .iter()
+            .filter_map(|p| {
+                if let DateTimeOrDate::DateTime(dt) = p.value {
+                    Some(dt)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !datetimes.is_empty() {
+            rdate_props.push(Prop {
+                value: RDateSeq::DateTime(datetimes),
+                params: Params::default(),
+            });
+        }
+        let dates: Vec<Date> = converted
+            .iter()
+            .filter_map(|p| {
+                if let DateTimeOrDate::Date(d) = p.value {
+                    Some(d)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if !dates.is_empty() {
+            rdate_props.push(Prop {
+                value: RDateSeq::Date(dates),
+                params: Params::default(),
+            });
+        }
+        if !rdate_props.is_empty() {
+            todo.set_rdate(rdate_props);
+        }
+    }
+
     // ATTACH ← attachments
     if let Some(ImportValue::List(attaches)) = record.get("attachments") {
         let props: Vec<Prop<Attachment, Params>> = attaches
@@ -1090,6 +1181,7 @@ const TODO_KNOWN: &[&str] = &[
     "recurrence_id",
     "recur",
     "exdates",
+    "rdates",
     "attachments",
     "attendees",
     "comments",
