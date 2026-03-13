@@ -461,12 +461,7 @@ mod tests {
         let blame = test_blame(&db);
         // Test negative duration with multiple components where one exceeds i64::MAX
         // The function should return None as soon as any component fails to convert
-        assert!(desugar_duration(
-            &db,
-            "-1w9223372036854775808d3h",
-            &blame
-        )
-        .is_none());
+        assert!(desugar_duration(&db, "-1w9223372036854775808d3h", &blame).is_none());
     }
 
     #[test]
