@@ -586,10 +586,7 @@ mod tests {
         let record = desugar::make_record(&db, &fields, &blame);
 
         let err = record_to_rule(&db, &record).unwrap_err();
-        assert!(
-            err.contains("interval must be at least 1"),
-            "got: {err}"
-        );
+        assert!(err.contains("interval must be at least 1"), "got: {err}");
     }
 
     #[test]
