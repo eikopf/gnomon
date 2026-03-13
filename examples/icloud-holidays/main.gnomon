@@ -3,7 +3,4 @@
 let us-holidays = import <https://calendars.icloud.com/holidays/us_en.ics> in
 let ch-holidays = import <https://calendars.icloud.com/holidays/ch_de-ch.ics> in
 
-[
-  us-holidays,
-  ch-holidays,
-]
+us-holidays ++ ch-holidays
