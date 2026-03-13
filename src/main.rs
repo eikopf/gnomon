@@ -404,7 +404,9 @@ fn main() -> ExitCode {
                     ExportFormat::Icalendar => {
                         emit_icalendar(&mut buf, &cal_record, &entries, &mut export_warnings)
                     }
-                    ExportFormat::Jscalendar => emit_jscalendar(&mut buf, &cal_record, &entries),
+                    ExportFormat::Jscalendar => {
+                        emit_jscalendar(&mut buf, &cal_record, &entries, &mut export_warnings)
+                    }
                 };
                 if let Err(e) = result {
                     eprintln!("error: export failed: {e}");
