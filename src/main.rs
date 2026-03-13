@@ -509,17 +509,45 @@ fn print_diagnostics(db: &Database, diagnostics: &[Diagnostic]) -> bool {
 
 fn offset_to_line_col(text: &str, offset: usize) -> (usize, usize) {
     let mut line = 1;
-    let mut col = 1;
-    for (i, ch) in text.char_indices() {
+    let mut line_start = 0;
+    for (i, byte) in text.bytes().enumerate() {
         if i >= offset {
             break;
         }
-        if ch == '\n' {
+        if byte == b'\n' {
             line += 1;
-            col = 1;
-        } else {
-            col += 1;
+            line_start = i + 1;
         }
     }
+    let col = offset - line_start + 1;
     (line, col)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn offset_zero() {
+        assert_eq!(offset_to_line_col("", 0), (1, 1));
+        assert_eq!(offset_to_line_col("abc", 0), (1, 1));
+    }
+
+    #[test]
+    fn simple_ascii() {
+        // "abc\ndef" — offset 5 is 'e', which is line 2, byte-column 2
+        assert_eq!(offset_to_line_col("abc\ndef", 5), (2, 2));
+    }
+
+    #[test]
+    fn multibyte_column_is_byte_based() {
+        // "héllo" — 'h' is byte 0, 'é' is bytes 1-2, 'l' is byte 3
+        // offset 3 should give column 4 (byte-based), not column 3 (char-based)
+        assert_eq!(offset_to_line_col("héllo", 3), (1, 4));
+    }
+
+    #[test]
+    fn empty_input() {
+        assert_eq!(offset_to_line_col("", 0), (1, 1));
+    }
 }
