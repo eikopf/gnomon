@@ -2315,4 +2315,122 @@ END:VCALENDAR\r\n";
             _ => panic!("expected duration record"),
         }
     }
+
+    #[test]
+    fn duration_same_day_zero() {
+        // Start and end are the same datetime — duration should be zero.
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:same-day-zero\r\n\
+SUMMARY:Zero Duration\r\n\
+DTSTART:20260315T100000\r\n\
+DTEND:20260315T100000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
+        }
+    }
+
+    #[test]
+    fn duration_jan30_to_feb28_non_leap() {
+        // 2026-01-30 00:00 to 2026-02-28 00:00 = 29 days.
+        // This is distinct from Jan 31 -> Mar 1 (also 29 days) because the path
+        // through the calendar is different; both must resolve correctly.
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:jan30-feb28\r\n\
+SUMMARY:Jan30 to Feb28\r\n\
+DTSTART:20260130T000000\r\n\
+DTEND:20260228T000000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(29));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
+        }
+    }
+
+    #[test]
+    fn duration_across_year_boundary() {
+        // 2025-12-31 00:00 to 2026-01-01 00:00 = 1 day.
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:year-boundary\r\n\
+SUMMARY:New Year\r\n\
+DTSTART:20251231T000000\r\n\
+DTEND:20260101T000000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(1));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
+        }
+    }
+
+    #[test]
+    fn duration_across_year_boundary_with_time() {
+        // 2025-12-31 23:00:00 to 2026-01-01 01:30:00 = 0 days, 2h, 30m.
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Test//Test//EN\r\n\
+BEGIN:VEVENT\r\n\
+UID:year-boundary-time\r\n\
+SUMMARY:New Year Countdown\r\n\
+DTSTART:20251231T230000\r\n\
+DTEND:20260101T013000\r\n\
+END:VEVENT\r\n\
+END:VCALENDAR\r\n";
+
+        let result = translate_icalendar(ics).unwrap();
+        let (_cal, entries) = split_ical_result(&result);
+        let rec = entries[0];
+        match get_field(rec, "duration") {
+            ImportValue::Record(dur) => {
+                assert_eq!(get_field(dur, "days"), &ImportValue::Integer(0));
+                assert_eq!(get_field(dur, "hours"), &ImportValue::Integer(2));
+                assert_eq!(get_field(dur, "minutes"), &ImportValue::Integer(30));
+                assert_eq!(get_field(dur, "seconds"), &ImportValue::Integer(0));
+            }
+            _ => panic!("expected duration record"),
+        }
+    }
 }
