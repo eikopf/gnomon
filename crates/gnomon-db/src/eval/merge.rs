@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use uuid::Uuid;
 
-use super::interned::FieldName;
+use super::interned::{DeclKind, FieldName};
 use super::types::{Blamed, Calendar, Record, Value};
 use crate::input::SourceFile;
 use crate::queries::{Diagnostic, Severity};
@@ -79,7 +79,14 @@ pub fn validate_calendar<'db>(
             }
             // r[impl model.calendar.singular+4]
             Some(Value::String(s)) if s == "calendar" => {
-                let mut calendar = Calendar::default();
+                // r[impl model.calendar.uid+2]
+                // Gnomon `calendar { ... }` expressions have DeclKind::Calendar;
+                // foreign import results have DeclKind::Expr.
+                let foreign_import = blame.decl.kind(db) != DeclKind::Calendar;
+                let mut calendar = Calendar {
+                    foreign_import,
+                    ..Calendar::default()
+                };
 
                 // Extract nested entries from the calendar record's `entries` field.
                 if let Some(entries_blamed) = record.get(&entries_key)
@@ -185,7 +192,7 @@ fn derive_uids<'db>(
     calendar: &mut Calendar<'db>,
     root_source: SourceFile,
     diagnostics: &mut Vec<Diagnostic>,
-    has_errors: &mut bool,
+    _has_errors: &mut bool,
 ) {
     let uid_key = FieldName::new(db, "uid".to_string());
     let name_key = FieldName::new(db, "name".to_string());
@@ -196,11 +203,10 @@ fn derive_uids<'db>(
             Value::String(s) => match Uuid::parse_str(s) {
                 Ok(uuid) => uuid,
                 Err(_) => {
-                    *has_errors = true;
                     diagnostics.push(Diagnostic {
                         source: root_source,
                         range: rowan::TextRange::default(),
-                        severity: Severity::Error,
+                        severity: Severity::Warning,
                         message: format!(
                             "calendar uid \"{}\" is not a valid UUID; cannot derive entry UIDs",
                             s
@@ -836,7 +842,7 @@ mod tests {
 
     // ── UID derivation tests ─────────────────────────────────
 
-    // r[verify model.calendar.uid]
+    // r[verify model.calendar.uid+2]
     // r[verify model.calendar.uid.derivation]
     #[test]
     fn uid_derived_for_entry_without_uid() {
@@ -926,17 +932,18 @@ mod tests {
             "a.gnomon",
             r#"
             calendar { uid: "not-a-uuid" }
-            event @meeting 2026-03-01T14:30 1h "Standup"
+            event @meeting 2026-03-01T14:30 1h "Standup" { uid: "explicit-uid" }
             "#,
         );
         let result = check(&db, source);
-        assert!(result.has_errors);
+        // Non-UUID uid is a warning, not an error.
+        assert!(!result.has_errors);
         assert!(
             result
                 .diagnostics
                 .iter()
-                .any(|d| d.message.contains("not a valid UUID")),
-            "expected UUID error, got: {:?}",
+                .any(|d| d.message.contains("not a valid UUID") && d.severity == Severity::Warning),
+            "expected UUID warning, got: {:?}",
             result
                 .diagnostics
                 .iter()
@@ -1008,7 +1015,7 @@ mod tests {
         assert!(entry.get(&occ_key).is_none(), "should not have occurrences");
     }
 
-    // r[verify record.rrule.eval.start-required]
+    // r[verify record.rrule.eval.start-required+2]
     #[test]
     fn entry_with_recur_but_no_start_produces_error() {
         let db = Database::default();

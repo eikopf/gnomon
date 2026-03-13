@@ -64,4 +64,7 @@ impl<'db> Value<'db> {
 pub struct Calendar<'db> {
     pub properties: Record<'db>,
     pub entries: Vec<Blamed<'db, Record<'db>>>,
+    /// True when this calendar was produced by a foreign format import (iCalendar, JSCalendar).
+    /// Foreign-import calendars may omit `uid`.
+    pub foreign_import: bool,
 }

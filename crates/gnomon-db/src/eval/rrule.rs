@@ -14,64 +14,83 @@ fn get_field<'db>(db: &'db dyn crate::Db, record: &Record<'db>, name: &str) -> O
     record.get(&key).map(|b| b.value.clone())
 }
 
-/// Convert a datetime record `{ date: { year, month, day }, time: { hour, minute, second } }`
-/// into a `jiff::civil::DateTime`.
+/// Convert a datetime or date record into a `jiff::civil::DateTime`.
+///
+/// Accepts two shapes:
+/// - `{ date: { year, month, day }, time: { hour, minute, second } }` (full datetime)
+/// - `{ year, month, day }` (date-only; time defaults to 00:00:00)
+// r[impl record.rrule.eval.start-required+2]
 fn record_to_datetime(
     db: &dyn crate::Db,
     record: &Record<'_>,
 ) -> Result<gnomon_rrule::DateTime, String> {
-    let date_rec = match get_field(db, record, "date") {
-        Some(Value::Record(r)) => r,
-        _ => return Err("missing or invalid 'date' sub-record".into()),
-    };
-    let time_rec = match get_field(db, record, "time") {
-        Some(Value::Record(r)) => r,
-        _ => return Err("missing or invalid 'time' sub-record".into()),
-    };
+    // Try nested datetime shape first.
+    if let Some(Value::Record(date_rec)) = get_field(db, record, "date") {
+        let time_rec = match get_field(db, record, "time") {
+            Some(Value::Record(r)) => r,
+            _ => return Err("missing or invalid 'time' sub-record".into()),
+        };
+        let (year, month, day) = extract_date_fields(db, &date_rec)?;
+        let (hour, minute, second) = extract_time_fields(db, &time_rec)?;
+        let date =
+            jiff::civil::Date::new(year, month, day).map_err(|e| format!("invalid date: {e}"))?;
+        let time = jiff::civil::Time::new(hour, minute, second, 0)
+            .map_err(|e| format!("invalid time: {e}"))?;
+        return Ok(jiff::civil::DateTime::from_parts(date, time));
+    }
 
-    let year = match get_field(db, &date_rec, "year") {
+    // Fall back to flat date-only shape: { year, month, day }.
+    let (year, month, day) = extract_date_fields(db, record)?;
+    let date =
+        jiff::civil::Date::new(year, month, day).map_err(|e| format!("invalid date: {e}"))?;
+    let time = jiff::civil::Time::new(0, 0, 0, 0).map_err(|e| format!("invalid time: {e}"))?;
+    Ok(jiff::civil::DateTime::from_parts(date, time))
+}
+
+/// Extract year, month, day from a record.
+fn extract_date_fields(db: &dyn crate::Db, record: &Record<'_>) -> Result<(i16, i8, i8), String> {
+    let year = match get_field(db, record, "year") {
         Some(Value::Integer(n)) => {
             i16::try_from(n).map_err(|_| format!("date.year out of range: {n}"))?
         }
         _ => return Err("missing or invalid 'date.year'".into()),
     };
-    let month = match get_field(db, &date_rec, "month") {
+    let month = match get_field(db, record, "month") {
         Some(Value::Integer(n)) => {
             i8::try_from(n).map_err(|_| format!("date.month out of range: {n}"))?
         }
         _ => return Err("missing or invalid 'date.month'".into()),
     };
-    let day = match get_field(db, &date_rec, "day") {
+    let day = match get_field(db, record, "day") {
         Some(Value::Integer(n)) => {
             i8::try_from(n).map_err(|_| format!("date.day out of range: {n}"))?
         }
         _ => return Err("missing or invalid 'date.day'".into()),
     };
+    Ok((year, month, day))
+}
 
-    let hour = match get_field(db, &time_rec, "hour") {
+/// Extract hour, minute, second from a record.
+fn extract_time_fields(db: &dyn crate::Db, record: &Record<'_>) -> Result<(i8, i8, i8), String> {
+    let hour = match get_field(db, record, "hour") {
         Some(Value::Integer(n)) => {
             i8::try_from(n).map_err(|_| format!("time.hour out of range: {n}"))?
         }
         _ => return Err("missing or invalid 'time.hour'".into()),
     };
-    let minute = match get_field(db, &time_rec, "minute") {
+    let minute = match get_field(db, record, "minute") {
         Some(Value::Integer(n)) => {
             i8::try_from(n).map_err(|_| format!("time.minute out of range: {n}"))?
         }
         _ => return Err("missing or invalid 'time.minute'".into()),
     };
-    let second = match get_field(db, &time_rec, "second") {
+    let second = match get_field(db, record, "second") {
         Some(Value::Integer(n)) => {
             i8::try_from(n).map_err(|_| format!("time.second out of range: {n}"))?
         }
         _ => return Err("missing or invalid 'time.second'".into()),
     };
-
-    let date =
-        jiff::civil::Date::new(year, month, day).map_err(|e| format!("invalid date: {e}"))?;
-    let time = jiff::civil::Time::new(hour, minute, second, 0)
-        .map_err(|e| format!("invalid time: {e}"))?;
-    Ok(jiff::civil::DateTime::from_parts(date, time))
+    Ok((hour, minute, second))
 }
 
 /// Parse a frequency string into a `Frequency` enum value.
@@ -347,7 +366,7 @@ pub fn validate_entry_recurrences<'db>(
 
         let source = entry.blame.decl.source(db);
 
-        // r[impl record.rrule.eval.start-required]
+        // r[impl record.rrule.eval.start-required+2]
         // Extract start datetime.
         let start_record = match entry.value.get(&start_key) {
             Some(blamed) => match &blamed.value {

@@ -159,6 +159,7 @@ mod tests {
                 value: entry,
                 blame: blame.clone(),
             }],
+            foreign_import: false,
         };
 
         let (cal_record, entries) = calendar_to_import_values(&db, &calendar);

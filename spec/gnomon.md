@@ -868,8 +868,8 @@ Events represent scheduled amounts of time on a calendar; they are required to s
 r[record.event.name+2]
 Records representing events MUST have a field named `name` whose value is a name, unless the record has a `uid` field.
 
-r[record.event.start]
-Records representing events MUST have a field named `start` whose value is a local datetime.
+r[record.event.start+2]
+Records representing events MUST have a field named `start` whose value is a local datetime or a local date.
 
 The `uid` field on events is always assigned a value. If omitted, it is derived per `r[model.calendar.uid.derivation]`.
 
@@ -1023,8 +1023,8 @@ If `termination` is a count (unsigned integer), expansion MUST stop after that m
 r[record.rrule.eval.infinite]
 Infinite recurrence rules (those without a `termination` value) are valid. Implementations MUST support them by evaluating only the occurrences relevant to the operation being performed (e.g., within a queried time range).
 
-r[record.rrule.eval.start-required]
-Expanding a recurrence rule requires a `start` field on the enclosing entry. It is an error if `start` is absent or is not a datetime record.
+r[record.rrule.eval.start-required+2]
+Expanding a recurrence rule requires a `start` field on the enclosing entry. It is an error if `start` is absent or is not a datetime or date record. When `start` is a date-only record (no nested `time`), the time defaults to 00:00:00.
 
 r[record.rrule.eval.empty]
 An error SHOULD be produced if a recurrence rule is empty.
@@ -1335,10 +1335,10 @@ Specific contexts impose shape expectations on the values they receive. The `che
 
 A calendar is the primary output of Gnomon evaluation. It is a record representing a collection of calendar entries (events and tasks) together with associated metadata.
 
-> r[model.calendar.uid]
-> A calendar record MUST have a field named `uid` whose value is a string.
+> r[model.calendar.uid+2]
+> A calendar record originating from Gnomon source MUST have a field named `uid` whose value is a string. Calendar records produced by foreign format imports (iCalendar, JSCalendar) MAY omit `uid`; when absent, UID derivation is skipped.
 
-The `uid` field is the sole mandatory field on a calendar. It serves as the namespace for deterministic UID derivation: any event or task that omits an explicit `uid` receives a UUIDv5 computed from the calendar's `uid` as the namespace and the object's `name` as the key.
+The `uid` field is the sole mandatory field on a Gnomon-authored calendar. It serves as the namespace for deterministic UID derivation: any event or task that omits an explicit `uid` receives a UUIDv5 computed from the calendar's `uid` as the namespace and the object's `name` as the key.
 
 > r[model.calendar.uid.derivation]
 > When an event or task omits a `uid` field, a UID MUST be derived as `UUIDv5(calendar_uid, name)`, where `calendar_uid` is the value of the `uid` field on the enclosing calendar and `name` is the string representation of the object's `name` field.
