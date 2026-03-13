@@ -224,449 +224,15 @@ const CALENDAR_KNOWN: &[&str] = &[
     "source",
 ];
 
-// ── Event builder ─────────────────────────────────────────────
+// ── Shared fields for event/todo known-field filtering ────────
 
-fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Event, String> {
-    let mut event = Event::new(vec![], vec![], vec![], vec![]);
-
-    // UID
-    if let Some(uid_str) = record.get("uid").and_then(|v| as_str(v)) {
-        let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in event: {}", e))?;
-        event.set_uid(Prop {
-            value: uid.into(),
-            params: Params::default(),
-        });
-    }
-
-    // SUMMARY ← title
-    if let Some(title) = record.get("title").and_then(|v| as_str(v)) {
-        event.set_summary(Prop {
-            value: title.to_string(),
-            params: Params::default(),
-        });
-    }
-
-    // DESCRIPTION
-    if let Some(desc) = record.get("description").and_then(|v| as_str(v)) {
-        event.set_description(Prop {
-            value: desc.to_string(),
-            params: Params::default(),
-        });
-    }
-
-    // DTSTART ← start + time_zone
-    if let Some(start_val) = record.get("start") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        if let Some(dtstart) = import_value_to_dtstart(start_val, tz_str) {
-            event.set_dtstart(dtstart);
-        }
-    }
-
-    // DURATION ← duration
-    if let Some(dur_val) = record.get("duration")
-        && let Some(sd) = record_to_signed_duration(dur_val)
-    {
-        event.set_duration(Prop {
-            value: sd,
-            params: Params::default(),
-        });
-    }
-
-    // STATUS
-    if let Some(status_str) = record.get("status").and_then(|v| as_str(v))
-        && let Some(status) = str_to_status(status_str)
-    {
-        event.set_status(Prop {
-            value: status,
-            params: Params::default(),
-        });
-    }
-
-    // PRIORITY
-    if let Some(prio_val) = record.get("priority") {
-        let prio = import_value_to_priority(prio_val);
-        event.set_priority(Prop {
-            value: prio,
-            params: Params::default(),
-        });
-    }
-
-    // LOCATION
-    if let Some(loc) = record.get("location").and_then(|v| as_str(v)) {
-        event.set_location(Prop {
-            value: loc.to_string(),
-            params: Params::default(),
-        });
-    }
-
-    // COLOR
-    if let Some(color_str) = record.get("color").and_then(|v| as_str(v))
-        && let Ok(color) = color_str.parse::<calico::model::css::Css3Color>()
-    {
-        event.set_color(Prop {
-            value: color,
-            params: Params::default(),
-        });
-    }
-
-    // CATEGORIES
-    if let Some(ImportValue::List(cats)) = record.get("categories") {
-        let cat_strings: Vec<String> = cats
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| s.to_string())
-            .collect();
-        if !cat_strings.is_empty() {
-            event.set_categories(vec![Prop {
-                value: cat_strings,
-                params: Params::default(),
-            }]);
-        }
-    }
-
-    // DTSTAMP
-    if let Some(dtstamp_val) = record.get("dtstamp")
-        && let Some(dt) = record_to_utc_datetime(dtstamp_val)
-    {
-        event.set_dtstamp(Prop {
-            value: dt,
-            params: Params::default(),
-        });
-    }
-
-    // CLASS
-    if let Some(class_str) = record.get("class").and_then(|v| as_str(v)) {
-        let class_val = str_to_class(class_str);
-        event.set_class(Prop {
-            value: class_val,
-            params: Params::default(),
-        });
-    }
-
-    // CREATED
-    if let Some(created_val) = record.get("created")
-        && let Some(dt) = record_to_utc_datetime(created_val)
-    {
-        event.set_created(Prop {
-            value: dt,
-            params: Params::default(),
-        });
-    }
-
-    // GEO
-    if let Some(geo_val) = record.get("geo")
-        && let Some(geo) = record_to_geo(geo_val)
-    {
-        event.set_geo(Prop {
-            value: geo,
-            params: Params::default(),
-        });
-    }
-
-    // LAST-MODIFIED
-    if let Some(lm_val) = record.get("last_modified")
-        && let Some(dt) = record_to_utc_datetime(lm_val)
-    {
-        event.set_last_modified(Prop {
-            value: dt,
-            params: Params::default(),
-        });
-    }
-
-    // ORGANIZER
-    if let Some(org_str) = record.get("organizer").and_then(|v| as_str(v)) {
-        let uri = make_calico_uri(org_str);
-        event.set_organizer(Prop {
-            value: uri,
-            params: Params::default(),
-        });
-    }
-
-    // SEQUENCE
-    if let Some(seq_val) = record.get("sequence")
-        && let Some(seq) = import_value_to_i32(seq_val)
-    {
-        event.set_sequence(Prop {
-            value: seq,
-            params: Params::default(),
-        });
-    }
-
-    // TRANSP ← transparency
-    if let Some(transp_str) = record.get("transparency").and_then(|v| as_str(v)) {
-        let transp = str_to_transp(transp_str);
-        event.set_transp(Prop {
-            value: transp,
-            params: Params::default(),
-        });
-    }
-
-    // URL
-    if let Some(url_str) = record.get("url").and_then(|v| as_str(v)) {
-        let uri = make_calico_uri(url_str);
-        event.set_url(Prop {
-            value: uri,
-            params: Params::default(),
-        });
-    }
-
-    // RECURRENCE-ID
-    if let Some(rid_val) = record.get("recurrence_id") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        if let Some(p) = import_value_to_dtstart(rid_val, tz_str) {
-            event.set_recurrence_id(Prop {
-                value: p.value,
-                params: p.params,
-            });
-        }
-    }
-
-    // RRULE ← recur
-    if let Some(recur_val) = record.get("recur")
-        && let ImportValue::Record(recur_rec) = recur_val
-        && let Some(rrule) = record_to_rrule(recur_rec)
-    {
-        event.set_rrule(vec![Prop {
-            value: rrule,
-            params: Params::default(),
-        }]);
-    }
-
-    // EXDATE ← exdates
-    if let Some(ImportValue::List(exdates)) = record.get("exdates") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        let props: Vec<Prop<DateTimeOrDate, Params>> = exdates
-            .iter()
-            .filter_map(|v| import_value_to_dtstart(v, tz_str))
-            .map(|p| Prop {
-                value: p.value,
-                params: p.params,
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_exdate(props);
-        }
-    }
-
-    // RDATE ← rdates
-    if let Some(ImportValue::List(rdates)) = record.get("rdates") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        let converted: Vec<Prop<DateTimeOrDate, Params>> = rdates
-            .iter()
-            .filter_map(|v| import_value_to_dtstart(v, tz_str))
-            .collect();
-        let mut rdate_props: Vec<Prop<RDateSeq, Params>> = Vec::new();
-        let datetimes: Vec<DateTime<TimeFormat>> = converted
-            .iter()
-            .filter_map(|p| {
-                if let DateTimeOrDate::DateTime(dt) = p.value {
-                    Some(dt)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if !datetimes.is_empty() {
-            rdate_props.push(Prop {
-                value: RDateSeq::DateTime(datetimes),
-                params: Params::default(),
-            });
-        }
-        let dates: Vec<Date> = converted
-            .iter()
-            .filter_map(|p| {
-                if let DateTimeOrDate::Date(d) = p.value {
-                    Some(d)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if !dates.is_empty() {
-            rdate_props.push(Prop {
-                value: RDateSeq::Date(dates),
-                params: Params::default(),
-            });
-        }
-        if !rdate_props.is_empty() {
-            event.set_rdate(rdate_props);
-        }
-    }
-
-    // ATTACH ← attachments
-    if let Some(ImportValue::List(attaches)) = record.get("attachments") {
-        let props: Vec<Prop<Attachment, Params>> = attaches
-            .iter()
-            .filter_map(import_value_to_attachment)
-            .collect();
-        if !props.is_empty() {
-            event.set_attach(props);
-        }
-    }
-
-    // ATTENDEE ← attendees
-    if let Some(ImportValue::List(attendees)) = record.get("attendees") {
-        let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = attendees
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: make_calico_uri(s),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_attendee(props);
-        }
-    }
-
-    // COMMENT ← comments
-    if let Some(ImportValue::List(comments)) = record.get("comments") {
-        let props: Vec<Prop<String, Params>> = comments
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: s.to_string(),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_comment(props);
-        }
-    }
-
-    // CONTACT ← contacts
-    if let Some(ImportValue::List(contacts)) = record.get("contacts") {
-        let props: Vec<Prop<String, Params>> = contacts
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: s.to_string(),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_contact(props);
-        }
-    }
-
-    // RELATED-TO ← related_to
-    if let Some(ImportValue::List(related)) = record.get("related_to") {
-        let props: Vec<Prop<Box<Uid>, Params>> = related
-            .iter()
-            .filter_map(|v| as_str(v))
-            .filter_map(|s| Uid::new(s).ok())
-            .map(|uid| Prop {
-                value: uid.into(),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_related_to(props);
-        }
-    }
-
-    // RESOURCES ← resources
-    if let Some(ImportValue::List(resources)) = record.get("resources") {
-        let props: Vec<Prop<Vec<String>, Params>> = resources
-            .iter()
-            .filter_map(|v| {
-                if let ImportValue::List(inner) = v {
-                    let strings: Vec<String> = inner
-                        .iter()
-                        .filter_map(|iv| as_str(iv))
-                        .map(|s| s.to_string())
-                        .collect();
-                    if strings.is_empty() {
-                        None
-                    } else {
-                        Some(strings)
-                    }
-                } else {
-                    None
-                }
-            })
-            .map(|strings| Prop {
-                value: strings,
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_resources(props);
-        }
-    }
-
-    // IMAGE ← images
-    if let Some(ImportValue::List(images)) = record.get("images") {
-        let props: Vec<Prop<Attachment, Params>> = images
-            .iter()
-            .filter_map(import_value_to_attachment)
-            .collect();
-        if !props.is_empty() {
-            event.set_image(props);
-        }
-    }
-
-    // CONFERENCE ← conferences
-    if let Some(ImportValue::List(conferences)) = record.get("conferences") {
-        let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = conferences
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: make_calico_uri(s),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_conference(props);
-        }
-    }
-
-    // REQUEST-STATUS ← request_statuses
-    if let Some(ImportValue::List(statuses)) = record.get("request_statuses") {
-        let props: Vec<Prop<calico::model::primitive::RequestStatus, Params>> = statuses
-            .iter()
-            .filter_map(|v| as_str(v))
-            .filter_map(str_to_request_status)
-            .map(|rs| Prop {
-                value: rs,
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            event.set_request_status(props);
-        }
-    }
-
-    // X-properties and unknown fields
-    for (key, val) in record {
-        if EVENT_KNOWN.contains(&key.as_str()) {
-            continue;
-        }
-        if !key.starts_with("x_") {
-            warnings.push(format!(
-                "unrecognised non-extension field '{key}' on event record"
-            ));
-        }
-        let prop_name = field_name_to_x_property(key);
-        let x_val = import_value_to_ical_value(val);
-        let prop = Prop {
-            value: x_val,
-            params: Params::default(),
-        };
-        event.insert_x_property(prop_name.into(), vec![prop]);
-    }
-
-    Ok(event)
-}
-
-const EVENT_KNOWN: &[&str] = &[
+const COMMON_KNOWN: &[&str] = &[
     "type",
     "name",
     "uid",
     "title",
     "description",
     "start",
-    "duration",
     "time_zone",
     "status",
     "priority",
@@ -680,7 +246,6 @@ const EVENT_KNOWN: &[&str] = &[
     "last_modified",
     "organizer",
     "sequence",
-    "transparency",
     "url",
     "recurrence_id",
     "recur",
@@ -697,45 +262,504 @@ const EVENT_KNOWN: &[&str] = &[
     "request_statuses",
 ];
 
+const EVENT_EXTRA_KNOWN: &[&str] = &["duration", "transparency"];
+const TODO_EXTRA_KNOWN: &[&str] = &["due", "completed", "estimated_duration", "percent_complete"];
+
+// ── Shared property-setting macro ─────────────────────────────
+//
+// Calico's Event and Todo structs share identical field names and types for all
+// common RFC 5545 properties, but expose no shared trait. This macro emits the
+// property-setting code once, parameterised by the component expression and a
+// label used in error messages.
+
+macro_rules! set_common_ical_fields {
+    ($component:expr, $record:expr, $kind:expr) => {
+        // UID
+        if let Some(uid_str) = $record.get("uid").and_then(|v| as_str(v)) {
+            let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in {}: {}", $kind, e))?;
+            $component.set_uid(Prop {
+                value: uid.into(),
+                params: Params::default(),
+            });
+        }
+
+        // SUMMARY ← title
+        if let Some(title) = $record.get("title").and_then(|v| as_str(v)) {
+            $component.set_summary(Prop {
+                value: title.to_string(),
+                params: Params::default(),
+            });
+        }
+
+        // DESCRIPTION
+        if let Some(desc) = $record.get("description").and_then(|v| as_str(v)) {
+            $component.set_description(Prop {
+                value: desc.to_string(),
+                params: Params::default(),
+            });
+        }
+
+        // DTSTART ← start + time_zone
+        if let Some(start_val) = $record.get("start") {
+            let tz_str = $record.get("time_zone").and_then(|v| as_str(v));
+            if let Some(dtstart) = import_value_to_dtstart(start_val, tz_str) {
+                $component.set_dtstart(dtstart);
+            }
+        }
+
+        // STATUS
+        if let Some(status_str) = $record.get("status").and_then(|v| as_str(v))
+            && let Some(status) = str_to_status(status_str)
+        {
+            $component.set_status(Prop {
+                value: status,
+                params: Params::default(),
+            });
+        }
+
+        // PRIORITY
+        if let Some(prio_val) = $record.get("priority") {
+            let prio = import_value_to_priority(prio_val);
+            $component.set_priority(Prop {
+                value: prio,
+                params: Params::default(),
+            });
+        }
+
+        // LOCATION
+        if let Some(loc) = $record.get("location").and_then(|v| as_str(v)) {
+            $component.set_location(Prop {
+                value: loc.to_string(),
+                params: Params::default(),
+            });
+        }
+
+        // COLOR
+        if let Some(color_str) = $record.get("color").and_then(|v| as_str(v))
+            && let Ok(color) = color_str.parse::<calico::model::css::Css3Color>()
+        {
+            $component.set_color(Prop {
+                value: color,
+                params: Params::default(),
+            });
+        }
+
+        // CATEGORIES
+        if let Some(ImportValue::List(cats)) = $record.get("categories") {
+            let cat_strings: Vec<String> = cats
+                .iter()
+                .filter_map(|v| as_str(v))
+                .map(|s| s.to_string())
+                .collect();
+            if !cat_strings.is_empty() {
+                $component.set_categories(vec![Prop {
+                    value: cat_strings,
+                    params: Params::default(),
+                }]);
+            }
+        }
+
+        // DTSTAMP
+        if let Some(dtstamp_val) = $record.get("dtstamp")
+            && let Some(dt) = record_to_utc_datetime(dtstamp_val)
+        {
+            $component.set_dtstamp(Prop {
+                value: dt,
+                params: Params::default(),
+            });
+        }
+
+        // CLASS
+        if let Some(class_str) = $record.get("class").and_then(|v| as_str(v)) {
+            let class_val = str_to_class(class_str);
+            $component.set_class(Prop {
+                value: class_val,
+                params: Params::default(),
+            });
+        }
+
+        // CREATED
+        if let Some(created_val) = $record.get("created")
+            && let Some(dt) = record_to_utc_datetime(created_val)
+        {
+            $component.set_created(Prop {
+                value: dt,
+                params: Params::default(),
+            });
+        }
+
+        // GEO
+        if let Some(geo_val) = $record.get("geo")
+            && let Some(geo) = record_to_geo(geo_val)
+        {
+            $component.set_geo(Prop {
+                value: geo,
+                params: Params::default(),
+            });
+        }
+
+        // LAST-MODIFIED
+        if let Some(lm_val) = $record.get("last_modified")
+            && let Some(dt) = record_to_utc_datetime(lm_val)
+        {
+            $component.set_last_modified(Prop {
+                value: dt,
+                params: Params::default(),
+            });
+        }
+
+        // ORGANIZER
+        if let Some(org_str) = $record.get("organizer").and_then(|v| as_str(v)) {
+            let uri = make_calico_uri(org_str);
+            $component.set_organizer(Prop {
+                value: uri,
+                params: Params::default(),
+            });
+        }
+
+        // SEQUENCE
+        if let Some(seq_val) = $record.get("sequence")
+            && let Some(seq) = import_value_to_i32(seq_val)
+        {
+            $component.set_sequence(Prop {
+                value: seq,
+                params: Params::default(),
+            });
+        }
+
+        // URL
+        if let Some(url_str) = $record.get("url").and_then(|v| as_str(v)) {
+            let uri = make_calico_uri(url_str);
+            $component.set_url(Prop {
+                value: uri,
+                params: Params::default(),
+            });
+        }
+
+        // RECURRENCE-ID
+        if let Some(rid_val) = $record.get("recurrence_id") {
+            let tz_str = $record.get("time_zone").and_then(|v| as_str(v));
+            if let Some(p) = import_value_to_dtstart(rid_val, tz_str) {
+                $component.set_recurrence_id(Prop {
+                    value: p.value,
+                    params: p.params,
+                });
+            }
+        }
+
+        // RRULE ← recur
+        if let Some(recur_val) = $record.get("recur")
+            && let ImportValue::Record(recur_rec) = recur_val
+            && let Some(rrule) = record_to_rrule(recur_rec)
+        {
+            $component.set_rrule(vec![Prop {
+                value: rrule,
+                params: Params::default(),
+            }]);
+        }
+
+        // EXDATE ← exdates
+        if let Some(ImportValue::List(exdates)) = $record.get("exdates") {
+            let tz_str = $record.get("time_zone").and_then(|v| as_str(v));
+            let props: Vec<Prop<DateTimeOrDate, Params>> = exdates
+                .iter()
+                .filter_map(|v| import_value_to_dtstart(v, tz_str))
+                .map(|p| Prop {
+                    value: p.value,
+                    params: p.params,
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_exdate(props);
+            }
+        }
+
+        // RDATE ← rdates
+        if let Some(ImportValue::List(rdates)) = $record.get("rdates") {
+            let tz_str = $record.get("time_zone").and_then(|v| as_str(v));
+            let converted: Vec<Prop<DateTimeOrDate, Params>> = rdates
+                .iter()
+                .filter_map(|v| import_value_to_dtstart(v, tz_str))
+                .collect();
+            let mut rdate_props: Vec<Prop<RDateSeq, Params>> = Vec::new();
+            let datetimes: Vec<DateTime<TimeFormat>> = converted
+                .iter()
+                .filter_map(|p| {
+                    if let DateTimeOrDate::DateTime(dt) = p.value {
+                        Some(dt)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if !datetimes.is_empty() {
+                rdate_props.push(Prop {
+                    value: RDateSeq::DateTime(datetimes),
+                    params: Params::default(),
+                });
+            }
+            let dates: Vec<Date> = converted
+                .iter()
+                .filter_map(|p| {
+                    if let DateTimeOrDate::Date(d) = p.value {
+                        Some(d)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if !dates.is_empty() {
+                rdate_props.push(Prop {
+                    value: RDateSeq::Date(dates),
+                    params: Params::default(),
+                });
+            }
+            if !rdate_props.is_empty() {
+                $component.set_rdate(rdate_props);
+            }
+        }
+
+        // ATTACH ← attachments
+        if let Some(ImportValue::List(attaches)) = $record.get("attachments") {
+            let props: Vec<Prop<Attachment, Params>> = attaches
+                .iter()
+                .filter_map(import_value_to_attachment)
+                .collect();
+            if !props.is_empty() {
+                $component.set_attach(props);
+            }
+        }
+
+        // ATTENDEE ← attendees
+        if let Some(ImportValue::List(attendees)) = $record.get("attendees") {
+            let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = attendees
+                .iter()
+                .filter_map(|v| as_str(v))
+                .map(|s| Prop {
+                    value: make_calico_uri(s),
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_attendee(props);
+            }
+        }
+
+        // COMMENT ← comments
+        if let Some(ImportValue::List(comments)) = $record.get("comments") {
+            let props: Vec<Prop<String, Params>> = comments
+                .iter()
+                .filter_map(|v| as_str(v))
+                .map(|s| Prop {
+                    value: s.to_string(),
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_comment(props);
+            }
+        }
+
+        // CONTACT ← contacts
+        if let Some(ImportValue::List(contacts)) = $record.get("contacts") {
+            let props: Vec<Prop<String, Params>> = contacts
+                .iter()
+                .filter_map(|v| as_str(v))
+                .map(|s| Prop {
+                    value: s.to_string(),
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_contact(props);
+            }
+        }
+
+        // RELATED-TO ← related_to
+        if let Some(ImportValue::List(related)) = $record.get("related_to") {
+            let props: Vec<Prop<Box<Uid>, Params>> = related
+                .iter()
+                .filter_map(|v| as_str(v))
+                .filter_map(|s| Uid::new(s).ok())
+                .map(|uid| Prop {
+                    value: uid.into(),
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_related_to(props);
+            }
+        }
+
+        // RESOURCES ← resources
+        if let Some(ImportValue::List(resources)) = $record.get("resources") {
+            let props: Vec<Prop<Vec<String>, Params>> = resources
+                .iter()
+                .filter_map(|v| {
+                    if let ImportValue::List(inner) = v {
+                        let strings: Vec<String> = inner
+                            .iter()
+                            .filter_map(|iv| as_str(iv))
+                            .map(|s| s.to_string())
+                            .collect();
+                        if strings.is_empty() {
+                            None
+                        } else {
+                            Some(strings)
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .map(|strings| Prop {
+                    value: strings,
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_resources(props);
+            }
+        }
+
+        // IMAGE ← images
+        if let Some(ImportValue::List(images)) = $record.get("images") {
+            let props: Vec<Prop<Attachment, Params>> = images
+                .iter()
+                .filter_map(import_value_to_attachment)
+                .collect();
+            if !props.is_empty() {
+                $component.set_image(props);
+            }
+        }
+
+        // CONFERENCE ← conferences
+        if let Some(ImportValue::List(conferences)) = $record.get("conferences") {
+            let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = conferences
+                .iter()
+                .filter_map(|v| as_str(v))
+                .map(|s| Prop {
+                    value: make_calico_uri(s),
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_conference(props);
+            }
+        }
+
+        // REQUEST-STATUS ← request_statuses
+        if let Some(ImportValue::List(statuses)) = $record.get("request_statuses") {
+            let props: Vec<Prop<calico::model::primitive::RequestStatus, Params>> = statuses
+                .iter()
+                .filter_map(|v| as_str(v))
+                .filter_map(str_to_request_status)
+                .map(|rs| Prop {
+                    value: rs,
+                    params: Params::default(),
+                })
+                .collect();
+            if !props.is_empty() {
+                $component.set_request_status(props);
+            }
+        }
+    };
+}
+
+/// Emit x-properties and warn about unrecognised non-extension fields.
+fn handle_x_properties(
+    component: &mut impl XPropertySink,
+    record: &ImportRecord,
+    extra_known: &[&str],
+    kind: &str,
+    warnings: &mut Vec<String>,
+) {
+    for (key, val) in record {
+        if COMMON_KNOWN.contains(&key.as_str()) || extra_known.contains(&key.as_str()) {
+            continue;
+        }
+        if !key.starts_with("x_") {
+            warnings.push(format!(
+                "unrecognised non-extension field '{key}' on {kind} record"
+            ));
+        }
+        let prop_name = field_name_to_x_property(key);
+        let x_val = import_value_to_ical_value(val);
+        let prop = Prop {
+            value: x_val,
+            params: Params::default(),
+        };
+        component.insert_x(prop_name, vec![prop]);
+    }
+}
+
+/// Minimal trait to abstract x-property insertion over Event and Todo.
+trait XPropertySink {
+    fn insert_x(
+        &mut self,
+        name: String,
+        props: Vec<Prop<calico::model::primitive::Value<String>, Params>>,
+    );
+}
+
+impl XPropertySink for Event {
+    fn insert_x(
+        &mut self,
+        name: String,
+        props: Vec<Prop<calico::model::primitive::Value<String>, Params>>,
+    ) {
+        self.insert_x_property(name.into(), props);
+    }
+}
+
+impl XPropertySink for Todo {
+    fn insert_x(
+        &mut self,
+        name: String,
+        props: Vec<Prop<calico::model::primitive::Value<String>, Params>>,
+    ) {
+        self.insert_x_property(name.into(), props);
+    }
+}
+
+// ── Event builder ─────────────────────────────────────────────
+
+fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Event, String> {
+    let mut event = Event::new(vec![], vec![], vec![], vec![]);
+
+    set_common_ical_fields!(event, record, "event");
+
+    // DURATION ← duration (event-specific: reads "duration" field)
+    if let Some(dur_val) = record.get("duration")
+        && let Some(sd) = record_to_signed_duration(dur_val)
+    {
+        event.set_duration(Prop {
+            value: sd,
+            params: Params::default(),
+        });
+    }
+
+    // TRANSP ← transparency (event-only)
+    if let Some(transp_str) = record.get("transparency").and_then(|v| as_str(v)) {
+        let transp = str_to_transp(transp_str);
+        event.set_transp(Prop {
+            value: transp,
+            params: Params::default(),
+        });
+    }
+
+    handle_x_properties(&mut event, record, EVENT_EXTRA_KNOWN, "event", warnings);
+
+    Ok(event)
+}
+
 // ── Todo builder ──────────────────────────────────────────────
 
 fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo, String> {
     let mut todo = Todo::new(vec![], vec![], vec![], vec![]);
 
-    // UID
-    if let Some(uid_str) = record.get("uid").and_then(|v| as_str(v)) {
-        let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in todo: {}", e))?;
-        todo.set_uid(Prop {
-            value: uid.into(),
-            params: Params::default(),
-        });
-    }
+    set_common_ical_fields!(todo, record, "todo");
 
-    // SUMMARY ← title
-    if let Some(title) = record.get("title").and_then(|v| as_str(v)) {
-        todo.set_summary(Prop {
-            value: title.to_string(),
-            params: Params::default(),
-        });
-    }
-
-    // DESCRIPTION
-    if let Some(desc) = record.get("description").and_then(|v| as_str(v)) {
-        todo.set_description(Prop {
-            value: desc.to_string(),
-            params: Params::default(),
-        });
-    }
-
-    // DTSTART ← start + time_zone
-    if let Some(start_val) = record.get("start") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        if let Some(dtstart) = import_value_to_dtstart(start_val, tz_str) {
-            todo.set_dtstart(dtstart);
-        }
-    }
-
-    // DUE ← due
+    // DUE ← due (todo-only)
     if let Some(due_val) = record.get("due") {
         let tz_str = record.get("time_zone").and_then(|v| as_str(v));
         if let Some(due) = import_value_to_dtstart(due_val, tz_str) {
@@ -743,7 +767,7 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
         }
     }
 
-    // DURATION ← estimated_duration
+    // DURATION ← estimated_duration (todo-specific: reads "estimated_duration" field)
     if let Some(dur_val) = record.get("estimated_duration")
         && let Some(sd) = record_to_signed_duration(dur_val)
     {
@@ -753,7 +777,7 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
         });
     }
 
-    // PERCENT-COMPLETE ← percent_complete
+    // PERCENT-COMPLETE ← percent_complete (todo-only)
     if let Some(pct_val) = record.get("percent_complete")
         && let Some(pct) = import_value_to_u64(pct_val)
         && let Ok(pct_u8) = u8::try_from(pct)
@@ -765,78 +789,7 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
         });
     }
 
-    // STATUS
-    if let Some(status_str) = record.get("status").and_then(|v| as_str(v))
-        && let Some(status) = str_to_status(status_str)
-    {
-        todo.set_status(Prop {
-            value: status,
-            params: Params::default(),
-        });
-    }
-
-    // PRIORITY
-    if let Some(prio_val) = record.get("priority") {
-        let prio = import_value_to_priority(prio_val);
-        todo.set_priority(Prop {
-            value: prio,
-            params: Params::default(),
-        });
-    }
-
-    // LOCATION
-    if let Some(loc) = record.get("location").and_then(|v| as_str(v)) {
-        todo.set_location(Prop {
-            value: loc.to_string(),
-            params: Params::default(),
-        });
-    }
-
-    // COLOR
-    if let Some(color_str) = record.get("color").and_then(|v| as_str(v))
-        && let Ok(color) = color_str.parse::<calico::model::css::Css3Color>()
-    {
-        todo.set_color(Prop {
-            value: color,
-            params: Params::default(),
-        });
-    }
-
-    // CATEGORIES
-    if let Some(ImportValue::List(cats)) = record.get("categories") {
-        let cat_strings: Vec<String> = cats
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| s.to_string())
-            .collect();
-        if !cat_strings.is_empty() {
-            todo.set_categories(vec![Prop {
-                value: cat_strings,
-                params: Params::default(),
-            }]);
-        }
-    }
-
-    // DTSTAMP
-    if let Some(dtstamp_val) = record.get("dtstamp")
-        && let Some(dt) = record_to_utc_datetime(dtstamp_val)
-    {
-        todo.set_dtstamp(Prop {
-            value: dt,
-            params: Params::default(),
-        });
-    }
-
-    // CLASS
-    if let Some(class_str) = record.get("class").and_then(|v| as_str(v)) {
-        let class_val = str_to_class(class_str);
-        todo.set_class(Prop {
-            value: class_val,
-            params: Params::default(),
-        });
-    }
-
-    // COMPLETED
+    // COMPLETED (todo-only)
     if let Some(completed_val) = record.get("completed")
         && let Some(dt) = record_to_utc_datetime(completed_val)
     {
@@ -846,352 +799,10 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
         });
     }
 
-    // CREATED
-    if let Some(created_val) = record.get("created")
-        && let Some(dt) = record_to_utc_datetime(created_val)
-    {
-        todo.set_created(Prop {
-            value: dt,
-            params: Params::default(),
-        });
-    }
-
-    // GEO
-    if let Some(geo_val) = record.get("geo")
-        && let Some(geo) = record_to_geo(geo_val)
-    {
-        todo.set_geo(Prop {
-            value: geo,
-            params: Params::default(),
-        });
-    }
-
-    // LAST-MODIFIED
-    if let Some(lm_val) = record.get("last_modified")
-        && let Some(dt) = record_to_utc_datetime(lm_val)
-    {
-        todo.set_last_modified(Prop {
-            value: dt,
-            params: Params::default(),
-        });
-    }
-
-    // ORGANIZER
-    if let Some(org_str) = record.get("organizer").and_then(|v| as_str(v)) {
-        let uri = make_calico_uri(org_str);
-        todo.set_organizer(Prop {
-            value: uri,
-            params: Params::default(),
-        });
-    }
-
-    // SEQUENCE
-    if let Some(seq_val) = record.get("sequence")
-        && let Some(seq) = import_value_to_i32(seq_val)
-    {
-        todo.set_sequence(Prop {
-            value: seq,
-            params: Params::default(),
-        });
-    }
-
-    // URL
-    if let Some(url_str) = record.get("url").and_then(|v| as_str(v)) {
-        let uri = make_calico_uri(url_str);
-        todo.set_url(Prop {
-            value: uri,
-            params: Params::default(),
-        });
-    }
-
-    // RECURRENCE-ID
-    if let Some(rid_val) = record.get("recurrence_id") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        if let Some(p) = import_value_to_dtstart(rid_val, tz_str) {
-            todo.set_recurrence_id(Prop {
-                value: p.value,
-                params: p.params,
-            });
-        }
-    }
-
-    // RRULE ← recur
-    if let Some(recur_val) = record.get("recur")
-        && let ImportValue::Record(recur_rec) = recur_val
-        && let Some(rrule) = record_to_rrule(recur_rec)
-    {
-        todo.set_rrule(vec![Prop {
-            value: rrule,
-            params: Params::default(),
-        }]);
-    }
-
-    // EXDATE ← exdates
-    if let Some(ImportValue::List(exdates)) = record.get("exdates") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        let props: Vec<Prop<DateTimeOrDate, Params>> = exdates
-            .iter()
-            .filter_map(|v| import_value_to_dtstart(v, tz_str))
-            .map(|p| Prop {
-                value: p.value,
-                params: p.params,
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_exdate(props);
-        }
-    }
-
-    // RDATE ← rdates
-    if let Some(ImportValue::List(rdates)) = record.get("rdates") {
-        let tz_str = record.get("time_zone").and_then(|v| as_str(v));
-        let converted: Vec<Prop<DateTimeOrDate, Params>> = rdates
-            .iter()
-            .filter_map(|v| import_value_to_dtstart(v, tz_str))
-            .collect();
-        let mut rdate_props: Vec<Prop<RDateSeq, Params>> = Vec::new();
-        let datetimes: Vec<DateTime<TimeFormat>> = converted
-            .iter()
-            .filter_map(|p| {
-                if let DateTimeOrDate::DateTime(dt) = p.value {
-                    Some(dt)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if !datetimes.is_empty() {
-            rdate_props.push(Prop {
-                value: RDateSeq::DateTime(datetimes),
-                params: Params::default(),
-            });
-        }
-        let dates: Vec<Date> = converted
-            .iter()
-            .filter_map(|p| {
-                if let DateTimeOrDate::Date(d) = p.value {
-                    Some(d)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if !dates.is_empty() {
-            rdate_props.push(Prop {
-                value: RDateSeq::Date(dates),
-                params: Params::default(),
-            });
-        }
-        if !rdate_props.is_empty() {
-            todo.set_rdate(rdate_props);
-        }
-    }
-
-    // ATTACH ← attachments
-    if let Some(ImportValue::List(attaches)) = record.get("attachments") {
-        let props: Vec<Prop<Attachment, Params>> = attaches
-            .iter()
-            .filter_map(import_value_to_attachment)
-            .collect();
-        if !props.is_empty() {
-            todo.set_attach(props);
-        }
-    }
-
-    // ATTENDEE ← attendees
-    if let Some(ImportValue::List(attendees)) = record.get("attendees") {
-        let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = attendees
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: make_calico_uri(s),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_attendee(props);
-        }
-    }
-
-    // COMMENT ← comments
-    if let Some(ImportValue::List(comments)) = record.get("comments") {
-        let props: Vec<Prop<String, Params>> = comments
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: s.to_string(),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_comment(props);
-        }
-    }
-
-    // CONTACT ← contacts
-    if let Some(ImportValue::List(contacts)) = record.get("contacts") {
-        let props: Vec<Prop<String, Params>> = contacts
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: s.to_string(),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_contact(props);
-        }
-    }
-
-    // RELATED-TO ← related_to
-    if let Some(ImportValue::List(related)) = record.get("related_to") {
-        let props: Vec<Prop<Box<Uid>, Params>> = related
-            .iter()
-            .filter_map(|v| as_str(v))
-            .filter_map(|s| Uid::new(s).ok())
-            .map(|uid| Prop {
-                value: uid.into(),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_related_to(props);
-        }
-    }
-
-    // RESOURCES ← resources
-    if let Some(ImportValue::List(resources)) = record.get("resources") {
-        let props: Vec<Prop<Vec<String>, Params>> = resources
-            .iter()
-            .filter_map(|v| {
-                if let ImportValue::List(inner) = v {
-                    let strings: Vec<String> = inner
-                        .iter()
-                        .filter_map(|iv| as_str(iv))
-                        .map(|s| s.to_string())
-                        .collect();
-                    if strings.is_empty() {
-                        None
-                    } else {
-                        Some(strings)
-                    }
-                } else {
-                    None
-                }
-            })
-            .map(|strings| Prop {
-                value: strings,
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_resources(props);
-        }
-    }
-
-    // IMAGE ← images
-    if let Some(ImportValue::List(images)) = record.get("images") {
-        let props: Vec<Prop<Attachment, Params>> = images
-            .iter()
-            .filter_map(import_value_to_attachment)
-            .collect();
-        if !props.is_empty() {
-            todo.set_image(props);
-        }
-    }
-
-    // CONFERENCE ← conferences
-    if let Some(ImportValue::List(conferences)) = record.get("conferences") {
-        let props: Vec<Prop<Box<calico::model::string::Uri>, Params>> = conferences
-            .iter()
-            .filter_map(|v| as_str(v))
-            .map(|s| Prop {
-                value: make_calico_uri(s),
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_conference(props);
-        }
-    }
-
-    // REQUEST-STATUS ← request_statuses
-    if let Some(ImportValue::List(statuses)) = record.get("request_statuses") {
-        let props: Vec<Prop<calico::model::primitive::RequestStatus, Params>> = statuses
-            .iter()
-            .filter_map(|v| as_str(v))
-            .filter_map(str_to_request_status)
-            .map(|rs| Prop {
-                value: rs,
-                params: Params::default(),
-            })
-            .collect();
-        if !props.is_empty() {
-            todo.set_request_status(props);
-        }
-    }
-
-    // X-properties and unknown fields
-    for (key, val) in record {
-        if TODO_KNOWN.contains(&key.as_str()) {
-            continue;
-        }
-        if !key.starts_with("x_") {
-            warnings.push(format!(
-                "unrecognised non-extension field '{key}' on task record"
-            ));
-        }
-        let prop_name = field_name_to_x_property(key);
-        let x_val = import_value_to_ical_value(val);
-        let prop = Prop {
-            value: x_val,
-            params: Params::default(),
-        };
-        todo.insert_x_property(prop_name.into(), vec![prop]);
-    }
+    handle_x_properties(&mut todo, record, TODO_EXTRA_KNOWN, "task", warnings);
 
     Ok(todo)
 }
-
-const TODO_KNOWN: &[&str] = &[
-    "type",
-    "name",
-    "uid",
-    "title",
-    "description",
-    "start",
-    "due",
-    "completed",
-    "estimated_duration",
-    "time_zone",
-    "status",
-    "priority",
-    "location",
-    "color",
-    "categories",
-    "percent_complete",
-    "dtstamp",
-    "class",
-    "created",
-    "geo",
-    "last_modified",
-    "organizer",
-    "sequence",
-    "url",
-    "recurrence_id",
-    "recur",
-    "exdates",
-    "rdates",
-    "attachments",
-    "attendees",
-    "comments",
-    "contacts",
-    "related_to",
-    "resources",
-    "images",
-    "conferences",
-    "request_statuses",
-];
 
 // ── Primitive conversion helpers ──────────────────────────────
 
@@ -2258,5 +1869,83 @@ END:VCALENDAR\r\n";
         );
         assert!(result.contains("WORK"), "missing WORK: {result}");
         assert!(result.contains("MEETING"), "missing MEETING: {result}");
+    }
+
+    // r[verify model.export.icalendar.roundtrip_task]
+    #[test]
+    fn roundtrip_task_fields() {
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Roundtrip//Task//EN\r\n\
+BEGIN:VTODO\r\n\
+UID:roundtrip-task-42\r\n\
+SUMMARY:Finish report\r\n\
+DESCRIPTION:A task for round-trip testing\r\n\
+DTSTART;TZID=Europe/London:20260401T090000\r\n\
+DUE;TZID=Europe/London:20260401T170000\r\n\
+PERCENT-COMPLETE:75\r\n\
+COMPLETED:20260401T160000Z\r\n\
+STATUS:IN-PROCESS\r\n\
+PRIORITY:2\r\n\
+LOCATION:Home Office\r\n\
+END:VTODO\r\n\
+END:VCALENDAR\r\n";
+
+        // Import
+        let import_result = gnomon_import::translate_icalendar(ics).expect("import failed");
+        let ImportValue::List(calendars) = import_result else {
+            panic!("expected list")
+        };
+        let ImportValue::Record(cal_rec) = &calendars[0] else {
+            panic!("expected record")
+        };
+        let ImportValue::List(entries) = cal_rec.get("entries").unwrap() else {
+            panic!("expected entries list")
+        };
+
+        // Export
+        let mut output = String::new();
+        let mut warnings = Vec::new();
+        emit_icalendar(&mut output, cal_rec, entries, &mut warnings).unwrap();
+        assert!(warnings.is_empty(), "unexpected warnings: {:?}", warnings);
+
+        // Re-parse
+        let cals = calico::model::component::Calendar::parse(&output).expect("re-parse failed");
+        let cal = &cals[0];
+        let todos: Vec<&Todo> = cal
+            .components()
+            .iter()
+            .filter_map(|c| match c {
+                CalendarComponent::Todo(t) => Some(t),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(todos.len(), 1, "expected 1 VTODO");
+        let todo = todos[0];
+
+        assert_eq!(todo.uid().unwrap().value.as_str(), "roundtrip-task-42");
+        assert_eq!(todo.summary().unwrap().value, "Finish report");
+        assert_eq!(
+            todo.description().unwrap().value,
+            "A task for round-trip testing"
+        );
+        assert_eq!(todo.location().unwrap().value, "Home Office");
+        assert_eq!(todo.priority().unwrap().value, Priority::A2);
+
+        // Status
+        assert_eq!(todo.status().unwrap().value, Status::InProcess);
+
+        // PERCENT-COMPLETE
+        assert_eq!(todo.percent_complete().unwrap().value.get(), 75);
+
+        // COMPLETED
+        let completed = todo.completed().unwrap().value;
+        assert_eq!(completed.time.hour() as u8, 16);
+
+        // DUE
+        let due = todo.due().unwrap();
+        let due_tz = due.params.tz_id().expect("DUE should have TZID");
+        assert_eq!(due_tz.as_str(), "Europe/London");
     }
 }

@@ -175,32 +175,216 @@ fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
     record
 }
 
+// ── Shared import-field extraction macro ─────────────────────
+//
+// Calico's Event and Todo structs share identical getter methods for all common
+// RFC 5545 properties but expose no shared trait. This macro emits the
+// property-extraction code once, parameterised by the component expression.
+
+macro_rules! translate_common_ical_fields {
+    ($component:expr, $fields:expr) => {
+        if let Some(uid_prop) = $component.uid() {
+            $fields.push((
+                "uid",
+                ImportValue::String(uid_prop.value.as_str().to_string()),
+            ));
+        }
+        if let Some(summary) = $component.summary() {
+            $fields.push(("title", ImportValue::String(summary.value.clone())));
+        }
+        if let Some(desc) = $component.description() {
+            $fields.push(("description", ImportValue::String(desc.value.clone())));
+        }
+        if let Some(dtstart) = $component.dtstart() {
+            if let Some(val) = translate_datetime_or_date(&dtstart.value) {
+                $fields.push(("start", val));
+            }
+            if let Some(tz) = dtstart.params.tz_id() {
+                $fields.push(("time_zone", ImportValue::String(tz.as_str().to_string())));
+            }
+        }
+        if let Some(status_prop) = $component.status() {
+            $fields.push(("status", translate_status(&status_prop.value)));
+        }
+        if let Some(priority_prop) = $component.priority() {
+            $fields.push((
+                "priority",
+                ImportValue::Integer(priority_to_u64(&priority_prop.value)),
+            ));
+        }
+        if let Some(loc) = $component.location() {
+            $fields.push(("location", ImportValue::String(loc.value.clone())));
+        }
+        if let Some(color) = $component.color() {
+            $fields.push(("color", ImportValue::String(color.value.to_string())));
+        }
+        if let Some(cats) = $component.categories() {
+            let all_cats: Vec<ImportValue> = cats
+                .iter()
+                .flat_map(|c| c.value.iter())
+                .map(|s: &String| ImportValue::String(s.clone()))
+                .collect();
+            if !all_cats.is_empty() {
+                $fields.push(("categories", ImportValue::List(all_cats)));
+            }
+        }
+
+        // Expanded properties.
+        if let Some(dtstamp) = $component.dtstamp() {
+            $fields.push(("dtstamp", translate_utc_datetime(&dtstamp.value)));
+        }
+        if let Some(class) = $component.class() {
+            $fields.push(("class", translate_class(&class.value)));
+        }
+        if let Some(created) = $component.created() {
+            $fields.push(("created", translate_utc_datetime(&created.value)));
+        }
+        if let Some(geo) = $component.geo() {
+            $fields.push(("geo", translate_geo(&geo.value)));
+        }
+        if let Some(lm) = $component.last_modified() {
+            $fields.push(("last_modified", translate_utc_datetime(&lm.value)));
+        }
+        if let Some(org) = $component.organizer() {
+            $fields.push((
+                "organizer",
+                ImportValue::String(org.value.as_str().to_string()),
+            ));
+        }
+        if let Some(seq) = $component.sequence() {
+            $fields.push(("sequence", ImportValue::SignedInteger(i64::from(seq.value))));
+        }
+        if let Some(url) = $component.url() {
+            $fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
+        }
+        if let Some(recurrence_id) = $component.recurrence_id()
+            && let Some(val) = translate_datetime_or_date(&recurrence_id.value)
+        {
+            $fields.push(("recurrence_id", val));
+        }
+        if let Some(rrules) = $component.rrule()
+            && let Some(first) = rrules.first()
+        {
+            $fields.push(("recur", translate_rrule(&first.value)));
+        }
+        if let Some(rdates) = $component.rdate() {
+            let items: Vec<ImportValue> = rdates
+                .iter()
+                .flat_map(|r| translate_rdate_seq(&r.value))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("rdates", ImportValue::List(items)));
+            }
+        }
+        if let Some(exdates) = $component.exdate() {
+            let items: Vec<ImportValue> = exdates
+                .iter()
+                .flat_map(|e| translate_datetime_or_date(&e.value))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("exdates", ImportValue::List(items)));
+            }
+        }
+        if let Some(attachments) = $component.attach() {
+            let items: Vec<ImportValue> = attachments
+                .iter()
+                .map(|a| translate_attachment(&a.value))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("attachments", ImportValue::List(items)));
+            }
+        }
+        if let Some(attendees) = $component.attendee() {
+            let items: Vec<ImportValue> = attendees
+                .iter()
+                .map(|a| ImportValue::String(a.value.as_str().to_string()))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("attendees", ImportValue::List(items)));
+            }
+        }
+        if let Some(comments) = $component.comment() {
+            let items: Vec<ImportValue> = comments
+                .iter()
+                .map(|c| ImportValue::String(c.value.clone()))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("comments", ImportValue::List(items)));
+            }
+        }
+        if let Some(contacts) = $component.contact() {
+            let items: Vec<ImportValue> = contacts
+                .iter()
+                .map(|c| ImportValue::String(c.value.clone()))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("contacts", ImportValue::List(items)));
+            }
+        }
+        if let Some(related) = $component.related_to() {
+            let items: Vec<ImportValue> = related
+                .iter()
+                .map(|r| ImportValue::String(r.value.as_str().to_string()))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("related_to", ImportValue::List(items)));
+            }
+        }
+        if let Some(resources) = $component.resources() {
+            let items: Vec<ImportValue> = resources
+                .iter()
+                .map(|r| {
+                    ImportValue::List(
+                        r.value
+                            .iter()
+                            .map(|s| ImportValue::String(s.clone()))
+                            .collect(),
+                    )
+                })
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("resources", ImportValue::List(items)));
+            }
+        }
+        if let Some(images) = $component.image() {
+            let items: Vec<ImportValue> = images
+                .iter()
+                .map(|i| translate_attachment(&i.value))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("images", ImportValue::List(items)));
+            }
+        }
+        if let Some(conferences) = $component.conference() {
+            let items: Vec<ImportValue> = conferences
+                .iter()
+                .map(|c| ImportValue::String(c.value.as_str().to_string()))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("conferences", ImportValue::List(items)));
+            }
+        }
+        if let Some(statuses) = $component.request_status() {
+            let items: Vec<ImportValue> = statuses
+                .iter()
+                .map(|s| translate_request_status(&s.value))
+                .collect();
+            if !items.is_empty() {
+                $fields.push(("request_statuses", ImportValue::List(items)));
+            }
+        }
+    };
+}
+
 // r[impl model.import.icalendar.event]
 /// Translate a VEVENT component into an event record.
 fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
     fields.push(("type", ImportValue::String("event".into())));
 
-    if let Some(uid_prop) = event.uid() {
-        fields.push((
-            "uid",
-            ImportValue::String(uid_prop.value.as_str().to_string()),
-        ));
-    }
-    if let Some(summary) = event.summary() {
-        fields.push(("title", ImportValue::String(summary.value.clone())));
-    }
-    if let Some(desc) = event.description() {
-        fields.push(("description", ImportValue::String(desc.value.clone())));
-    }
-    if let Some(dtstart) = event.dtstart() {
-        if let Some(val) = translate_datetime_or_date(&dtstart.value) {
-            fields.push(("start", val));
-        }
-        if let Some(tz) = dtstart.params.tz_id() {
-            fields.push(("time_zone", ImportValue::String(tz.as_str().to_string())));
-        }
-    }
+    translate_common_ical_fields!(event, fields);
+
+    // Event-specific: DURATION (with DTEND fallback)
     if let Some(dur) = event.duration() {
         if let Some(val) = translate_signed_duration(&dur.value) {
             fields.push(("duration", val));
@@ -211,178 +395,10 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
     {
         fields.push(("duration", val));
     }
-    if let Some(status_prop) = event.status() {
-        fields.push(("status", translate_status(&status_prop.value)));
-    }
-    if let Some(priority_prop) = event.priority() {
-        fields.push((
-            "priority",
-            ImportValue::Integer(priority_to_u64(&priority_prop.value)),
-        ));
-    }
-    if let Some(loc) = event.location() {
-        fields.push(("location", ImportValue::String(loc.value.clone())));
-    }
-    if let Some(color) = event.color() {
-        fields.push(("color", ImportValue::String(color.value.to_string())));
-    }
-    if let Some(cats) = event.categories() {
-        let all_cats: Vec<ImportValue> = cats
-            .iter()
-            .flat_map(|c| c.value.iter())
-            .map(|s: &String| ImportValue::String(s.clone()))
-            .collect();
-        if !all_cats.is_empty() {
-            fields.push(("categories", ImportValue::List(all_cats)));
-        }
-    }
 
-    // Expanded properties.
-    if let Some(dtstamp) = event.dtstamp() {
-        fields.push(("dtstamp", translate_utc_datetime(&dtstamp.value)));
-    }
-    if let Some(class) = event.class() {
-        fields.push(("class", translate_class(&class.value)));
-    }
-    if let Some(created) = event.created() {
-        fields.push(("created", translate_utc_datetime(&created.value)));
-    }
-    if let Some(geo) = event.geo() {
-        fields.push(("geo", translate_geo(&geo.value)));
-    }
-    if let Some(lm) = event.last_modified() {
-        fields.push(("last_modified", translate_utc_datetime(&lm.value)));
-    }
-    if let Some(org) = event.organizer() {
-        fields.push((
-            "organizer",
-            ImportValue::String(org.value.as_str().to_string()),
-        ));
-    }
-    if let Some(seq) = event.sequence() {
-        fields.push(("sequence", ImportValue::SignedInteger(i64::from(seq.value))));
-    }
+    // Event-specific: TRANSP
     if let Some(transp) = event.transp() {
         fields.push(("transparency", translate_transp(&transp.value)));
-    }
-    if let Some(url) = event.url() {
-        fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
-    }
-    if let Some(recurrence_id) = event.recurrence_id()
-        && let Some(val) = translate_datetime_or_date(&recurrence_id.value)
-    {
-        fields.push(("recurrence_id", val));
-    }
-    if let Some(rrules) = event.rrule()
-        && let Some(first) = rrules.first()
-    {
-        fields.push(("recur", translate_rrule(&first.value)));
-    }
-    if let Some(rdates) = event.rdate() {
-        let items: Vec<ImportValue> = rdates
-            .iter()
-            .flat_map(|r| translate_rdate_seq(&r.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("rdates", ImportValue::List(items)));
-        }
-    }
-    if let Some(exdates) = event.exdate() {
-        let items: Vec<ImportValue> = exdates
-            .iter()
-            .flat_map(|e| translate_datetime_or_date(&e.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("exdates", ImportValue::List(items)));
-        }
-    }
-    if let Some(attachments) = event.attach() {
-        let items: Vec<ImportValue> = attachments
-            .iter()
-            .map(|a| translate_attachment(&a.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("attachments", ImportValue::List(items)));
-        }
-    }
-    if let Some(attendees) = event.attendee() {
-        let items: Vec<ImportValue> = attendees
-            .iter()
-            .map(|a| ImportValue::String(a.value.as_str().to_string()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("attendees", ImportValue::List(items)));
-        }
-    }
-    if let Some(comments) = event.comment() {
-        let items: Vec<ImportValue> = comments
-            .iter()
-            .map(|c| ImportValue::String(c.value.clone()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("comments", ImportValue::List(items)));
-        }
-    }
-    if let Some(contacts) = event.contact() {
-        let items: Vec<ImportValue> = contacts
-            .iter()
-            .map(|c| ImportValue::String(c.value.clone()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("contacts", ImportValue::List(items)));
-        }
-    }
-    if let Some(related) = event.related_to() {
-        let items: Vec<ImportValue> = related
-            .iter()
-            .map(|r| ImportValue::String(r.value.as_str().to_string()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("related_to", ImportValue::List(items)));
-        }
-    }
-    if let Some(resources) = event.resources() {
-        let items: Vec<ImportValue> = resources
-            .iter()
-            .map(|r| {
-                ImportValue::List(
-                    r.value
-                        .iter()
-                        .map(|s| ImportValue::String(s.clone()))
-                        .collect(),
-                )
-            })
-            .collect();
-        if !items.is_empty() {
-            fields.push(("resources", ImportValue::List(items)));
-        }
-    }
-    if let Some(images) = event.image() {
-        let items: Vec<ImportValue> = images
-            .iter()
-            .map(|i| translate_attachment(&i.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("images", ImportValue::List(items)));
-        }
-    }
-    if let Some(conferences) = event.conference() {
-        let items: Vec<ImportValue> = conferences
-            .iter()
-            .map(|c| ImportValue::String(c.value.as_str().to_string()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("conferences", ImportValue::List(items)));
-        }
-    }
-    if let Some(statuses) = event.request_status() {
-        let items: Vec<ImportValue> = statuses
-            .iter()
-            .map(|s| translate_request_status(&s.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("request_statuses", ImportValue::List(items)));
-        }
     }
 
     let mut record = make_record(&fields);
@@ -396,214 +412,33 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     let mut fields: Vec<(&str, ImportValue)> = Vec::new();
     fields.push(("type", ImportValue::String("task".into())));
 
-    if let Some(uid_prop) = todo.uid() {
-        fields.push((
-            "uid",
-            ImportValue::String(uid_prop.value.as_str().to_string()),
-        ));
-    }
-    if let Some(summary) = todo.summary() {
-        fields.push(("title", ImportValue::String(summary.value.clone())));
-    }
-    if let Some(desc) = todo.description() {
-        fields.push(("description", ImportValue::String(desc.value.clone())));
-    }
+    translate_common_ical_fields!(todo, fields);
+
+    // Task-specific: DUE
     if let Some(due_prop) = todo.due()
         && let Some(val) = translate_datetime_or_date(&due_prop.value)
     {
         fields.push(("due", val));
     }
-    if let Some(dtstart) = todo.dtstart() {
-        if let Some(val) = translate_datetime_or_date(&dtstart.value) {
-            fields.push(("start", val));
-        }
-        if let Some(tz) = dtstart.params.tz_id() {
-            fields.push(("time_zone", ImportValue::String(tz.as_str().to_string())));
-        }
-    }
+
+    // Task-specific: DURATION → estimated_duration
     if let Some(dur) = todo.duration()
         && let Some(val) = translate_signed_duration(&dur.value)
     {
         fields.push(("estimated_duration", val));
     }
+
+    // Task-specific: PERCENT-COMPLETE
     if let Some(pct) = todo.percent_complete() {
         fields.push((
             "percent_complete",
             ImportValue::Integer(u64::from(pct.value.get())),
         ));
     }
-    if let Some(status_prop) = todo.status() {
-        fields.push(("status", translate_status(&status_prop.value)));
-    }
-    if let Some(priority_prop) = todo.priority() {
-        fields.push((
-            "priority",
-            ImportValue::Integer(priority_to_u64(&priority_prop.value)),
-        ));
-    }
-    if let Some(loc) = todo.location() {
-        fields.push(("location", ImportValue::String(loc.value.clone())));
-    }
-    if let Some(color) = todo.color() {
-        fields.push(("color", ImportValue::String(color.value.to_string())));
-    }
-    if let Some(cats) = todo.categories() {
-        let all_cats: Vec<ImportValue> = cats
-            .iter()
-            .flat_map(|c| c.value.iter())
-            .map(|s: &String| ImportValue::String(s.clone()))
-            .collect();
-        if !all_cats.is_empty() {
-            fields.push(("categories", ImportValue::List(all_cats)));
-        }
-    }
 
-    // Expanded properties.
-    if let Some(dtstamp) = todo.dtstamp() {
-        fields.push(("dtstamp", translate_utc_datetime(&dtstamp.value)));
-    }
-    if let Some(class) = todo.class() {
-        fields.push(("class", translate_class(&class.value)));
-    }
-    if let Some(created) = todo.created() {
-        fields.push(("created", translate_utc_datetime(&created.value)));
-    }
-    if let Some(geo) = todo.geo() {
-        fields.push(("geo", translate_geo(&geo.value)));
-    }
-    if let Some(lm) = todo.last_modified() {
-        fields.push(("last_modified", translate_utc_datetime(&lm.value)));
-    }
-    if let Some(org) = todo.organizer() {
-        fields.push((
-            "organizer",
-            ImportValue::String(org.value.as_str().to_string()),
-        ));
-    }
-    if let Some(seq) = todo.sequence() {
-        fields.push(("sequence", ImportValue::SignedInteger(i64::from(seq.value))));
-    }
-    if let Some(url) = todo.url() {
-        fields.push(("url", ImportValue::String(url.value.as_str().to_string())));
-    }
+    // Task-specific: COMPLETED
     if let Some(completed) = todo.completed() {
         fields.push(("completed", translate_utc_datetime(&completed.value)));
-    }
-    if let Some(recurrence_id) = todo.recurrence_id()
-        && let Some(val) = translate_datetime_or_date(&recurrence_id.value)
-    {
-        fields.push(("recurrence_id", val));
-    }
-    if let Some(rrules) = todo.rrule()
-        && let Some(first) = rrules.first()
-    {
-        fields.push(("recur", translate_rrule(&first.value)));
-    }
-    if let Some(rdates) = todo.rdate() {
-        let items: Vec<ImportValue> = rdates
-            .iter()
-            .flat_map(|r| translate_rdate_seq(&r.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("rdates", ImportValue::List(items)));
-        }
-    }
-    if let Some(exdates) = todo.exdate() {
-        let items: Vec<ImportValue> = exdates
-            .iter()
-            .flat_map(|e| translate_datetime_or_date(&e.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("exdates", ImportValue::List(items)));
-        }
-    }
-    if let Some(attachments) = todo.attach() {
-        let items: Vec<ImportValue> = attachments
-            .iter()
-            .map(|a| translate_attachment(&a.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("attachments", ImportValue::List(items)));
-        }
-    }
-    if let Some(attendees) = todo.attendee() {
-        let items: Vec<ImportValue> = attendees
-            .iter()
-            .map(|a| ImportValue::String(a.value.as_str().to_string()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("attendees", ImportValue::List(items)));
-        }
-    }
-    if let Some(comments) = todo.comment() {
-        let items: Vec<ImportValue> = comments
-            .iter()
-            .map(|c| ImportValue::String(c.value.clone()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("comments", ImportValue::List(items)));
-        }
-    }
-    if let Some(contacts) = todo.contact() {
-        let items: Vec<ImportValue> = contacts
-            .iter()
-            .map(|c| ImportValue::String(c.value.clone()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("contacts", ImportValue::List(items)));
-        }
-    }
-    if let Some(related) = todo.related_to() {
-        let items: Vec<ImportValue> = related
-            .iter()
-            .map(|r| ImportValue::String(r.value.as_str().to_string()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("related_to", ImportValue::List(items)));
-        }
-    }
-    if let Some(resources) = todo.resources() {
-        let items: Vec<ImportValue> = resources
-            .iter()
-            .map(|r| {
-                ImportValue::List(
-                    r.value
-                        .iter()
-                        .map(|s| ImportValue::String(s.clone()))
-                        .collect(),
-                )
-            })
-            .collect();
-        if !items.is_empty() {
-            fields.push(("resources", ImportValue::List(items)));
-        }
-    }
-    if let Some(images) = todo.image() {
-        let items: Vec<ImportValue> = images
-            .iter()
-            .map(|i| translate_attachment(&i.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("images", ImportValue::List(items)));
-        }
-    }
-    if let Some(conferences) = todo.conference() {
-        let items: Vec<ImportValue> = conferences
-            .iter()
-            .map(|c| ImportValue::String(c.value.as_str().to_string()))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("conferences", ImportValue::List(items)));
-        }
-    }
-    if let Some(statuses) = todo.request_status() {
-        let items: Vec<ImportValue> = statuses
-            .iter()
-            .map(|s| translate_request_status(&s.value))
-            .collect();
-        if !items.is_empty() {
-            fields.push(("request_statuses", ImportValue::List(items)));
-        }
     }
 
     let mut record = make_record(&fields);
