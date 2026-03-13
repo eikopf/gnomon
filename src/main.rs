@@ -566,4 +566,42 @@ mod tests {
     fn empty_input() {
         assert_eq!(offset_to_line_col("", 0), (1, 1));
     }
+
+    #[test]
+    fn offset_at_newline_boundary() {
+        // "abc\ndef" — offset 3 is the '\n' character
+        assert_eq!(offset_to_line_col("abc\ndef", 3), (1, 4));
+    }
+
+    #[test]
+    fn offset_after_newline_boundary() {
+        // "abc\ndef" — offset 4 is 'd', the first char after newline on line 2
+        assert_eq!(offset_to_line_col("abc\ndef", 4), (2, 1));
+    }
+
+    #[test]
+    fn multiple_newlines() {
+        // "a\nb\nc" — offset 4 is 'c' on line 3
+        assert_eq!(offset_to_line_col("a\nb\nc", 4), (3, 1));
+    }
+
+    #[test]
+    fn offset_past_end_of_string() {
+        // "abc" has length 3, offset 10 is way past the end
+        // The function doesn't clamp; it calculates col = offset - line_start + 1
+        // So col = 10 - 0 + 1 = 11 (still on line 1 since no newlines were seen)
+        assert_eq!(offset_to_line_col("abc", 10), (1, 11));
+    }
+
+    #[test]
+    fn multibyte_with_newlines() {
+        // "café\ndog" — 'café' is 5 bytes (c=1, a=1, f=1, é=2), newline at byte 5, 'd' at byte 6
+        assert_eq!(offset_to_line_col("café\ndog", 6), (2, 1));
+    }
+
+    #[test]
+    fn last_character_of_line_before_newline() {
+        // "abc\ndef" — offset 2 is 'c' on line 1, column 3
+        assert_eq!(offset_to_line_col("abc\ndef", 2), (1, 3));
+    }
 }
