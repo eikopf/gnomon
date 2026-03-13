@@ -1739,7 +1739,34 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
     })
 }
 
+/// Convert an `ImportValue` to a `serde_json::Value` so that composite values
+/// can be round-tripped through iCalendar x-properties as JSON text.
+fn import_value_to_json(value: &ImportValue) -> serde_json::Value {
+    use serde_json::{Map, Value as Json};
+    match value {
+        ImportValue::String(s) => Json::String(s.clone()),
+        ImportValue::Integer(n) => Json::Number((*n).into()),
+        ImportValue::SignedInteger(n) => Json::Number((*n).into()),
+        ImportValue::Bool(b) => Json::Bool(*b),
+        ImportValue::Undefined => Json::Null,
+        ImportValue::Record(r) => {
+            let mut map = Map::new();
+            for (k, v) in r {
+                map.insert(k.clone(), import_value_to_json(v));
+            }
+            Json::Object(map)
+        }
+        ImportValue::List(items) => {
+            Json::Array(items.iter().map(import_value_to_json).collect())
+        }
+    }
+}
+
 /// Convert an ImportValue to a calico x-property `Value<String>`.
+///
+/// Scalar values map to their native iCal counterparts. Composite values
+/// (`Record`, `List`) and `Undefined` are serialised as JSON text so that
+/// no data is lost.
 fn import_value_to_ical_value(v: &ImportValue) -> calico::model::primitive::Value<String> {
     use calico::model::primitive::Value;
     match v {
@@ -1747,7 +1774,10 @@ fn import_value_to_ical_value(v: &ImportValue) -> calico::model::primitive::Valu
         ImportValue::Integer(n) => Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX)),
         ImportValue::SignedInteger(n) => Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX)),
         ImportValue::Bool(b) => Value::Boolean(*b),
-        _ => Value::Text(String::new()),
+        ImportValue::Undefined => Value::Text(String::new()),
+        ImportValue::Record(_) | ImportValue::List(_) => {
+            Value::Text(import_value_to_json(v).to_string())
+        }
     }
 }
 
