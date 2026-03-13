@@ -1607,8 +1607,8 @@ When compiling a Gnomon calendar to a foreign format, each validated `Calendar` 
 
 ##### JSCalendar Export
 
-> r[model.export.jscalendar.calendar]
-> A JSCalendar export MUST produce a JSON value. If the calendar has a single entry, the output MUST be a single JSCalendar object. Otherwise, the output MUST be a JSON array of JSCalendar objects.
+> r[model.export.jscalendar.calendar+2]
+> A JSCalendar export MUST produce one JSCalendar Group object per calendar. Each Group MUST contain the calendar's entries and calendar-level properties (uid, title, etc.). If there is a single calendar, the output MUST be the Group object. If there are multiple calendars, the output MUST be a JSON array of Group objects.
 
 > r[model.export.jscalendar.event]
 > An event record MUST be translated to a JSCalendar Event object (with `@type` set to `"Event"`) using the inverse of the JSCalendar import event mapping table. Gnomon field names MUST be converted to their camelCase JSCalendar equivalents (e.g. `time_zone` → `timeZone`, `free_busy_status` → `freeBusyStatus`).

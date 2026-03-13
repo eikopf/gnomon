@@ -422,23 +422,22 @@ fn main() -> ExitCode {
                     }
                 }
                 ExportFormat::Jscalendar => {
-                    // For JSCalendar with multiple calendars: wrap in outer array.
+                    // Each output is a JSCalendar Group. Single group → emit
+                    // directly; multiple groups → wrap in a JSON array.
                     if outputs.len() == 1 {
                         let _ = writeln!(lock, "{}", outputs[0]);
                     } else {
-                        // Parse each calendar's JSON, combine into single array.
-                        let mut all: Vec<serde_json::Value> = Vec::new();
+                        let mut groups: Vec<serde_json::Value> = Vec::new();
                         for s in &outputs {
                             match serde_json::from_str::<serde_json::Value>(s) {
-                                Ok(serde_json::Value::Array(arr)) => all.extend(arr),
-                                Ok(val) => all.push(val),
+                                Ok(val) => groups.push(val),
                                 Err(e) => {
                                     eprintln!("error: invalid JSON output: {e}");
                                     return ExitCode::FAILURE;
                                 }
                             }
                         }
-                        let combined = serde_json::to_string_pretty(&all).unwrap();
+                        let combined = serde_json::to_string_pretty(&groups).unwrap();
                         let _ = writeln!(lock, "{combined}");
                     }
                 }

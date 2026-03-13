@@ -472,6 +472,7 @@ event @meeting 2026-03-15T14:00 1h "Meeting"
         .args(["compile", file.to_str().unwrap(), "--format", "jscalendar"])
         .assert()
         .success()
+        .stdout(predicate::str::contains("\"@type\": \"Group\""))
         .stdout(predicate::str::contains("\"@type\": \"Event\""))
         .stdout(predicate::str::contains("Meeting"));
 }
