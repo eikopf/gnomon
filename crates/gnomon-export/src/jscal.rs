@@ -1,9 +1,22 @@
-//! JSCalendar export: ImportValue → jscalendar Group → JSON (RFC 9553).
+//! JSCalendar export: ImportValue → jscalendar model → JSON (RFC 9553).
+
+use std::collections::HashSet;
+use std::str::FromStr;
 
 use gnomon_import::{ImportRecord, ImportValue};
 use jscalendar::json::{IntoJson, TryFromJson};
-use jscalendar::model::object::Group;
-use serde_json::{Map, Value as Json, json};
+use jscalendar::model::object::{Event, Group, Task, TaskOrEvent};
+use jscalendar::model::set::{
+    Color, EventStatus, FreeBusyStatus, Percent, Priority, Privacy, TaskProgress,
+};
+use jscalendar::model::time::{
+    Date, DateTime, Day, Duration, ExactDuration, Hour, Local, Minute, Month, NominalDuration,
+    Second, Time, Year,
+};
+use serde_json::{Map, Value as Json};
+
+use calendar_types::set::Token;
+use calendar_types::string::Uid;
 
 // ── Public API ───────────────────────────────────────────────
 
@@ -15,285 +28,415 @@ use serde_json::{Map, Value as Json, json};
 /// The output is a single JSCalendar Group object containing the entries.
 // r[impl model.export.jscalendar.calendar+2]
 pub fn emit_jscalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Result<String, String> {
-    let group_json = build_group_json(calendar, entries)?;
-    let group = Group::<Json>::try_from_json(group_json)
-        .map_err(|e| format!("JSCalendar validation error: {e}"))?;
-    let rendered: Json = group.into_json();
-    serde_json::to_string_pretty(&rendered).map_err(|e| e.to_string())
+    let group = build_group(calendar, entries)?;
+    let json: Json = group.into_json();
+    serde_json::to_string_pretty(&json).map_err(|e| e.to_string())
 }
 
 // ── Group builder ────────────────────────────────────────────
 
-/// Known Gnomon calendar fields → JSCalendar Group property names.
-const GROUP_FIELDS: &[(&str, &str)] = &[
-    ("uid", "uid"),
-    ("title", "title"),
-    ("description", "description"),
-    ("color", "color"),
-    ("locale", "locale"),
-    ("prod_id", "prodId"),
-    ("categories", "categories"),
-    ("keywords", "keywords"),
-];
+fn build_group(calendar: &ImportRecord, entries: &[ImportValue]) -> Result<Group<Json>, String> {
+    let uid = get_uid(calendar)?;
 
-fn build_group_json(calendar: &ImportRecord, entries: &[ImportValue]) -> Result<Json, String> {
-    let mut obj = Map::new();
-    obj.insert("@type".into(), json!("Group"));
+    let jscal_entries: Vec<TaskOrEvent<Json>> = entries
+        .iter()
+        .filter_map(|entry| {
+            let ImportValue::Record(record) = entry else {
+                return None;
+            };
+            build_entry(record).ok()
+        })
+        .collect();
 
-    for &(gnomon_key, jscal_key) in GROUP_FIELDS {
-        if let Some(value) = calendar.get(gnomon_key) {
-            obj.insert(jscal_key.into(), translate_field(gnomon_key, value));
-        }
+    let mut group = Group::new(jscal_entries, uid);
+
+    if let Some(s) = get_str(calendar, "title") {
+        group.set_title(s.to_string());
+    }
+    if let Some(s) = get_str(calendar, "description") {
+        group.set_description(s.to_string());
+    }
+    if let Some(s) = get_str(calendar, "prod_id") {
+        group.set_prod_id(s.to_string());
+    }
+    if let Some(s) = get_str(calendar, "color")
+        && let Ok(c) = Color::try_from_json(Json::String(s.to_string()))
+    {
+        group.set_color(c);
+    }
+    if let Some(s) = get_str(calendar, "locale")
+        && let Ok(l) = calendar_types::string::LanguageTag::parse(s)
+    {
+        group.set_locale(l);
+    }
+    if let Some(set) = get_string_set(calendar, "categories") {
+        group.set_categories(set);
+    }
+    if let Some(set) = get_string_set(calendar, "keywords") {
+        group.set_keywords(set);
     }
 
-    // Vendor properties on the calendar record.
-    emit_vendor_properties(calendar, GROUP_FIELDS, &mut obj);
-
-    // Build entries array.
-    let mut jscal_entries = Vec::new();
-    for entry in entries {
-        let ImportValue::Record(record) = entry else {
-            continue;
-        };
-        jscal_entries.push(build_entry_json(record)?);
+    // Vendor properties.
+    let vendor = collect_vendor_properties(calendar, GROUP_KNOWN);
+    for (k, v) in vendor {
+        group.insert_vendor_property(k.into(), v);
     }
-    obj.insert("entries".into(), Json::Array(jscal_entries));
 
-    Ok(Json::Object(obj))
+    Ok(group)
 }
+
+const GROUP_KNOWN: &[&str] = &[
+    "type",
+    "entries",
+    "name",
+    "uid",
+    "title",
+    "description",
+    "prod_id",
+    "color",
+    "locale",
+    "categories",
+    "keywords",
+];
 
 // ── Entry dispatch ───────────────────────────────────────────
 
-fn build_entry_json(record: &ImportRecord) -> Result<Json, String> {
-    let entry_type = record.get("type").and_then(as_str).unwrap_or("event");
-
+fn build_entry(record: &ImportRecord) -> Result<TaskOrEvent<Json>, String> {
+    let entry_type = get_str(record, "type").unwrap_or("event");
     match entry_type {
         // r[impl model.export.jscalendar.event]
-        "event" => Ok(build_event_json(record)),
+        "event" => build_event(record).map(TaskOrEvent::Event),
         // r[impl model.export.jscalendar.task]
-        "task" => Ok(build_task_json(record)),
+        "task" => build_task(record).map(TaskOrEvent::Task),
         other => Err(format!("unknown entry type: {other}")),
     }
 }
 
 // ── Event builder ────────────────────────────────────────────
 
-/// Known Gnomon fields for events → JSCalendar camelCase property names.
-const EVENT_FIELDS: &[(&str, &str)] = &[
-    ("uid", "uid"),
-    ("title", "title"),
-    ("description", "description"),
-    ("start", "start"),
-    ("duration", "duration"),
-    ("time_zone", "timeZone"),
-    ("status", "status"),
-    ("priority", "priority"),
-    ("color", "color"),
-    ("locale", "locale"),
-    ("privacy", "privacy"),
-    ("free_busy_status", "freeBusyStatus"),
-    ("show_without_time", "showWithoutTime"),
-    ("categories", "categories"),
-    ("keywords", "keywords"),
-];
+fn build_event(record: &ImportRecord) -> Result<Event<Json>, String> {
+    let uid = get_uid(record)?;
+    let start = get_datetime(record, "start")
+        .ok_or_else(|| "event missing required 'start' field".to_string())?;
 
-fn build_event_json(record: &ImportRecord) -> Json {
-    let mut obj = Map::new();
-    obj.insert("@type".into(), json!("Event"));
+    let mut event = Event::new(start, uid);
 
-    for &(gnomon_key, jscal_key) in EVENT_FIELDS {
-        if let Some(value) = record.get(gnomon_key) {
-            obj.insert(jscal_key.into(), translate_field(gnomon_key, value));
-        }
+    if let Some(s) = get_str(record, "title") {
+        event.set_title(s.to_string());
+    }
+    if let Some(s) = get_str(record, "description") {
+        event.set_description(s.to_string());
+    }
+    if let Some(dur) = get_duration(record, "duration") {
+        event.set_duration(dur);
+    }
+    if let Some(s) = get_str(record, "time_zone") {
+        event.set_time_zone(s.to_string());
+    }
+    if let Some(s) = get_str(record, "status") {
+        event.set_status(Token::<EventStatus, Box<str>>::from_str(s).unwrap());
+    }
+    if let Some(p) = get_priority(record) {
+        event.set_priority(p);
+    }
+    if let Some(s) = get_str(record, "color")
+        && let Ok(c) = Color::try_from_json(Json::String(s.to_string()))
+    {
+        event.set_color(c);
+    }
+    if let Some(s) = get_str(record, "locale")
+        && let Ok(l) = calendar_types::string::LanguageTag::parse(s)
+    {
+        event.set_locale(l);
+    }
+    if let Some(s) = get_str(record, "privacy") {
+        event.set_privacy(Token::<Privacy, Box<str>>::from_str(s).unwrap());
+    }
+    if let Some(s) = get_str(record, "free_busy_status") {
+        event.set_free_busy_status(Token::<FreeBusyStatus, Box<str>>::from_str(s).unwrap());
+    }
+    if let Some(b) = get_bool(record, "show_without_time") {
+        event.set_show_without_time(b);
+    }
+    if let Some(set) = get_string_set(record, "categories") {
+        event.set_categories(set);
+    }
+    if let Some(set) = get_string_set(record, "keywords") {
+        event.set_keywords(set);
     }
 
     // r[impl model.export.jscalendar.vendor]
-    emit_vendor_properties(record, EVENT_FIELDS, &mut obj);
+    let vendor = collect_vendor_properties(record, EVENT_KNOWN);
+    for (k, v) in vendor {
+        event.insert_vendor_property(k.into(), v);
+    }
 
-    Json::Object(obj)
+    Ok(event)
 }
+
+const EVENT_KNOWN: &[&str] = &[
+    "type",
+    "name",
+    "uid",
+    "title",
+    "description",
+    "start",
+    "duration",
+    "time_zone",
+    "status",
+    "priority",
+    "color",
+    "locale",
+    "privacy",
+    "free_busy_status",
+    "show_without_time",
+    "categories",
+    "keywords",
+];
 
 // ── Task builder ─────────────────────────────────────────────
 
-/// Known Gnomon fields for tasks → JSCalendar camelCase property names.
-const TASK_FIELDS: &[(&str, &str)] = &[
-    ("uid", "uid"),
-    ("title", "title"),
-    ("description", "description"),
-    ("start", "start"),
-    ("due", "due"),
-    ("estimated_duration", "estimatedDuration"),
-    ("percent_complete", "percentComplete"),
-    ("progress", "progress"),
-    ("time_zone", "timeZone"),
-    ("priority", "priority"),
-    ("color", "color"),
-    ("locale", "locale"),
-    ("privacy", "privacy"),
-    ("free_busy_status", "freeBusyStatus"),
-    ("show_without_time", "showWithoutTime"),
-    ("categories", "categories"),
-    ("keywords", "keywords"),
-];
+fn build_task(record: &ImportRecord) -> Result<Task<Json>, String> {
+    let uid = get_uid(record)?;
 
-fn build_task_json(record: &ImportRecord) -> Json {
-    let mut obj = Map::new();
-    obj.insert("@type".into(), json!("Task"));
+    let mut task = Task::new(uid);
 
-    for &(gnomon_key, jscal_key) in TASK_FIELDS {
-        if let Some(value) = record.get(gnomon_key) {
-            obj.insert(jscal_key.into(), translate_field(gnomon_key, value));
-        }
+    if let Some(s) = get_str(record, "title") {
+        task.set_title(s.to_string());
+    }
+    if let Some(s) = get_str(record, "description") {
+        task.set_description(s.to_string());
+    }
+    if let Some(dt) = get_datetime(record, "start") {
+        task.set_start(dt);
+    }
+    if let Some(dt) = get_datetime(record, "due") {
+        task.set_due(dt);
+    }
+    if let Some(dur) = get_duration(record, "estimated_duration") {
+        task.set_estimated_duration(dur);
+    }
+    if let Some(n) = get_u64(record, "percent_complete")
+        && let Ok(n) = u8::try_from(n)
+        && let Some(pct) = Percent::new(n)
+    {
+        task.set_percent_complete(pct);
+    }
+    if let Some(s) = get_str(record, "progress") {
+        task.set_progress(Token::<TaskProgress, Box<str>>::from_str(s).unwrap());
+    }
+    if let Some(s) = get_str(record, "time_zone") {
+        task.set_time_zone(s.to_string());
+    }
+    if let Some(p) = get_priority(record) {
+        task.set_priority(p);
+    }
+    if let Some(s) = get_str(record, "color")
+        && let Ok(c) = Color::try_from_json(Json::String(s.to_string()))
+    {
+        task.set_color(c);
+    }
+    if let Some(s) = get_str(record, "locale")
+        && let Ok(l) = calendar_types::string::LanguageTag::parse(s)
+    {
+        task.set_locale(l);
+    }
+    if let Some(s) = get_str(record, "privacy") {
+        task.set_privacy(Token::<Privacy, Box<str>>::from_str(s).unwrap());
+    }
+    if let Some(s) = get_str(record, "free_busy_status") {
+        task.set_free_busy_status(Token::<FreeBusyStatus, Box<str>>::from_str(s).unwrap());
+    }
+    if let Some(b) = get_bool(record, "show_without_time") {
+        task.set_show_without_time(b);
+    }
+    if let Some(set) = get_string_set(record, "categories") {
+        task.set_categories(set);
+    }
+    if let Some(set) = get_string_set(record, "keywords") {
+        task.set_keywords(set);
     }
 
     // r[impl model.export.jscalendar.vendor]
-    emit_vendor_properties(record, TASK_FIELDS, &mut obj);
+    let vendor = collect_vendor_properties(record, TASK_KNOWN);
+    for (k, v) in vendor {
+        task.insert_vendor_property(k.into(), v);
+    }
 
-    Json::Object(obj)
+    Ok(task)
 }
 
-// ── Field translation ────────────────────────────────────────
+const TASK_KNOWN: &[&str] = &[
+    "type",
+    "name",
+    "uid",
+    "title",
+    "description",
+    "start",
+    "due",
+    "estimated_duration",
+    "percent_complete",
+    "progress",
+    "time_zone",
+    "priority",
+    "color",
+    "locale",
+    "privacy",
+    "free_busy_status",
+    "show_without_time",
+    "categories",
+    "keywords",
+];
 
-/// Translate a single Gnomon field value to its JSCalendar JSON representation.
-///
-/// Special fields (datetime records, duration records, categories/keywords as
-/// maps) are handled here; everything else uses the generic value translation.
-fn translate_field(gnomon_key: &str, value: &ImportValue) -> Json {
-    match gnomon_key {
-        // Datetime fields → ISO 8601 local datetime string.
-        "start" | "due" => datetime_record_to_json(value),
-        // Duration fields → ISO 8601 duration string.
-        "duration" | "estimated_duration" => duration_record_to_json(value),
-        // Categories and keywords: JSCalendar uses { "key": true } map form.
-        "categories" | "keywords" => list_to_jscal_map(value),
-        // Everything else: generic translation.
-        _ => import_value_to_json(value),
+// ── Value extraction helpers ─────────────────────────────────
+
+fn get_str<'a>(record: &'a ImportRecord, key: &str) -> Option<&'a str> {
+    match record.get(key)? {
+        ImportValue::String(s) => Some(s),
+        _ => None,
     }
 }
 
-/// Translate an ImportValue datetime record to an ISO 8601 local datetime string.
-///
-/// Input format: `{date: {year, month, day}, time: {hour, minute, second}}`
-/// Output: `"2026-03-01T14:30:00"`
-fn datetime_record_to_json(value: &ImportValue) -> Json {
-    let ImportValue::Record(record) = value else {
-        return import_value_to_json(value);
-    };
-
-    let date = record.get("date").and_then(as_record);
-    let time = record.get("time").and_then(as_record);
-
-    let (Some(date), Some(time)) = (date, time) else {
-        return import_value_to_json(value);
-    };
-
-    let year = get_u64(date, "year").unwrap_or(0);
-    let month = get_u64(date, "month").unwrap_or(1);
-    let day = get_u64(date, "day").unwrap_or(1);
-    let hour = get_u64(time, "hour").unwrap_or(0);
-    let minute = get_u64(time, "minute").unwrap_or(0);
-    let second = get_u64(time, "second").unwrap_or(0);
-
-    Json::String(format!(
-        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}"
-    ))
+fn get_u64(record: &ImportRecord, key: &str) -> Option<u64> {
+    match record.get(key)? {
+        ImportValue::Integer(n) => Some(*n),
+        _ => None,
+    }
 }
 
-/// Translate an ImportValue duration record to an ISO 8601 duration string.
-///
-/// Input format: `{weeks, days, hours, minutes, seconds}`
-/// Output: `"P1W"`, `"P1DT2H30M"`, `"PT1H"`, etc.
-fn duration_record_to_json(value: &ImportValue) -> Json {
-    let ImportValue::Record(record) = value else {
-        return import_value_to_json(value);
-    };
-
-    let weeks = get_u64(record, "weeks").unwrap_or(0);
-    let days = get_u64(record, "days").unwrap_or(0);
-    let hours = get_u64(record, "hours").unwrap_or(0);
-    let minutes = get_u64(record, "minutes").unwrap_or(0);
-    let seconds = get_u64(record, "seconds").unwrap_or(0);
-
-    let mut s = String::from("P");
-
-    if weeks > 0 {
-        s.push_str(&format!("{weeks}W"));
+fn get_bool(record: &ImportRecord, key: &str) -> Option<bool> {
+    match record.get(key)? {
+        ImportValue::Bool(b) => Some(*b),
+        _ => None,
     }
-    if days > 0 {
-        s.push_str(&format!("{days}D"));
-    }
-
-    if hours > 0 || minutes > 0 || seconds > 0 {
-        s.push('T');
-        if hours > 0 {
-            s.push_str(&format!("{hours}H"));
-        }
-        if minutes > 0 {
-            s.push_str(&format!("{minutes}M"));
-        }
-        if seconds > 0 {
-            s.push_str(&format!("{seconds}S"));
-        }
-    }
-
-    // Edge case: zero duration.
-    if s == "P" {
-        s.push_str("T0S");
-    }
-
-    Json::String(s)
 }
 
-/// Translate a list of strings to the JSCalendar map form `{ "key": true }`.
-///
-/// JSCalendar represents categories/keywords as `{ "cat1": true, "cat2": true }`.
-fn list_to_jscal_map(value: &ImportValue) -> Json {
-    let ImportValue::List(items) = value else {
-        return import_value_to_json(value);
+fn get_uid(record: &ImportRecord) -> Result<Box<Uid>, String> {
+    let s = get_str(record, "uid").ok_or("missing required 'uid' field")?;
+    Uid::new(s)
+        .map(Into::into)
+        .map_err(|e| format!("invalid uid '{s}': {e}"))
+}
+
+fn get_datetime(record: &ImportRecord, key: &str) -> Option<DateTime<Local>> {
+    let ImportValue::Record(dt_record) = record.get(key)? else {
+        return None;
+    };
+    let ImportValue::Record(date_rec) = dt_record.get("date")? else {
+        return None;
+    };
+    let ImportValue::Record(time_rec) = dt_record.get("time")? else {
+        return None;
     };
 
-    let mut map = Map::new();
-    for item in items {
-        if let ImportValue::String(s) = item {
-            map.insert(s.clone(), Json::Bool(true));
-        }
+    let year = get_u64(date_rec, "year")?;
+    let month = get_u64(date_rec, "month")?;
+    let day = get_u64(date_rec, "day")?;
+    let hour = get_u64(time_rec, "hour").unwrap_or(0);
+    let minute = get_u64(time_rec, "minute").unwrap_or(0);
+    let second = get_u64(time_rec, "second").unwrap_or(0);
+
+    let date = Date::new(
+        Year::new(u16::try_from(year).ok()?).ok()?,
+        Month::new(u8::try_from(month).ok()?).ok()?,
+        Day::new(u8::try_from(day).ok()?).ok()?,
+    )
+    .ok()?;
+    let time = Time::new(
+        Hour::new(u8::try_from(hour).ok()?).ok()?,
+        Minute::new(u8::try_from(minute).ok()?).ok()?,
+        Second::new(u8::try_from(second).ok()?).ok()?,
+        None,
+    )
+    .ok()?;
+
+    Some(DateTime {
+        date,
+        time,
+        marker: Local,
+    })
+}
+
+fn get_duration(record: &ImportRecord, key: &str) -> Option<Duration> {
+    let ImportValue::Record(dur_record) = record.get(key)? else {
+        return None;
+    };
+
+    let weeks = u32::try_from(get_u64(dur_record, "weeks").unwrap_or(0)).ok()?;
+    let days = u32::try_from(get_u64(dur_record, "days").unwrap_or(0)).ok()?;
+    let hours = u32::try_from(get_u64(dur_record, "hours").unwrap_or(0)).ok()?;
+    let minutes = u32::try_from(get_u64(dur_record, "minutes").unwrap_or(0)).ok()?;
+    let seconds = u32::try_from(get_u64(dur_record, "seconds").unwrap_or(0)).ok()?;
+
+    if weeks > 0 || days > 0 {
+        let exact = (hours > 0 || minutes > 0 || seconds > 0).then_some(ExactDuration {
+            hours,
+            minutes,
+            seconds,
+            frac: None,
+        });
+        Some(Duration::Nominal(NominalDuration { weeks, days, exact }))
+    } else {
+        Some(Duration::Exact(ExactDuration {
+            hours,
+            minutes,
+            seconds,
+            frac: None,
+        }))
     }
-    Json::Object(map)
+}
+
+fn get_priority(record: &ImportRecord) -> Option<Priority> {
+    let n = get_u64(record, "priority")?;
+    match n {
+        0 => Some(Priority::Zero),
+        1 => Some(Priority::A1),
+        2 => Some(Priority::A2),
+        3 => Some(Priority::A3),
+        4 => Some(Priority::B1),
+        5 => Some(Priority::B2),
+        6 => Some(Priority::B3),
+        7 => Some(Priority::C1),
+        8 => Some(Priority::C2),
+        9 => Some(Priority::C3),
+        _ => None,
+    }
+}
+
+fn get_string_set(record: &ImportRecord, key: &str) -> Option<HashSet<String>> {
+    let ImportValue::List(items) = record.get(key)? else {
+        return None;
+    };
+    let set: HashSet<String> = items
+        .iter()
+        .filter_map(|v| match v {
+            ImportValue::String(s) => Some(s.clone()),
+            _ => None,
+        })
+        .collect();
+    if set.is_empty() { None } else { Some(set) }
 }
 
 // ── Vendor properties ────────────────────────────────────────
 
-/// Emit vendor (unknown) properties: any record field not in the known set
-/// and not `type`/`entries` is emitted as-is into the JSON object.
-fn emit_vendor_properties(
-    record: &ImportRecord,
-    known_fields: &[(&str, &str)],
-    obj: &mut Map<String, Json>,
-) {
+/// Collect record fields not in the known set into a JSON object for vendor_property.
+fn collect_vendor_properties(record: &ImportRecord, known: &[&str]) -> Map<String, Json> {
+    let mut obj = Map::new();
     for (key, value) in record {
-        // Skip internal gnomon fields.
-        if key == "type" || key == "entries" || key == "name" {
+        if known.contains(&key.as_str()) {
             continue;
         }
-        if known_fields
-            .iter()
-            .any(|&(gnomon_key, _)| gnomon_key == key)
-        {
-            continue;
-        }
-        // Unknown field → emit as vendor property.
         obj.insert(key.clone(), import_value_to_json(value));
     }
+    obj
 }
-
-// ── Generic value translation (inverse of translate_json_value) ──
 
 /// Convert an ImportValue to a serde_json::Value recursively.
 fn import_value_to_json(value: &ImportValue) -> Json {
     match value {
         ImportValue::String(s) => Json::String(s.clone()),
-        ImportValue::Integer(n) => json!(*n),
-        ImportValue::SignedInteger(n) => json!(*n),
+        ImportValue::Integer(n) => Json::Number((*n).into()),
+        ImportValue::SignedInteger(n) => Json::Number((*n).into()),
         ImportValue::Bool(b) => Json::Bool(*b),
         ImportValue::Undefined => Json::Null,
         ImportValue::Record(r) => {
@@ -304,29 +447,6 @@ fn import_value_to_json(value: &ImportValue) -> Json {
             Json::Object(map)
         }
         ImportValue::List(items) => Json::Array(items.iter().map(import_value_to_json).collect()),
-    }
-}
-
-// ── Helpers ──────────────────────────────────────────────────
-
-fn as_str(v: &ImportValue) -> Option<&str> {
-    match v {
-        ImportValue::String(s) => Some(s),
-        _ => None,
-    }
-}
-
-fn as_record(v: &ImportValue) -> Option<&ImportRecord> {
-    match v {
-        ImportValue::Record(r) => Some(r),
-        _ => None,
-    }
-}
-
-fn get_u64(record: &ImportRecord, key: &str) -> Option<u64> {
-    match record.get(key) {
-        Some(ImportValue::Integer(n)) => Some(*n),
-        _ => None,
     }
 }
 
@@ -411,7 +531,6 @@ mod tests {
         assert_eq!(entries[0]["start"], "2026-03-12T09:00:00");
         assert_eq!(entries[0]["duration"], "PT1H");
         assert_eq!(entries[0]["timeZone"], "America/New_York");
-        // `type` should not appear in entry output.
         assert!(entries[0].get("type").is_none());
     }
 
@@ -530,53 +649,6 @@ mod tests {
         let entries = parsed["entries"].as_array().unwrap();
         assert_eq!(entries[0]["com.example:custom"], "vendor-value");
         assert_eq!(entries[0]["com.example:nested"]["key"], "val");
-    }
-
-    #[test]
-    fn duration_formats() {
-        // Weeks only.
-        assert_eq!(
-            duration_record_to_json(&make_duration(2, 0, 0, 0, 0)),
-            json!("P2W")
-        );
-        // Days + time.
-        assert_eq!(
-            duration_record_to_json(&make_duration(0, 1, 2, 30, 0)),
-            json!("P1DT2H30M")
-        );
-        // Time only.
-        assert_eq!(
-            duration_record_to_json(&make_duration(0, 0, 0, 45, 0)),
-            json!("PT45M")
-        );
-        // Seconds.
-        assert_eq!(
-            duration_record_to_json(&make_duration(0, 0, 0, 0, 15)),
-            json!("PT15S")
-        );
-        // Zero duration.
-        assert_eq!(
-            duration_record_to_json(&make_duration(0, 0, 0, 0, 0)),
-            json!("PT0S")
-        );
-        // Mixed weeks + days + time.
-        assert_eq!(
-            duration_record_to_json(&make_duration(1, 2, 3, 4, 5)),
-            json!("P1W2DT3H4M5S")
-        );
-    }
-
-    #[test]
-    fn datetime_format() {
-        assert_eq!(
-            datetime_record_to_json(&make_datetime(2026, 3, 1, 14, 30, 0)),
-            json!("2026-03-01T14:30:00")
-        );
-        // Midnight.
-        assert_eq!(
-            datetime_record_to_json(&make_datetime(2026, 12, 25, 0, 0, 0)),
-            json!("2026-12-25T00:00:00")
-        );
     }
 
     #[test]
