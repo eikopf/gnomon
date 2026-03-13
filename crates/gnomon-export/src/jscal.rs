@@ -42,7 +42,11 @@ pub fn emit_jscalendar(
 
 // ── Group builder ────────────────────────────────────────────
 
-fn build_group(calendar: &ImportRecord, entries: &[ImportValue], warnings: &mut Vec<String>) -> Result<Group<Json>, String> {
+fn build_group(
+    calendar: &ImportRecord,
+    entries: &[ImportValue],
+    warnings: &mut Vec<String>,
+) -> Result<Group<Json>, String> {
     let uid = get_uid(calendar)?;
 
     let jscal_entries: Vec<TaskOrEvent<Json>> = entries
