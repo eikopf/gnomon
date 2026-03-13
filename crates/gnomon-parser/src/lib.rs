@@ -75,15 +75,26 @@ pub fn parse(source: &str) -> Parse {
 pub fn is_balanced(source: &str) -> bool {
     let preprocessed = preprocess::preprocess(source);
     let tokens = lexer::lex(&preprocessed);
-    let mut depth: i32 = 0;
+    let mut stack: Vec<SyntaxKind> = Vec::new();
     for tok in &tokens {
         match tok.kind {
-            SyntaxKind::L_BRACE | SyntaxKind::L_BRACKET | SyntaxKind::L_PAREN => depth += 1,
-            SyntaxKind::R_BRACE | SyntaxKind::R_BRACKET | SyntaxKind::R_PAREN => depth -= 1,
+            SyntaxKind::L_BRACE => stack.push(SyntaxKind::R_BRACE),
+            SyntaxKind::L_BRACKET => stack.push(SyntaxKind::R_BRACKET),
+            SyntaxKind::L_PAREN => stack.push(SyntaxKind::R_PAREN),
+            SyntaxKind::R_BRACE | SyntaxKind::R_BRACKET | SyntaxKind::R_PAREN => {
+                match stack.last() {
+                    Some(&expected) if expected == tok.kind => {
+                        stack.pop();
+                    }
+                    // Mismatched or excess closer: treat as balanced so the
+                    // parser (not the REPL) can report the real error.
+                    _ => return true,
+                }
+            }
             _ => {}
         }
     }
-    depth <= 0
+    stack.is_empty()
 }
 
 #[cfg(test)]
@@ -1175,5 +1186,71 @@ task @cleanup "Clean""#;
     #[test]
     fn multi_binding_let_three_bindings_no_errors() {
         check_no_errors("{ v: let a = 1 let b = 2 let c = 3 in a }");
+    }
+
+    // ── is_balanced ─────────────────────────────────────────────
+
+    #[test]
+    fn balanced_empty() {
+        assert!(is_balanced(""));
+    }
+
+    #[test]
+    fn balanced_matched_braces() {
+        assert!(is_balanced("{ }"));
+    }
+
+    #[test]
+    fn balanced_matched_brackets() {
+        assert!(is_balanced("[ ]"));
+    }
+
+    #[test]
+    fn balanced_matched_parens() {
+        assert!(is_balanced("( )"));
+    }
+
+    #[test]
+    fn balanced_nested() {
+        assert!(is_balanced("{ [ ( ) ] }"));
+    }
+
+    #[test]
+    fn unbalanced_unclosed_brace() {
+        assert!(!is_balanced("{"));
+    }
+
+    #[test]
+    fn unbalanced_unclosed_bracket() {
+        assert!(!is_balanced("["));
+    }
+
+    #[test]
+    fn unbalanced_unclosed_paren() {
+        assert!(!is_balanced("("));
+    }
+
+    #[test]
+    fn balanced_excess_closer() {
+        // Excess closing delimiter: balanced (let the parser report the error).
+        assert!(is_balanced("}"));
+    }
+
+    #[test]
+    fn balanced_mismatched_brace_bracket() {
+        // Mismatched: `{` closed by `]` — balanced (parser handles the error).
+        assert!(is_balanced("{]"));
+    }
+
+    #[test]
+    fn balanced_mismatched_bracket_paren_brace() {
+        // Mismatched: `[` closed by `(`, then `}` — balanced.
+        assert!(is_balanced("[(}"));
+    }
+
+    #[test]
+    fn balanced_mismatched_interleaved() {
+        // Mismatched: `(` then `[`, but `)` closes the `[` — balanced.
+        assert!(is_balanced("([)"));
     }
 }
