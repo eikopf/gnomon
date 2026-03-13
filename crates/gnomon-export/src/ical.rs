@@ -1626,7 +1626,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(sec);
             }
         }
-        core.by_second = Some(set);
+        if set != SecondSet::default() {
+            core.by_second = Some(set);
+        }
     }
 
     // BYMINUTE
@@ -1641,7 +1643,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(min);
             }
         }
-        core.by_minute = Some(set);
+        if set != MinuteSet::default() {
+            core.by_minute = Some(set);
+        }
     }
 
     // BYHOUR
@@ -1656,7 +1660,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(h);
             }
         }
-        core.by_hour = Some(set);
+        if set != HourSet::default() {
+            core.by_hour = Some(set);
+        }
     }
 
     // BYMONTH
@@ -1669,7 +1675,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(month);
             }
         }
-        core.by_month = Some(set);
+        if set != MonthSet::default() {
+            core.by_month = Some(set);
+        }
     }
 
     // BYDAY
@@ -1715,7 +1723,9 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 _ => {}
             }
         }
-        core.by_day = Some(set);
+        if !set.is_empty() {
+            core.by_day = Some(set);
+        }
     }
 
     // BYSETPOS
@@ -1751,7 +1761,11 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(idx);
             }
         }
-        Some(set)
+        if set == MonthDaySet::default() {
+            None
+        } else {
+            Some(set)
+        }
     };
 
     let build_year_day_set = |rec: &ImportRecord| -> Option<BTreeSet<YearDayNum>> {
@@ -1786,7 +1800,11 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(idx);
             }
         }
-        Some(set)
+        if set == WeekNoSet::default() {
+            None
+        } else {
+            Some(set)
+        }
     };
 
     let freq = match freq_str {
