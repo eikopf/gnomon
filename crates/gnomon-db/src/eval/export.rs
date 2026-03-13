@@ -28,7 +28,7 @@ pub fn calendar_to_import_values<'db>(
 /// resolving interned field names.
 fn record_to_import_record<'db>(db: &'db dyn crate::Db, record: &Record<'db>) -> ImportRecord {
     let mut result = ImportRecord::new();
-    for (name, blamed) in &record.0 {
+    for (name, blamed) in record.iter() {
         let key = name.text(db).clone();
         let value = value_to_import_value(db, &blamed.value);
         result.insert(key, value);
@@ -84,6 +84,7 @@ mod tests {
 
         let mut record = Record::new();
         record.insert(
+            &db,
             FieldName::new(&db, "name".to_string()),
             Blamed {
                 value: Value::String("hello".to_string()),
@@ -91,6 +92,7 @@ mod tests {
             },
         );
         record.insert(
+            &db,
             FieldName::new(&db, "count".to_string()),
             Blamed {
                 value: Value::Integer(42),
@@ -123,6 +125,7 @@ mod tests {
 
         let mut props = Record::new();
         props.insert(
+            &db,
             FieldName::new(&db, "uid".to_string()),
             Blamed {
                 value: Value::String("cal-1".to_string()),
@@ -130,6 +133,7 @@ mod tests {
             },
         );
         props.insert(
+            &db,
             FieldName::new(&db, "type".to_string()),
             Blamed {
                 value: Value::String("calendar".to_string()),
@@ -139,6 +143,7 @@ mod tests {
 
         let mut entry = Record::new();
         entry.insert(
+            &db,
             FieldName::new(&db, "type".to_string()),
             Blamed {
                 value: Value::String("event".to_string()),
@@ -146,6 +151,7 @@ mod tests {
             },
         );
         entry.insert(
+            &db,
             FieldName::new(&db, "title".to_string()),
             Blamed {
                 value: Value::String("Standup".to_string()),

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use gnomon_parser::SyntaxKind;
 
 use super::interned::FieldName;
@@ -193,10 +191,11 @@ pub(super) fn make_record<'db>(
     fields: &[(&str, Value<'db>)],
     blame: &Blame<'db>,
 ) -> Record<'db> {
-    let mut map = BTreeMap::new();
+    let mut record = Record::new();
     for (name, value) in fields {
         let field_name = FieldName::new(db, (*name).to_string());
-        map.insert(
+        record.insert(
+            db,
             field_name,
             Blamed {
                 value: value.clone(),
@@ -204,7 +203,7 @@ pub(super) fn make_record<'db>(
             },
         );
     }
-    Record(map)
+    record
 }
 
 /// Convert a month-day to a day-of-year in a non-leap year.
@@ -248,7 +247,7 @@ mod tests {
 
     fn get_field<'db>(record: &Record<'db>, db: &'db Database, name: &str) -> Value<'db> {
         let field_name = FieldName::new(db, name.to_string());
-        record.get(&field_name).unwrap().value.clone()
+        record.get(db, &field_name).unwrap().value.clone()
     }
 
     // r[verify lexer.date.desugar]
