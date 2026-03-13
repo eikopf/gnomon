@@ -139,7 +139,7 @@ fn build_event(record: &ImportRecord) -> Result<Event<Json>, String> {
         event.set_time_zone(s.to_string());
     }
     if let Some(s) = get_str(record, "status") {
-        event.set_status(Token::<EventStatus, Box<str>>::from_str(s).unwrap());
+        event.set_status(Token::<EventStatus, Box<str>>::from_str(s).map_err(|e| format!("invalid status: {e}"))?)
     }
     if let Some(p) = get_priority(record) {
         event.set_priority(p);
@@ -155,10 +155,10 @@ fn build_event(record: &ImportRecord) -> Result<Event<Json>, String> {
         event.set_locale(l);
     }
     if let Some(s) = get_str(record, "privacy") {
-        event.set_privacy(Token::<Privacy, Box<str>>::from_str(s).unwrap());
+        event.set_privacy(Token::<Privacy, Box<str>>::from_str(s).map_err(|e| format!("invalid privacy: {e}"))?)
     }
     if let Some(s) = get_str(record, "free_busy_status") {
-        event.set_free_busy_status(Token::<FreeBusyStatus, Box<str>>::from_str(s).unwrap());
+        event.set_free_busy_status(Token::<FreeBusyStatus, Box<str>>::from_str(s).map_err(|e| format!("invalid free_busy_status: {e}"))?)
     }
     if let Some(b) = get_bool(record, "show_without_time") {
         event.set_show_without_time(b);
@@ -228,7 +228,7 @@ fn build_task(record: &ImportRecord) -> Result<Task<Json>, String> {
         task.set_percent_complete(pct);
     }
     if let Some(s) = get_str(record, "progress") {
-        task.set_progress(Token::<TaskProgress, Box<str>>::from_str(s).unwrap());
+        task.set_progress(Token::<TaskProgress, Box<str>>::from_str(s).map_err(|e| format!("invalid progress: {e}"))?)
     }
     if let Some(s) = get_str(record, "time_zone") {
         task.set_time_zone(s.to_string());
@@ -247,10 +247,10 @@ fn build_task(record: &ImportRecord) -> Result<Task<Json>, String> {
         task.set_locale(l);
     }
     if let Some(s) = get_str(record, "privacy") {
-        task.set_privacy(Token::<Privacy, Box<str>>::from_str(s).unwrap());
+        task.set_privacy(Token::<Privacy, Box<str>>::from_str(s).map_err(|e| format!("invalid privacy: {e}"))?);
     }
     if let Some(s) = get_str(record, "free_busy_status") {
-        task.set_free_busy_status(Token::<FreeBusyStatus, Box<str>>::from_str(s).unwrap());
+        task.set_free_busy_status(Token::<FreeBusyStatus, Box<str>>::from_str(s).map_err(|e| format!("invalid free_busy_status: {e}"))?);
     }
     if let Some(b) = get_bool(record, "show_without_time") {
         task.set_show_without_time(b);
