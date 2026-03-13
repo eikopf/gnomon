@@ -2194,10 +2194,7 @@ END:VCALENDAR\r\n";
     #[test]
     fn days_from_civil_known_values() {
         // Consecutive days differ by 1.
-        assert_eq!(
-            days_from_civil(2000, 3, 2) - days_from_civil(2000, 3, 1),
-            1
-        );
+        assert_eq!(days_from_civil(2000, 3, 2) - days_from_civil(2000, 3, 1), 1);
         // 1970-01-01 to 2000-03-01 = 11017 days.
         assert_eq!(
             days_from_civil(2000, 3, 1) - days_from_civil(1970, 1, 1),
