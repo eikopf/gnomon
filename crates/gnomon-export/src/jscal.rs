@@ -14,10 +14,7 @@ use serde_json::{Map, Value as Json, json};
 ///
 /// The output is a single JSCalendar Group object containing the entries.
 // r[impl model.export.jscalendar.calendar+2]
-pub fn emit_jscalendar(
-    calendar: &ImportRecord,
-    entries: &[ImportValue],
-) -> Result<String, String> {
+pub fn emit_jscalendar(calendar: &ImportRecord, entries: &[ImportValue]) -> Result<String, String> {
     let group_json = build_group_json(calendar, entries)?;
     let group = Group::<Json>::try_from_json(group_json)
         .map_err(|e| format!("JSCalendar validation error: {e}"))?;
@@ -390,7 +387,10 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("title", ImportValue::String("Standup".into())),
             ("start", make_datetime(2026, 3, 12, 9, 0, 0)),
             ("duration", make_duration(0, 0, 1, 0, 0)),
@@ -420,7 +420,10 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let task = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("task".into())),
-            ("uid", ImportValue::String("b9ef7684-1585-5a7e-b827-144b66551111".into())),
+            (
+                "uid",
+                ImportValue::String("b9ef7684-1585-5a7e-b827-144b66551111".into()),
+            ),
             ("title", ImportValue::String("Review PR".into())),
             ("due", make_datetime(2026, 3, 15, 17, 0, 0)),
             ("percent_complete", ImportValue::Integer(50)),
@@ -445,12 +448,18 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
         ]));
         let task = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("task".into())),
-            ("uid", ImportValue::String("b9ef7684-1585-5a7e-b827-144b66551111".into())),
+            (
+                "uid",
+                ImportValue::String("b9ef7684-1585-5a7e-b827-144b66551111".into()),
+            ),
         ]));
 
         let result = emit_jscalendar(&cal, &[event, task]).unwrap();
@@ -468,7 +477,10 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
             (
                 "categories",
@@ -497,7 +509,10 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
             (
                 "com.example:custom",
@@ -569,7 +584,10 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
             ("show_without_time", ImportValue::Bool(true)),
         ]));
@@ -586,7 +604,10 @@ mod tests {
         let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
             ("priority", ImportValue::Integer(5)),
         ]));
@@ -629,12 +650,18 @@ mod tests {
     fn group_preserves_calendar_title() {
         let cal = make_record(&[
             ("type", ImportValue::String("calendar".into())),
-            ("uid", ImportValue::String("550e8400-e29b-41d4-a716-446655440000".into())),
+            (
+                "uid",
+                ImportValue::String("550e8400-e29b-41d4-a716-446655440000".into()),
+            ),
             ("title", ImportValue::String("My Calendar".into())),
         ]);
         let event = ImportValue::Record(make_record(&[
             ("type", ImportValue::String("event".into())),
-            ("uid", ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
             ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
         ]));
 

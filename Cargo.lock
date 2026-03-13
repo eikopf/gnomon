@@ -535,6 +535,7 @@ dependencies = [
  "calico",
  "expect-test",
  "gnomon-import",
+ "jscalendar",
  "serde_json",
 ]
 
