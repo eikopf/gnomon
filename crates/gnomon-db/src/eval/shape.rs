@@ -663,7 +663,9 @@ pub fn check_calendar_shape<'db>(
                     &mut diagnostics,
                 );
                 // r[impl record.event.name+2]
-                if entry.value.get(db, &name_key).is_none() && entry.value.get(db, &uid_key).is_none() {
+                if entry.value.get(db, &name_key).is_none()
+                    && entry.value.get(db, &uid_key).is_none()
+                {
                     diagnostics.push(Diagnostic {
                         source,
                         range: rowan::TextRange::default(),
@@ -690,7 +692,9 @@ pub fn check_calendar_shape<'db>(
                     &mut diagnostics,
                 );
                 // r[impl record.task.name+2]
-                if entry.value.get(db, &name_key).is_none() && entry.value.get(db, &uid_key).is_none() {
+                if entry.value.get(db, &name_key).is_none()
+                    && entry.value.get(db, &uid_key).is_none()
+                {
                     diagnostics.push(Diagnostic {
                         source,
                         range: rowan::TextRange::default(),

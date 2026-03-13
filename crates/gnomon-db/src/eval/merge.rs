@@ -294,11 +294,11 @@ fn flatten_to_records<'db>(
 
     match value {
         Value::Record(r) => {
-            let blame =
-                r.values()
-                    .next()
-                    .map(|b| b.blame.clone())
-                    .unwrap_or_else(default_blame);
+            let blame = r
+                .values()
+                .next()
+                .map(|b| b.blame.clone())
+                .unwrap_or_else(default_blame);
             vec![(r, blame)]
         }
         Value::List(items) => {
@@ -864,7 +864,9 @@ mod tests {
         );
         let uid_key = FieldName::new(&db, "uid".to_string());
         let entry = &result.calendars[0].entries[0].value;
-        let uid = entry.get(&db, &uid_key).expect("entry should have derived uid");
+        let uid = entry
+            .get(&db, &uid_key)
+            .expect("entry should have derived uid");
         match &uid.value {
             Value::String(s) => {
                 assert!(
@@ -1013,7 +1015,10 @@ mod tests {
         let result = check(&db, source);
         let occ_key = FieldName::new(&db, "occurrences".to_string());
         let entry = &result.calendars[0].entries[0].value;
-        assert!(entry.get(&db, &occ_key).is_none(), "should not have occurrences");
+        assert!(
+            entry.get(&db, &occ_key).is_none(),
+            "should not have occurrences"
+        );
     }
 
     // r[verify record.rrule.eval.start-required+2]

@@ -15,7 +15,6 @@ impl fmt::Debug for FieldName<'_> {
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PathSegment<'db> {
     Field(FieldName<'db>),
