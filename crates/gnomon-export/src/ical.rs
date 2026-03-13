@@ -1745,7 +1745,17 @@ fn import_value_to_ical_value(v: &ImportValue) -> calico::model::primitive::Valu
     match v {
         ImportValue::String(s) => Value::Text(s.clone()),
         ImportValue::Integer(n) => Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX)),
-        ImportValue::SignedInteger(n) => Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX)),
+        ImportValue::SignedInteger(n) => {
+            Value::Integer(
+                i32::try_from(*n).unwrap_or_else(|_| {
+                    if *n < 0 {
+                        i32::MIN
+                    } else {
+                        i32::MAX
+                    }
+                }),
+            )
+        }
         ImportValue::Bool(b) => Value::Boolean(*b),
         _ => Value::Text(String::new()),
     }
