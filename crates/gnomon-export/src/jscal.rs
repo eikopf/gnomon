@@ -743,4 +743,110 @@ mod tests {
         assert_eq!(parsed["@type"], "Group");
         assert_eq!(parsed["title"], "My Calendar");
     }
+
+    // r[verify model.export.jscalendar.roundtrip]
+    #[test]
+    fn roundtrip_event_fields() {
+        let json = r#"{
+            "@type": "Event",
+            "uid": "a8df6573-0474-496d-8496-033ad45d7fea",
+            "updated": "2020-01-02T18:23:04Z",
+            "title": "Roundtrip Test",
+            "description": "An event for round-trip testing",
+            "start": "2026-03-15T14:00:00",
+            "timeZone": "America/New_York",
+            "duration": "PT2H",
+            "status": "confirmed",
+            "priority": 3,
+            "showWithoutTime": false,
+            "categories": { "work": true, "meeting": true },
+            "keywords": { "important": true }
+        }"#;
+
+        // Import the event.
+        let import_result = gnomon_import::translate_jscalendar(json).unwrap();
+        let ImportValue::Record(event_rec) = &import_result else {
+            panic!("expected record");
+        };
+
+        // Wrap in a calendar and re-emit.
+        let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
+        let emitted = emit_jscalendar(&cal, &[ImportValue::Record(event_rec.clone())]).unwrap();
+
+        // Re-parse via the jscalendar crate to validate structure.
+        let re_parsed: Json = serde_json::from_str(&emitted).unwrap();
+        let group = Group::<Json>::try_from_json(re_parsed).expect("re-parse as Group failed");
+
+        assert_eq!(
+            group.uid().to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
+        assert_eq!(group.entries().len(), 1);
+
+        let TaskOrEvent::Event(event) = &group.entries()[0] else {
+            panic!("expected Event");
+        };
+
+        assert_eq!(
+            event.uid().to_string(),
+            "a8df6573-0474-496d-8496-033ad45d7fea"
+        );
+        assert_eq!(event.title().map(|s| s.as_str()), Some("Roundtrip Test"));
+        assert_eq!(
+            event.description().map(|s| s.as_str()),
+            Some("An event for round-trip testing")
+        );
+        assert_eq!(
+            event.time_zone().map(|s| s.as_str()),
+            Some("America/New_York")
+        );
+        assert_eq!(event.show_without_time(), Some(&false));
+        assert!(event.categories().as_ref().unwrap().contains("work"));
+        assert!(event.categories().as_ref().unwrap().contains("meeting"));
+        assert!(event.keywords().as_ref().unwrap().contains("important"));
+    }
+
+    // r[verify model.export.jscalendar.roundtrip]
+    #[test]
+    fn roundtrip_task_fields() {
+        let json = r#"{
+            "@type": "Task",
+            "uid": "b9ef7684-1585-5a7e-b827-144b66551111",
+            "updated": "2020-01-02T18:23:04Z",
+            "title": "Review PR",
+            "due": "2026-03-20T18:00:00",
+            "estimatedDuration": "PT30M",
+            "percentComplete": 50,
+            "progress": "in-process",
+            "priority": 5
+        }"#;
+
+        // Import the task.
+        let import_result = gnomon_import::translate_jscalendar(json).unwrap();
+        let ImportValue::Record(task_rec) = &import_result else {
+            panic!("expected record");
+        };
+
+        // Wrap in a calendar and re-emit.
+        let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
+        let emitted = emit_jscalendar(&cal, &[ImportValue::Record(task_rec.clone())]).unwrap();
+
+        // Re-parse via the jscalendar crate to validate structure.
+        let re_parsed: Json = serde_json::from_str(&emitted).unwrap();
+        let group = Group::<Json>::try_from_json(re_parsed).expect("re-parse as Group failed");
+
+        assert_eq!(group.entries().len(), 1);
+
+        let TaskOrEvent::Task(task) = &group.entries()[0] else {
+            panic!("expected Task");
+        };
+
+        assert_eq!(
+            task.uid().to_string(),
+            "b9ef7684-1585-5a7e-b827-144b66551111"
+        );
+        assert_eq!(task.title().map(|s| s.as_str()), Some("Review PR"));
+        assert_eq!(task.percent_complete().unwrap().get(), 50);
+        assert_eq!(task.progress().as_ref().unwrap().to_string(), "in-process");
+    }
 }
