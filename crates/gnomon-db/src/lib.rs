@@ -2,6 +2,7 @@ pub mod eval;
 pub mod input;
 pub mod queries;
 
+pub use eval::export::calendar_to_import_values;
 pub use eval::interned::{DeclId, DeclKind, FieldName, FieldPath, PathSegment};
 pub use eval::merge::{CheckResult, validate_calendar};
 pub use eval::render::{RenderWithDb, Rendered};

@@ -820,9 +820,12 @@ fn translate_rrule(rrule: &RRule) -> ImportValue {
         let items: Vec<ImportValue> = (1..=12u8)
             .filter_map(|m| {
                 let month = calico::model::primitive::Month::new(m).ok()?;
-                by_month
-                    .get(month)
-                    .then(|| ImportValue::Integer(u64::from(m)))
+                by_month.get(month).then(|| {
+                    ImportValue::Record(make_record(&[
+                        ("month", ImportValue::Integer(u64::from(m))),
+                        ("leap", ImportValue::Bool(false)),
+                    ]))
+                })
             })
             .collect();
         if !items.is_empty() {

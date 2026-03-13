@@ -1,5 +1,6 @@
 pub mod cache;
 pub mod desugar;
+pub mod export;
 pub mod import;
 pub mod interned;
 pub mod literals;
