@@ -88,7 +88,7 @@ pub fn emit_icalendar(
     // ── Optional VCALENDAR properties ────────────────────────
 
     if let Some(uid_str) = calendar.get("uid").and_then(|v| as_str(v)) {
-        let uid = Uid::new(uid_str).unwrap();
+        let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in calendar: {}", e))?;
         cal.set_uid(Prop {
             value: uid.into(),
             params: Params::default(),
@@ -214,7 +214,7 @@ fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Even
 
     // UID
     if let Some(uid_str) = record.get("uid").and_then(|v| as_str(v)) {
-        let uid = Uid::new(uid_str).unwrap();
+        let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in event: {}", e))?;
         event.set_uid(Prop {
             value: uid.into(),
             params: Params::default(),
@@ -641,7 +641,7 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
 
     // UID
     if let Some(uid_str) = record.get("uid").and_then(|v| as_str(v)) {
-        let uid = Uid::new(uid_str).unwrap();
+        let uid = Uid::new(uid_str).map_err(|e| format!("Invalid UID in todo: {}", e))?;
         todo.set_uid(Prop {
             value: uid.into(),
             params: Params::default(),
