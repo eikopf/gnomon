@@ -1756,9 +1756,7 @@ fn import_value_to_json(value: &ImportValue) -> serde_json::Value {
             }
             Json::Object(map)
         }
-        ImportValue::List(items) => {
-            Json::Array(items.iter().map(import_value_to_json).collect())
-        }
+        ImportValue::List(items) => Json::Array(items.iter().map(import_value_to_json).collect()),
     }
 }
 
