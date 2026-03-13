@@ -1295,34 +1295,59 @@ fn record_to_signed_duration(v: &ImportValue) -> Option<SignedDuration> {
         .and_then(import_value_to_i64)
         .unwrap_or(0);
 
-    // If any field is negative, the whole duration is negative.
-    let sign =
-        if weeks_raw < 0 || days_raw < 0 || hours_raw < 0 || minutes_raw < 0 || seconds_raw < 0 {
-            Sign::Neg
-        } else {
-            Sign::Pos
-        };
+    // RFC 5545 durations have a single sign for the whole duration. Because
+    // nominal (weeks/days) and exact (hours/minutes/seconds) components are
+    // semantically distinct in iCal, we normalise each group separately:
+    //
+    //   total_nominal_days = weeks * 7 + days   (may be negative)
+    //   total_exact_secs   = hours*3600 + minutes*60 + seconds  (may be negative)
+    //
+    // The overall sign is derived from the combined total converted to seconds
+    // so that mixed-sign inputs like {weeks: 1, days: -2} produce the correct
+    // net result (-P5D for that example is wrong; 1w-2d = 5d so +P5D).
+    let total_nominal_days: i64 = weeks_raw
+        .saturating_mul(7)
+        .saturating_add(days_raw);
+    let total_exact_secs: i64 = hours_raw
+        .saturating_mul(3600)
+        .saturating_add(minutes_raw.saturating_mul(60))
+        .saturating_add(seconds_raw);
 
-    let weeks = u32::try_from(weeks_raw.unsigned_abs()).unwrap_or(u32::MAX);
-    let days = u32::try_from(days_raw.unsigned_abs()).unwrap_or(u32::MAX);
-    let hours = u32::try_from(hours_raw.unsigned_abs()).unwrap_or(u32::MAX);
-    let minutes = u32::try_from(minutes_raw.unsigned_abs()).unwrap_or(u32::MAX);
-    let secs = u32::try_from(seconds_raw.unsigned_abs()).unwrap_or(u32::MAX);
+    // Combine into a single signed total (in seconds) to determine the sign.
+    let combined_secs: i64 = total_nominal_days
+        .saturating_mul(86400)
+        .saturating_add(total_exact_secs);
 
-    let nominal = if hours == 0 && minutes == 0 && secs == 0 {
+    let sign = if combined_secs < 0 {
+        Sign::Neg
+    } else {
+        Sign::Pos
+    };
+
+    // Reconstruct from absolute values.
+    let abs_nominal_days = total_nominal_days.unsigned_abs();
+    let abs_exact_secs = total_exact_secs.unsigned_abs();
+
+    let abs_weeks = u32::try_from(abs_nominal_days / 7).unwrap_or(u32::MAX);
+    let abs_days = u32::try_from(abs_nominal_days % 7).unwrap_or(u32::MAX);
+    let abs_hours = u32::try_from(abs_exact_secs / 3600).unwrap_or(u32::MAX);
+    let abs_minutes = u32::try_from((abs_exact_secs % 3600) / 60).unwrap_or(u32::MAX);
+    let abs_secs = u32::try_from(abs_exact_secs % 60).unwrap_or(u32::MAX);
+
+    let nominal = if abs_exact_secs == 0 {
         NominalDuration {
-            weeks,
-            days,
+            weeks: abs_weeks,
+            days: abs_days,
             exact: None,
         }
     } else {
         NominalDuration {
-            weeks,
-            days,
+            weeks: abs_weeks,
+            days: abs_days,
             exact: Some(ExactDuration {
-                hours,
-                minutes,
-                seconds: secs,
+                hours: abs_hours,
+                minutes: abs_minutes,
+                seconds: abs_secs,
                 frac: None,
             }),
         }
@@ -2036,6 +2061,63 @@ END:VCALENDAR\r\n";
         assert!(
             result.contains("DURATION:-P1W"),
             "missing negative duration: {result}"
+        );
+    }
+
+    // r[verify model.export.icalendar.duration_mixed_sign]
+    #[test]
+    fn emit_mixed_sign_duration() {
+        let calendar = make_cal("-//Test//Test//EN");
+
+        // {weeks: 1, days: -2} → net 5 days → +P5D
+        let duration = ImportValue::Record(make_record(&[
+            ("weeks", ImportValue::SignedInteger(1)),
+            ("days", ImportValue::SignedInteger(-2)),
+        ]));
+        let event = ImportValue::Record(make_record(&[
+            ("type", ImportValue::String("event".into())),
+            ("uid", ImportValue::String("mixed-sign-uid-1".into())),
+            ("duration", duration),
+        ]));
+        let mut result = String::new();
+        emit_icalendar(&mut result, &calendar, &[event], &mut vec![]).unwrap();
+        assert!(
+            result.contains("DURATION:P5D"),
+            "expected +P5D for {{weeks:1,days:-2}}: {result}"
+        );
+
+        // {weeks: -1, days: 2} → net -5 days → -P5D
+        let duration2 = ImportValue::Record(make_record(&[
+            ("weeks", ImportValue::SignedInteger(-1)),
+            ("days", ImportValue::SignedInteger(2)),
+        ]));
+        let event2 = ImportValue::Record(make_record(&[
+            ("type", ImportValue::String("event".into())),
+            ("uid", ImportValue::String("mixed-sign-uid-2".into())),
+            ("duration", duration2),
+        ]));
+        let mut result2 = String::new();
+        emit_icalendar(&mut result2, &calendar, &[event2], &mut vec![]).unwrap();
+        assert!(
+            result2.contains("DURATION:-P5D"),
+            "expected -P5D for {{weeks:-1,days:2}}: {result2}"
+        );
+
+        // {hours: 1, minutes: -30} → net 30 minutes → PT30M
+        let duration3 = ImportValue::Record(make_record(&[
+            ("hours", ImportValue::SignedInteger(1)),
+            ("minutes", ImportValue::SignedInteger(-30)),
+        ]));
+        let event3 = ImportValue::Record(make_record(&[
+            ("type", ImportValue::String("event".into())),
+            ("uid", ImportValue::String("mixed-sign-uid-3".into())),
+            ("duration", duration3),
+        ]));
+        let mut result3 = String::new();
+        emit_icalendar(&mut result3, &calendar, &[event3], &mut vec![]).unwrap();
+        assert!(
+            result3.contains("DURATION:PT30M"),
+            "expected PT30M for {{hours:1,minutes:-30}}: {result3}"
         );
     }
 
