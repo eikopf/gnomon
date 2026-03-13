@@ -1653,7 +1653,11 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(idx);
             }
         }
-        if set == MonthDaySet::default() { None } else { Some(set) }
+        if set == MonthDaySet::default() {
+            None
+        } else {
+            Some(set)
+        }
     };
 
     let build_year_day_set = |rec: &ImportRecord| -> Option<BTreeSet<YearDayNum>> {
@@ -1688,7 +1692,11 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
                 set.set(idx);
             }
         }
-        if set == WeekNoSet::default() { None } else { Some(set) }
+        if set == WeekNoSet::default() {
+            None
+        } else {
+            Some(set)
+        }
     };
 
     let freq = match freq_str {
