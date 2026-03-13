@@ -414,6 +414,28 @@ fn repl_meta_quit() {
         .success();
 }
 
+// r[verify cli.subcommand.repl.meta.type.no-arg]
+#[test]
+fn repl_meta_type_no_argument() {
+    gnomon()
+        .arg("repl")
+        .write_stdin(":type\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("usage: :type <expression>"));
+}
+
+// r[verify cli.subcommand.repl.meta.parse.no-arg]
+#[test]
+fn repl_meta_parse_no_argument() {
+    gnomon()
+        .arg("repl")
+        .write_stdin(":parse\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("usage: :parse <expression>"));
+}
+
 // ── Clean subcommand ───────────────────────────────────────
 
 // r[verify cli.subcommand.clean]
