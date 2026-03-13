@@ -105,12 +105,13 @@ pub fn desugar_duration<'db>(
         ];
         Some(Value::Record(make_record(db, &fields, blame)))
     } else {
+        let neg = |v: u64| -> Option<i64> { i64::try_from(v).ok()?.checked_neg() };
         let fields = [
-            ("weeks", Value::SignedInteger(-(parts.weeks as i64))),
-            ("days", Value::SignedInteger(-(parts.days as i64))),
-            ("hours", Value::SignedInteger(-(parts.hours as i64))),
-            ("minutes", Value::SignedInteger(-(parts.minutes as i64))),
-            ("seconds", Value::SignedInteger(-(parts.seconds as i64))),
+            ("weeks", Value::SignedInteger(neg(parts.weeks)?)),
+            ("days", Value::SignedInteger(neg(parts.days)?)),
+            ("hours", Value::SignedInteger(neg(parts.hours)?)),
+            ("minutes", Value::SignedInteger(neg(parts.minutes)?)),
+            ("seconds", Value::SignedInteger(neg(parts.seconds)?)),
         ];
         Some(Value::Record(make_record(db, &fields, blame)))
     }
@@ -367,6 +368,15 @@ mod tests {
             }
             _ => panic!("expected Record"),
         }
+    }
+
+    #[test]
+    fn duration_desugar_overflow_returns_none() {
+        let db = Database::default();
+        let blame = test_blame(&db);
+        // 9999999999999999999 > i64::MAX (9_223_372_036_854_775_807), so the
+        // u64-to-i64 conversion must fail and desugar_duration should return None.
+        assert!(desugar_duration(&db, "-9999999999999999999w", &blame).is_none());
     }
 
     #[test]
