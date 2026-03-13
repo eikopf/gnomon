@@ -176,7 +176,7 @@ pub fn emit_icalendar(
         }
         if !key.starts_with("x_") {
             warnings.push(format!(
-                "unknown calendar field '{key}' emitted as X-property"
+                "unrecognised non-extension field '{key}' on calendar record"
             ));
         }
         let prop_name = field_name_to_x_property(key);
@@ -581,7 +581,7 @@ fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Even
             continue;
         }
         if !key.starts_with("x_") {
-            warnings.push(format!("unknown event field '{key}' emitted as X-property"));
+            warnings.push(format!("unrecognised non-extension field '{key}' on event record"));
         }
         let prop_name = field_name_to_x_property(key);
         let x_val = import_value_to_ical_value(val);
@@ -1027,7 +1027,7 @@ fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo,
             continue;
         }
         if !key.starts_with("x_") {
-            warnings.push(format!("unknown task field '{key}' emitted as X-property"));
+            warnings.push(format!("unrecognised non-extension field '{key}' on task record"));
         }
         let prop_name = field_name_to_x_property(key);
         let x_val = import_value_to_ical_value(val);
