@@ -454,7 +454,7 @@ mod tests {
         let r = expect_single_decl(&result);
         let uid_name = FieldName::new(&db, "uid".to_string());
         let blamed_value = r.get(&db, &uid_name).unwrap();
-        assert_eq!(blamed_value.blame.path.0.len(), 1);
+        assert_eq!(blamed_value.blame.path.segments().len(), 1);
     }
 
     // ── Every expression lowering ────────────────────────────────

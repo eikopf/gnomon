@@ -1,4 +1,5 @@
 use std::fmt;
+use std::rc::Rc;
 
 use crate::input::SourceFile;
 
@@ -23,20 +24,25 @@ pub enum PathSegment<'db> {
 
 /// A path into a record structure, e.g. `[Field("alerts"), Index(0), Field("trigger")]`.
 ///
+/// Uses `Rc` for O(1) cloning. Paths are frequently cloned when stored in
+/// `Blame` values, so cheap clones avoid the O(n) copy that a bare `Vec`
+/// would require on every clone.
+///
 /// Not salsa-interned because it contains `FieldName<'db>` values that carry a
 /// non-`'static` lifetime.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FieldPath<'db>(pub Vec<PathSegment<'db>>);
+pub struct FieldPath<'db>(Rc<Vec<PathSegment<'db>>>);
 
 impl<'db> FieldPath<'db> {
     pub fn root() -> Self {
-        Self(Vec::new())
+        Self(Rc::new(Vec::new()))
     }
 
     pub fn push(&self, segment: PathSegment<'db>) -> Self {
-        let mut segments = self.0.clone();
+        let mut segments = Vec::with_capacity(self.0.len() + 1);
+        segments.extend_from_slice(&self.0);
         segments.push(segment);
-        Self(segments)
+        Self(Rc::new(segments))
     }
 
     pub fn field(&self, name: FieldName<'db>) -> Self {
@@ -45,6 +51,11 @@ impl<'db> FieldPath<'db> {
 
     pub fn index(&self, i: usize) -> Self {
         self.push(PathSegment::Index(i))
+    }
+
+    /// Returns a reference to the path segments.
+    pub fn segments(&self) -> &[PathSegment<'db>] {
+        &self.0
     }
 }
 

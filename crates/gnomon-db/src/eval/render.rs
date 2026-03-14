@@ -122,7 +122,7 @@ impl<'db> RenderWithDb<'db> for PathSegment<'db> {
 
 impl<'db> RenderWithDb<'db> for FieldPath<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        for (i, segment) in self.0.iter().enumerate() {
+        for (i, segment) in self.segments().iter().enumerate() {
             if i > 0 && matches!(segment, PathSegment::Field(_)) {
                 write!(f, ".")?;
             }
