@@ -45,8 +45,10 @@ enum ExpectedType {
     StringOrRecord,
     /// A record conforming to a named shape.
     Record(Shape),
-    /// Any record (no field constraints, e.g. desugared datetime/duration).
+    /// Any record (no field constraints, e.g. desugared datetime).
     AnyRecord,
+    /// A duration record (checked for mixed-sign violations).
+    DurationRecord,
     /// List of strings.
     ListOfStrings,
     /// List of records conforming to a named shape.
@@ -129,7 +131,7 @@ const EVENT_FIELDS: [FieldDef; 6] = [
     FieldDef {
         name: "duration",
         required: false,
-        expected: ExpectedType::AnyRecord,
+        expected: ExpectedType::DurationRecord,
     },
     FieldDef {
         name: "status",
@@ -176,7 +178,7 @@ const TASK_FIELDS: [FieldDef; 7] = [
     FieldDef {
         name: "estimated_duration",
         required: false,
-        expected: ExpectedType::AnyRecord,
+        expected: ExpectedType::DurationRecord,
     },
     FieldDef {
         name: "percent_complete",
@@ -487,7 +489,7 @@ const TRIGGER_FIELDS: [FieldDef; 2] = [
     FieldDef {
         name: "offset",
         required: false,
-        expected: ExpectedType::AnyRecord,
+        expected: ExpectedType::DurationRecord,
     },
 ];
 
@@ -838,6 +840,14 @@ fn check_value_type<'db>(
                 diagnostics.push(type_error(source, context, field_name, "record", value));
             }
         }
+        // r[impl record.duration.mixed-sign]
+        ExpectedType::DurationRecord => {
+            if let Value::Record(rec) = value {
+                check_duration_mixed_sign(db, rec, field_name, source, context, diagnostics);
+            } else {
+                diagnostics.push(type_error(source, context, field_name, "record", value));
+            }
+        }
         ExpectedType::ListOfStrings => {
             check_list_elements(
                 db,
@@ -1056,6 +1066,47 @@ fn check_value_type<'db>(
                 ));
             }
         }
+    }
+}
+
+/// Check that all integer-valued duration fields have the same sign.
+///
+/// Duration records have fields `weeks`, `days`, `hours`, `minutes`, `seconds`.
+/// Zero-valued fields are ignored for sign consistency. If the record contains
+/// a mix of positive and negative non-zero values, a diagnostic is produced.
+fn check_duration_mixed_sign<'db>(
+    db: &'db dyn crate::Db,
+    record: &Record<'db>,
+    field_name: &str,
+    source: SourceFile,
+    context: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    const DURATION_FIELDS: [&str; 5] = ["weeks", "days", "hours", "minutes", "seconds"];
+    let mut has_positive = false;
+    let mut has_negative = false;
+
+    for &name in &DURATION_FIELDS {
+        let key = FieldName::new(db, name.to_string());
+        if let Some(blamed) = record.get(db, &key) {
+            match &blamed.value {
+                Value::Integer(n) if *n > 0 => has_positive = true,
+                Value::SignedInteger(n) if *n > 0 => has_positive = true,
+                Value::SignedInteger(n) if *n < 0 => has_negative = true,
+                _ => {} // zero or non-integer: ignore
+            }
+        }
+    }
+
+    if has_positive && has_negative {
+        diagnostics.push(Diagnostic {
+            source,
+            range: rowan::TextRange::default(),
+            severity: Severity::Error,
+            message: format!(
+                "{context}: field `{field_name}` is a duration with mixed positive and negative components"
+            ),
+        });
     }
 }
 
@@ -2163,6 +2214,120 @@ mod tests {
         assert!(
             diags.iter().any(|d| d.contains("uid")),
             "expected uid type error, got: {diags:?}"
+        );
+    }
+
+    // ── Duration mixed-sign tests ─────────────────────────────
+
+    // r[verify record.duration.mixed-sign]
+    #[test]
+    fn event_duration_mixed_sign_rejected() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 "E" {
+                    duration: { weeks: 1, days: -2, hours: 0, minutes: 0, seconds: 0 }
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.contains("mixed positive and negative")),
+            "expected mixed-sign duration error, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.duration.mixed-sign]
+    #[test]
+    fn event_duration_all_positive_accepted() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 1h30m "E"
+                "#,
+            )],
+        );
+        assert!(
+            !diags.iter().any(|d| d.contains("mixed")),
+            "expected no mixed-sign errors for valid duration, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.duration.mixed-sign]
+    #[test]
+    fn event_duration_all_negative_accepted() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 "E" {
+                    duration: { weeks: -1, days: -2, hours: 0, minutes: 0, seconds: 0 }
+                }
+                "#,
+            )],
+        );
+        assert!(
+            !diags.iter().any(|d| d.contains("mixed")),
+            "expected no mixed-sign errors for all-negative duration, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.duration.mixed-sign]
+    #[test]
+    fn event_duration_zeros_ignored_for_sign() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                event @e 2026-03-01T09:00 "E" {
+                    duration: { weeks: 0, days: 0, hours: -1, minutes: 0, seconds: 0 }
+                }
+                "#,
+            )],
+        );
+        assert!(
+            !diags.iter().any(|d| d.contains("mixed")),
+            "expected no mixed-sign errors when zeros are present, got: {diags:?}"
+        );
+    }
+
+    // r[verify record.duration.mixed-sign]
+    #[test]
+    fn task_estimated_duration_mixed_sign_rejected() {
+        let db = Database::default();
+        let diags = shape_diags(
+            &db,
+            &[(
+                "a.gnomon",
+                r#"
+                calendar { uid: "test" }
+                task @t "Review" {
+                    estimated_duration: { weeks: 0, days: 1, hours: -2, minutes: 0, seconds: 0 }
+                }
+                "#,
+            )],
+        );
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.contains("mixed positive and negative")),
+            "expected mixed-sign estimated_duration error, got: {diags:?}"
         );
     }
 }
