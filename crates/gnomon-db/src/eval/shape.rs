@@ -1103,22 +1103,8 @@ fn type_error(
         severity: Severity::Error,
         message: format!(
             "{context}: field `{field_name}` expected {expected}, got {}",
-            value_type_name(actual)
+            actual.type_name()
         ),
-    }
-}
-
-fn value_type_name(value: &Value<'_>) -> &'static str {
-    match value {
-        Value::String(_) => "string",
-        Value::Integer(_) => "unsigned integer",
-        Value::SignedInteger(_) => "signed integer",
-        Value::Bool(_) => "boolean",
-        Value::Undefined => "undefined",
-        Value::Name(_) => "name",
-        Value::Record(_) => "record",
-        Value::List(_) => "list",
-        Value::Path(_) => "path",
     }
 }
 
