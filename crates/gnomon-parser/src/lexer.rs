@@ -1,12 +1,25 @@
+use std::ops::Range;
+
 use logos::Logos;
 
 use crate::syntax_kind::SyntaxKind;
 
 /// A single token produced by the lexer.
+///
+/// Tokens store a byte range into the original source string rather than
+/// owning a copy of the text. This avoids one heap allocation per token.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token {
     pub kind: SyntaxKind,
-    pub text: String,
+    pub span: Range<usize>,
+}
+
+impl Token {
+    /// Get the token text by slicing the original source string.
+    #[inline]
+    pub fn text<'a>(&self, source: &'a str) -> &'a str {
+        &source[self.span.clone()]
+    }
 }
 
 /// Internal logos token enum. Maps 1:1 to the token variants of `SyntaxKind`
@@ -201,17 +214,19 @@ impl LogosToken {
 
 /// Tokenize the input string into a sequence of tokens.
 /// Unrecognized bytes produce `ERROR` tokens.
+///
+/// Each token stores a byte range referencing the original `input` string.
 pub fn lex(input: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
     let mut lexer = LogosToken::lexer(input);
 
     while let Some(result) = lexer.next() {
-        let text = lexer.slice().to_string();
+        let span = lexer.span();
         let kind = match result {
             Ok(tok) => tok.to_syntax_kind(),
             Err(()) => SyntaxKind::ERROR,
         };
-        tokens.push(Token { kind, text });
+        tokens.push(Token { kind, span });
     }
 
     tokens
@@ -223,15 +238,7 @@ mod tests {
 
     fn kinds(input: &str) -> Vec<(SyntaxKind, &str)> {
         let tokens = lex(input);
-        // Re-lex from input to get &str slices for comparison
-        let mut result = Vec::new();
-        let mut pos = 0;
-        for tok in &tokens {
-            let end = pos + tok.text.len();
-            result.push((tok.kind, &input[pos..end]));
-            pos = end;
-        }
-        result
+        tokens.iter().map(|tok| (tok.kind, tok.text(input))).collect()
     }
 
     // ── Ambiguity resolution ─────────────────────────────────────
