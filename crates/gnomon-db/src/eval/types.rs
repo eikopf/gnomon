@@ -100,9 +100,9 @@ impl<'db> Value<'db> {
     pub fn type_name(&self) -> &'static str {
         match self {
             Value::String(_) => "string",
-            Value::Integer(_) => "integer",
+            Value::Integer(_) => "unsigned integer",
             Value::SignedInteger(_) => "signed integer",
-            Value::Bool(_) => "bool",
+            Value::Bool(_) => "boolean",
             Value::Undefined => "undefined",
             Value::Name(_) => "name",
             Value::Record(_) => "record",

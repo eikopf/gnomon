@@ -370,8 +370,8 @@ impl<'db> LowerCtx<'db> {
                                         op_tok.text_range(),
                                         format!(
                                             "++ requires two lists, got {} and {}",
-                                            value_type_name(&l),
-                                            value_type_name(&r)
+                                            l.type_name(),
+                                            r.type_name()
                                         ),
                                     );
                                 }
@@ -395,8 +395,8 @@ impl<'db> LowerCtx<'db> {
                                         op_tok.text_range(),
                                         format!(
                                             "// requires two records, got {} and {}",
-                                            value_type_name(&l),
-                                            value_type_name(&r)
+                                            l.type_name(),
+                                            r.type_name()
                                         ),
                                     );
                                 }
@@ -889,19 +889,5 @@ fn values_equal(a: &Value, b: &Value) -> bool {
                     .all(|((ka, va), (kb, vb))| ka == kb && values_equal(&va.value, &vb.value))
         }
         _ => false,
-    }
-}
-
-fn value_type_name(v: &Value) -> &'static str {
-    match v {
-        Value::String(_) => "string",
-        Value::Integer(_) => "integer",
-        Value::SignedInteger(_) => "signed integer",
-        Value::Bool(_) => "bool",
-        Value::Undefined => "undefined",
-        Value::Name(_) => "name",
-        Value::Record(_) => "record",
-        Value::List(_) => "list",
-        Value::Path(_) => "path",
     }
 }
