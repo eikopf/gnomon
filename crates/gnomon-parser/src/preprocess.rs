@@ -6,21 +6,44 @@
 /// 1. BOM removal
 /// 2. CRLF normalization
 /// 3. Shebang removal
-pub fn preprocess(input: &str) -> String {
-    // r[impl lexer.input-format.bom-removal]
-    let input = input.strip_prefix('\u{FEFF}').unwrap_or(input);
+///
+/// Returns `Cow::Borrowed` when no transformation is needed, avoiding
+/// allocation for typical source files (no BOM, no CRLF, no shebang).
+pub fn preprocess(input: &str) -> std::borrow::Cow<'_, str> {
+    use std::borrow::Cow;
 
-    // r[impl lexer.input-format.crlf-normalization]
-    let input = input.replace("\r\n", "\n");
-
-    // r[impl lexer.input-format.shebang-removal]
-    if input.starts_with("#!") {
-        match input.find('\n') {
-            Some(pos) => input[pos + 1..].to_string(),
-            None => String::new(),
-        }
+    let has_bom = input.starts_with('\u{FEFF}');
+    let has_crlf = input.contains("\r\n");
+    let after_bom = if has_bom {
+        &input['\u{FEFF}'.len_utf8()..]
     } else {
         input
+    };
+    let has_shebang = after_bom.starts_with("#!");
+
+    // Fast path: no transformations needed.
+    if !has_bom && !has_crlf && !has_shebang {
+        return Cow::Borrowed(input);
+    }
+
+    // r[impl lexer.input-format.bom-removal]
+    // (already computed as `after_bom`)
+
+    // r[impl lexer.input-format.crlf-normalization]
+    let normalized: Cow<'_, str> = if has_crlf {
+        Cow::Owned(after_bom.replace("\r\n", "\n"))
+    } else {
+        Cow::Borrowed(after_bom)
+    };
+
+    // r[impl lexer.input-format.shebang-removal]
+    if normalized.starts_with("#!") {
+        match normalized.find('\n') {
+            Some(pos) => Cow::Owned(normalized[pos + 1..].to_string()),
+            None => Cow::Owned(String::new()),
+        }
+    } else {
+        normalized
     }
 }
 
@@ -31,6 +54,34 @@ mod tests {
     #[test]
     fn no_changes() {
         assert_eq!(preprocess("hello world"), "hello world");
+    }
+
+    #[test]
+    fn no_changes_returns_borrowed() {
+        let input = "hello world";
+        assert!(matches!(preprocess(input), std::borrow::Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn empty_input_returns_borrowed() {
+        assert!(matches!(preprocess(""), std::borrow::Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn bom_only_returns_borrowed_slice() {
+        // BOM removal is a slice, not an allocation, so still Borrowed.
+        assert!(matches!(
+            preprocess("\u{FEFF}hello"),
+            std::borrow::Cow::Borrowed(_)
+        ));
+    }
+
+    #[test]
+    fn crlf_returns_owned() {
+        assert!(matches!(
+            preprocess("a\r\nb"),
+            std::borrow::Cow::Owned(_)
+        ));
     }
 
     // r[verify lexer.input-format.bom-removal]
