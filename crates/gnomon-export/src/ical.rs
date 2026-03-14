@@ -73,6 +73,7 @@ pub fn emit_icalendar(
         .unwrap_or("-//gnomon//EN")
         .to_string();
 
+    // r[impl model.export.icalendar.version]
     let version_prop: Prop<Token<Version, String>, Params> = Prop {
         value: Token::Known(Version::V2_0),
         params: Params::default(),
@@ -82,6 +83,7 @@ pub fn emit_icalendar(
         params: Params::default(),
     };
 
+    // r[impl model.export.icalendar.entries]
     // Build components first so we can pass them to Calendar::new.
     let mut components: Vec<CalendarComponent> = Vec::new();
     for entry in entries {
@@ -723,6 +725,7 @@ impl XPropertySink for Todo {
 
 // ── Event builder ─────────────────────────────────────────────
 
+// r[impl model.export.icalendar.event]
 fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Event, String> {
     let mut event = Event::new(vec![], vec![], vec![], vec![]);
 
@@ -754,6 +757,7 @@ fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Even
 
 // ── Todo builder ──────────────────────────────────────────────
 
+// r[impl model.export.icalendar.task]
 fn build_todo(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Todo, String> {
     let mut todo = Todo::new(vec![], vec![], vec![], vec![]);
 
@@ -1065,6 +1069,7 @@ fn record_to_geo(v: &ImportValue) -> Option<Geo> {
 }
 
 /// Convert a status string to a calico `Status`.
+// r[impl model.export.icalendar.status]
 fn str_to_status(s: &str) -> Option<Status> {
     match s {
         "tentative" => Some(Status::Tentative),
