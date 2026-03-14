@@ -861,6 +861,26 @@ If the `trigger` record has an `offset` field, its value MUST be a duration. A n
 r[record.alert.trigger.at]
 If the `trigger` record has an `at` field, its value MUST be a local datetime representing the absolute time at which the alert fires.
 
+### Durations
+
+A duration value is a record representing an amount of time, as defined by RFC 5545 and JSCalendar. Duration records are produced by desugaring duration literals, but may also be written directly.
+
+> r[record.duration.syntax]
+> A duration is a record with the following fields:
+>
+> | Field | Value Type | Meaning |
+> |-------|-----------|---------|
+> | `weeks` | integer | The number of weeks. |
+> | `days` | integer | The number of days. |
+> | `hours` | integer | The number of hours. |
+> | `minutes` | integer | The number of minutes. |
+> | `seconds` | integer | The number of seconds. |
+
+Neither iCalendar nor JSCalendar can represent a duration whose components have different signs. Gnomon therefore disallows such durations.
+
+r[record.duration.mixed-sign]
+All integer-valued fields in a duration record MUST have the same sign. It is an error for a duration record to contain a mix of positive and negative values. Zero-valued fields are ignored for the purposes of sign consistency.
+
 ### Events
 
 Events represent scheduled amounts of time on a calendar; they are required to start at a certain point in time and usually have a non-zero duration. Every event must be identifiable by either a `name` or a `uid`.
