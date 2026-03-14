@@ -1,18 +1,28 @@
 //! JSCalendar export: ImportValue → jscalendar model → JSON (RFC 9553).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::num::NonZero;
 use std::str::FromStr;
 
 use gnomon_import::{ImportRecord, ImportValue};
-use jscalendar::json::{IntoJson, TryFromJson};
-use jscalendar::model::object::{Event, Group, Task, TaskOrEvent};
-use jscalendar::model::set::{
-    Color, EventStatus, FreeBusyStatus, Percent, Priority, Privacy, TaskProgress,
+use jscalendar::json::{IntoJson, TryFromJson, UnsignedInt};
+use jscalendar::model::object::{
+    Event, Group, Link, Location, Participant, PatchObject, Relation, ReplyTo, Task,
+    TaskOrEvent, TaskParticipant, VirtualLocation,
 };
+use jscalendar::model::rrule::{
+    ByMonthDayRule, ByPeriodDayRules, CoreByRules, FreqByRules, Interval, RRule, Termination,
+};
+use jscalendar::model::set::{
+    Color, EventStatus, FreeBusyStatus, LinkRelation, ParticipantRole, Percent, Priority, Privacy,
+    TaskProgress,
+};
+use jscalendar::model::string::{CalAddress, GeoUri, Id, Uri};
 use jscalendar::model::time::{
     Date, DateTime, Day, Duration, ExactDuration, Hour, Local, Minute, Month, NominalDuration,
-    Second, Time, Year,
+    Second, Time, TimeFormat, Utc, Weekday, Year,
 };
+use calico::model::primitive::DateTimeOrDate;
 use serde_json::{Map, Value as Json};
 
 use calendar_types::set::Token;
@@ -55,7 +65,7 @@ fn build_group(
             let ImportValue::Record(record) = entry else {
                 return None;
             };
-            match build_entry(record) {
+            match build_entry(record, warnings) {
                 Ok(entry) => Some(entry),
                 Err(err) => {
                     warnings.push(err);
@@ -94,7 +104,7 @@ fn build_group(
     }
 
     // Vendor properties.
-    let vendor = collect_vendor_properties(calendar, GROUP_KNOWN);
+    let vendor = collect_vendor_properties(calendar, GROUP_KNOWN, "calendar", warnings);
     for (k, v) in vendor {
         group.insert_vendor_property(k.into(), v);
     }
@@ -118,20 +128,23 @@ const GROUP_KNOWN: &[&str] = &[
 
 // ── Entry dispatch ───────────────────────────────────────────
 
-fn build_entry(record: &ImportRecord) -> Result<TaskOrEvent<Json>, String> {
+fn build_entry(
+    record: &ImportRecord,
+    warnings: &mut Vec<String>,
+) -> Result<TaskOrEvent<Json>, String> {
     let entry_type = get_str(record, "type").unwrap_or("event");
     match entry_type {
         // r[impl model.export.jscalendar.event]
-        "event" => build_event(record).map(TaskOrEvent::Event),
+        "event" => build_event(record, warnings).map(TaskOrEvent::Event),
         // r[impl model.export.jscalendar.task]
-        "task" => build_task(record).map(TaskOrEvent::Task),
+        "task" => build_task(record, warnings).map(TaskOrEvent::Task),
         other => Err(format!("unknown entry type: {other}")),
     }
 }
 
 // ── Event builder ────────────────────────────────────────────
 
-fn build_event(record: &ImportRecord) -> Result<Event<Json>, String> {
+fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Event<Json>, String> {
     let uid = get_uid(record)?;
     let start = get_datetime(record, "start")
         .ok_or_else(|| "event missing required 'start' field".to_string())?;
@@ -190,8 +203,60 @@ fn build_event(record: &ImportRecord) -> Result<Event<Json>, String> {
         event.set_keywords(set);
     }
 
-    // r[impl model.export.jscalendar.vendor]
-    let vendor = collect_vendor_properties(record, EVENT_KNOWN);
+    // Metadata properties.
+    if let Some(dt) = get_utc_datetime(record, "created") {
+        event.set_created(dt);
+    }
+    if let Some(dt) = get_utc_datetime(record, "updated") {
+        event.set_updated(dt);
+    }
+    if let Some(n) = get_u64(record, "sequence")
+        && let Some(uint) = UnsignedInt::new(n)
+    {
+        event.set_sequence(uint);
+    }
+    if let Some(dt) = get_datetime(record, "recurrence_id") {
+        event.set_recurrence_id(dt);
+    }
+
+    // Location properties.
+    if let Some(locations) = build_locations(record) {
+        event.set_locations(locations);
+    }
+    if let Some(vl) = build_virtual_locations(record) {
+        event.set_virtual_locations(vl);
+    }
+
+    // Links (url, attachments, images).
+    if let Some(links) = build_links(record) {
+        event.set_links(links);
+    }
+
+    // Participants and organizer.
+    if let Some(participants) = build_participants(record) {
+        event.set_participants(participants);
+    }
+    if let Some(reply_to) = build_reply_to(record) {
+        event.set_reply_to(reply_to);
+    }
+
+    // Relations.
+    if let Some(related) = build_related_to(record) {
+        event.set_related_to(related);
+    }
+
+    // Recurrence rules.
+    if let Some(rules) = build_recurrence_rules(record) {
+        event.set_recurrence_rules(rules);
+    }
+
+    // Recurrence overrides (exdates, rdates).
+    if let Some(overrides) = build_recurrence_overrides(record) {
+        event.set_recurrence_overrides(overrides);
+    }
+
+    // r[impl model.export.jscalendar.vendor+2]
+    let vendor = collect_vendor_properties(record, EVENT_KNOWN, "event", warnings);
     for (k, v) in vendor {
         event.insert_vendor_property(k.into(), v);
     }
@@ -217,11 +282,30 @@ const EVENT_KNOWN: &[&str] = &[
     "show_without_time",
     "categories",
     "keywords",
+    "created",
+    "updated",
+    "sequence",
+    "recurrence_id",
+    "url",
+    "location",
+    "geo",
+    "organizer",
+    "attendees",
+    "attachments",
+    "images",
+    "conferences",
+    "related_to",
+    "recur",
+    "exdates",
+    "rdates",
+    "request_statuses",
+    "end_time_zone",
+    "recurrence_id_time_zone",
 ];
 
 // ── Task builder ─────────────────────────────────────────────
 
-fn build_task(record: &ImportRecord) -> Result<Task<Json>, String> {
+fn build_task(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Task<Json>, String> {
     let uid = get_uid(record)?;
 
     let mut task = Task::new(uid);
@@ -290,8 +374,60 @@ fn build_task(record: &ImportRecord) -> Result<Task<Json>, String> {
         task.set_keywords(set);
     }
 
-    // r[impl model.export.jscalendar.vendor]
-    let vendor = collect_vendor_properties(record, TASK_KNOWN);
+    // Metadata properties.
+    if let Some(dt) = get_utc_datetime(record, "created") {
+        task.set_created(dt);
+    }
+    if let Some(dt) = get_utc_datetime(record, "updated") {
+        task.set_updated(dt);
+    }
+    if let Some(n) = get_u64(record, "sequence")
+        && let Some(uint) = UnsignedInt::new(n)
+    {
+        task.set_sequence(uint);
+    }
+    if let Some(dt) = get_datetime(record, "recurrence_id") {
+        task.set_recurrence_id(dt);
+    }
+
+    // Location properties.
+    if let Some(locations) = build_locations(record) {
+        task.set_locations(locations);
+    }
+    if let Some(vl) = build_virtual_locations(record) {
+        task.set_virtual_locations(vl);
+    }
+
+    // Links (url, attachments, images).
+    if let Some(links) = build_links(record) {
+        task.set_links(links);
+    }
+
+    // Participants and organizer.
+    if let Some(participants) = build_task_participants(record) {
+        task.set_participants(participants);
+    }
+    if let Some(reply_to) = build_reply_to(record) {
+        task.set_reply_to(reply_to);
+    }
+
+    // Relations.
+    if let Some(related) = build_related_to(record) {
+        task.set_related_to(related);
+    }
+
+    // Recurrence rules.
+    if let Some(rules) = build_recurrence_rules(record) {
+        task.set_recurrence_rules(rules);
+    }
+
+    // Recurrence overrides (exdates, rdates).
+    if let Some(overrides) = build_recurrence_overrides(record) {
+        task.set_recurrence_overrides(overrides);
+    }
+
+    // r[impl model.export.jscalendar.vendor+2]
+    let vendor = collect_vendor_properties(record, TASK_KNOWN, "task", warnings);
     for (k, v) in vendor {
         task.insert_vendor_property(k.into(), v);
     }
@@ -319,6 +455,25 @@ const TASK_KNOWN: &[&str] = &[
     "show_without_time",
     "categories",
     "keywords",
+    "created",
+    "updated",
+    "sequence",
+    "recurrence_id",
+    "completed",
+    "url",
+    "location",
+    "geo",
+    "organizer",
+    "attendees",
+    "attachments",
+    "images",
+    "conferences",
+    "related_to",
+    "recur",
+    "exdates",
+    "rdates",
+    "request_statuses",
+    "recurrence_id_time_zone",
 ];
 
 // ── Value extraction helpers ─────────────────────────────────
@@ -450,14 +605,428 @@ fn get_string_set(record: &ImportRecord, key: &str) -> Option<HashSet<String>> {
     if set.is_empty() { None } else { Some(set) }
 }
 
+// ── JSCalendar structured property helpers ───────────────────
+
+fn get_utc_datetime(record: &ImportRecord, key: &str) -> Option<DateTime<Utc>> {
+    let ImportValue::Record(dt_record) = record.get(key)? else {
+        return None;
+    };
+    let ImportValue::Record(date_rec) = dt_record.get("date")? else {
+        return None;
+    };
+    let ImportValue::Record(time_rec) = dt_record.get("time")? else {
+        return None;
+    };
+
+    let year = get_u64(date_rec, "year")?;
+    let month = get_u64(date_rec, "month")?;
+    let day = get_u64(date_rec, "day")?;
+    let hour = get_u64(time_rec, "hour").unwrap_or(0);
+    let minute = get_u64(time_rec, "minute").unwrap_or(0);
+    let second = get_u64(time_rec, "second").unwrap_or(0);
+
+    let date = Date::new(
+        Year::new(u16::try_from(year).ok()?).ok()?,
+        Month::new(u8::try_from(month).ok()?).ok()?,
+        Day::new(u8::try_from(day).ok()?).ok()?,
+    )
+    .ok()?;
+    let time = Time::new(
+        Hour::new(u8::try_from(hour).ok()?).ok()?,
+        Minute::new(u8::try_from(minute).ok()?).ok()?,
+        Second::new(u8::try_from(second).ok()?).ok()?,
+        None,
+    )
+    .ok()?;
+
+    Some(DateTime {
+        date,
+        time,
+        marker: Utc,
+    })
+}
+
+fn get_record<'a>(record: &'a ImportRecord, key: &str) -> Option<&'a ImportRecord> {
+    match record.get(key)? {
+        ImportValue::Record(r) => Some(r),
+        _ => None,
+    }
+}
+
+fn get_list<'a>(record: &'a ImportRecord, key: &str) -> Option<&'a Vec<ImportValue>> {
+    match record.get(key)? {
+        ImportValue::List(l) => Some(l),
+        _ => None,
+    }
+}
+
+fn get_string_list(record: &ImportRecord, key: &str) -> Option<Vec<String>> {
+    let ImportValue::List(items) = record.get(key)? else {
+        return None;
+    };
+    let list: Vec<String> = items
+        .iter()
+        .filter_map(|v| match v {
+            ImportValue::String(s) => Some(s.clone()),
+            _ => None,
+        })
+        .collect();
+    if list.is_empty() { None } else { Some(list) }
+}
+
+fn make_id(s: &str) -> Option<Box<Id>> {
+    Box::<Id>::try_from_json(Json::String(s.to_string())).ok()
+}
+
+fn build_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, Location<Json>>> {
+    let location_str = get_str(record, "location");
+    let geo_record = get_record(record, "geo");
+
+    if location_str.is_none() && geo_record.is_none() {
+        return None;
+    }
+
+    let mut locations = HashMap::new();
+    let mut loc = Location::new();
+
+    if let Some(name) = location_str {
+        loc.set_name(name.to_string());
+    }
+    if let Some(geo) = geo_record {
+        let lat = get_str(geo, "latitude").unwrap_or("0");
+        let lon = get_str(geo, "longitude").unwrap_or("0");
+        let geo_uri = format!("geo:{lat},{lon}");
+        if let Ok(g) = GeoUri::new(&geo_uri) {
+            loc.set_coordinates(g.into());
+        }
+    }
+
+    locations.insert(make_id("1")?, loc);
+    Some(locations)
+}
+
+fn build_virtual_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, VirtualLocation<Json>>> {
+    let conferences = get_string_list(record, "conferences")?;
+    let mut vl_map = HashMap::new();
+    for (i, uri_str) in conferences.iter().enumerate() {
+        if let Ok(uri) = Uri::new(uri_str) {
+            let vloc = VirtualLocation::new(uri.into());
+            let id = make_id(&(i + 1).to_string())?;
+            vl_map.insert(id, vloc);
+        }
+    }
+    if vl_map.is_empty() { None } else { Some(vl_map) }
+}
+
+fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
+    let mut links = HashMap::new();
+    let mut id_counter = 1u32;
+
+    // url → link
+    if let Some(url_str) = get_str(record, "url")
+        && let Ok(uri) = Uri::new(url_str) {
+            let link = Link::new(uri.into());
+            if let Some(id) = make_id(&id_counter.to_string()) {
+                links.insert(id, link);
+                id_counter += 1;
+            }
+        }
+
+    // attachments → links
+    if let Some(items) = get_list(record, "attachments") {
+        for item in items {
+            match item {
+                ImportValue::String(uri_str) => {
+                    if let Ok(uri) = Uri::new(uri_str) {
+                        let link = Link::new(uri.into());
+                        if let Some(id) = make_id(&id_counter.to_string()) {
+                            links.insert(id, link);
+                            id_counter += 1;
+                        }
+                    }
+                }
+                ImportValue::Record(attach_rec) => {
+                    if let Some(data) = get_str(attach_rec, "data") {
+                        // base64 data → data URI
+                        let uri_str =
+                            format!("data:application/octet-stream;base64,{data}");
+                        if let Ok(uri) = Uri::new(&uri_str) {
+                            let link = Link::new(uri.into());
+                            if let Some(id) = make_id(&id_counter.to_string()) {
+                                links.insert(id, link);
+                                id_counter += 1;
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // images → links with rel="icon"
+    if let Some(items) = get_list(record, "images") {
+        for item in items {
+            let uri_str = match item {
+                ImportValue::String(s) => Some(s.as_str()),
+                _ => None,
+            };
+            if let Some(uri_str) = uri_str
+                && let Ok(uri) = Uri::new(uri_str) {
+                    let mut link = Link::new(uri.into());
+                    link.set_relation(LinkRelation::Icon);
+                    if let Some(id) = make_id(&id_counter.to_string()) {
+                        links.insert(id, link);
+                        id_counter += 1;
+                    }
+                }
+        }
+    }
+
+    if links.is_empty() { None } else { Some(links) }
+}
+
+fn build_participants(record: &ImportRecord) -> Option<HashMap<Box<Id>, Participant<Json>>> {
+    let attendees = get_string_list(record, "attendees")?;
+    let mut participants = HashMap::new();
+
+    for (i, uri_str) in attendees.iter().enumerate() {
+        let mut participant = Participant::new();
+        // Set the role to attendee.
+        let mut roles = HashSet::new();
+        roles.insert(Token::Known(ParticipantRole::Attendee));
+        participant.set_roles(roles);
+        // If the URI is a mailto: URI, set the sendTo.imip field.
+        if let Ok(cal_addr) = CalAddress::new(uri_str) {
+            let mut send_to = jscalendar::model::object::SendToParticipant::new();
+            send_to.set_imip(cal_addr.into());
+            participant.set_send_to(send_to);
+        }
+        if let Some(id) = make_id(&(i + 1).to_string()) {
+            participants.insert(id, participant);
+        }
+    }
+
+    if participants.is_empty() {
+        None
+    } else {
+        Some(participants)
+    }
+}
+
+fn build_task_participants(
+    record: &ImportRecord,
+) -> Option<HashMap<Box<Id>, TaskParticipant<Json>>> {
+    let attendees = get_string_list(record, "attendees")?;
+    let mut participants = HashMap::new();
+
+    for (i, uri_str) in attendees.iter().enumerate() {
+        let mut participant = TaskParticipant::new();
+        let mut roles = HashSet::new();
+        roles.insert(Token::Known(ParticipantRole::Attendee));
+        participant.set_roles(roles);
+        if let Ok(cal_addr) = CalAddress::new(uri_str) {
+            let mut send_to = jscalendar::model::object::SendToParticipant::new();
+            send_to.set_imip(cal_addr.into());
+            participant.set_send_to(send_to);
+        }
+        if let Some(id) = make_id(&(i + 1).to_string()) {
+            participants.insert(id, participant);
+        }
+    }
+
+    if participants.is_empty() {
+        None
+    } else {
+        Some(participants)
+    }
+}
+
+fn build_reply_to(record: &ImportRecord) -> Option<ReplyTo> {
+    let organizer_uri = get_str(record, "organizer")?;
+    if let Ok(cal_addr) = CalAddress::new(organizer_uri) {
+        let mut reply_to = ReplyTo::new();
+        reply_to.set_imip(cal_addr.into());
+        Some(reply_to)
+    } else {
+        None
+    }
+}
+
+fn build_related_to(record: &ImportRecord) -> Option<HashMap<Box<Uid>, Relation<Json>>> {
+    let uids = get_string_list(record, "related_to")?;
+    let mut map = HashMap::new();
+    for uid_str in &uids {
+        if let Ok(uid) = Uid::new(uid_str) {
+            let relation = Relation::new(HashSet::new());
+            map.insert(uid.into(), relation);
+        }
+    }
+    if map.is_empty() { None } else { Some(map) }
+}
+
+fn build_recurrence_rules(record: &ImportRecord) -> Option<Vec<RRule>> {
+    let recur_rec = get_record(record, "recur")?;
+    let rrule = build_jscal_rrule(recur_rec)?;
+    Some(vec![rrule])
+}
+
+fn build_jscal_rrule(recur: &ImportRecord) -> Option<RRule> {
+    let freq_str = get_str(recur, "frequency")?;
+    let empty_period_day = ByPeriodDayRules {
+        by_month_day: None,
+        by_year_day: None,
+    };
+    let freq_by_rules = match freq_str {
+        "secondly" => FreqByRules::Secondly(empty_period_day),
+        "minutely" => FreqByRules::Minutely(empty_period_day.clone()),
+        "hourly" => FreqByRules::Hourly(empty_period_day.clone()),
+        "daily" => FreqByRules::Daily(ByMonthDayRule { by_month_day: None }),
+        "weekly" => FreqByRules::Weekly,
+        "monthly" => FreqByRules::Monthly(ByMonthDayRule { by_month_day: None }),
+        "yearly" => FreqByRules::Yearly(Default::default()),
+        _ => return None,
+    };
+
+    let mut rrule = RRule {
+        freq: freq_by_rules,
+        core_by_rules: CoreByRules::default(),
+        interval: None,
+        termination: None,
+        week_start: None,
+    };
+
+    if let Some(interval) = get_u64(recur, "interval")
+        && let Some(nz) = NonZero::new(interval) {
+            rrule.interval = Some(Interval::new(nz));
+        }
+
+    if let Some(count) = get_u64(recur, "count") {
+        rrule.termination = Some(Termination::Count(count));
+    } else if let Some(until_dt) = get_datetime(recur, "until") {
+        rrule.termination = Some(Termination::Until(
+            DateTimeOrDate::DateTime(DateTime {
+                date: until_dt.date,
+                time: until_dt.time,
+                marker: TimeFormat::Local,
+            }),
+        ));
+    }
+
+    if let Some(wkst) = get_str(recur, "week_start") {
+        rrule.week_start = match wkst {
+            "mo" => Some(Weekday::Monday),
+            "tu" => Some(Weekday::Tuesday),
+            "we" => Some(Weekday::Wednesday),
+            "th" => Some(Weekday::Thursday),
+            "fr" => Some(Weekday::Friday),
+            "sa" => Some(Weekday::Saturday),
+            "su" => Some(Weekday::Sunday),
+            _ => None,
+        };
+    }
+
+    Some(rrule)
+}
+
+fn build_recurrence_overrides(
+    record: &ImportRecord,
+) -> Option<HashMap<DateTime<Local>, PatchObject<Json>>> {
+    let mut overrides: HashMap<DateTime<Local>, PatchObject<Json>> = HashMap::new();
+
+    // exdates → overrides with excluded: true
+    if let Some(exdates) = get_list(record, "exdates") {
+        for exdate in exdates {
+            if let ImportValue::Record(dt_rec) = exdate
+                && let Some(dt) = record_to_local_datetime(dt_rec) {
+                    let mut patch_map = Map::new();
+                    patch_map.insert("excluded".to_string(), Json::Bool(true));
+                    if let Ok(patch) = PatchObject::try_from_json(Json::Object(patch_map)) {
+                        overrides.insert(dt, patch);
+                    }
+                }
+        }
+    }
+
+    // rdates → overrides with empty patch (just marks the date as an occurrence)
+    if let Some(rdates) = get_list(record, "rdates") {
+        for rdate in rdates {
+            if let ImportValue::Record(dt_rec) = rdate
+                && let Some(dt) = record_to_local_datetime(dt_rec) {
+                    overrides.entry(dt).or_default();
+                }
+        }
+    }
+
+    if overrides.is_empty() {
+        None
+    } else {
+        Some(overrides)
+    }
+}
+
+fn record_to_local_datetime(dt_record: &ImportRecord) -> Option<DateTime<Local>> {
+    let date_rec = get_record(dt_record, "date")?;
+    let time_rec = get_record(dt_record, "time");
+
+    let year = get_u64(date_rec, "year")?;
+    let month = get_u64(date_rec, "month")?;
+    let day = get_u64(date_rec, "day")?;
+
+    let (hour, minute, second) = if let Some(time_rec) = time_rec {
+        (
+            get_u64(time_rec, "hour").unwrap_or(0),
+            get_u64(time_rec, "minute").unwrap_or(0),
+            get_u64(time_rec, "second").unwrap_or(0),
+        )
+    } else {
+        (0, 0, 0)
+    };
+
+    let date = Date::new(
+        Year::new(u16::try_from(year).ok()?).ok()?,
+        Month::new(u8::try_from(month).ok()?).ok()?,
+        Day::new(u8::try_from(day).ok()?).ok()?,
+    )
+    .ok()?;
+    let time = Time::new(
+        Hour::new(u8::try_from(hour).ok()?).ok()?,
+        Minute::new(u8::try_from(minute).ok()?).ok()?,
+        Second::new(u8::try_from(second).ok()?).ok()?,
+        None,
+    )
+    .ok()?;
+
+    Some(DateTime {
+        date,
+        time,
+        marker: Local,
+    })
+}
+
 // ── Vendor properties ────────────────────────────────────────
 
 /// Collect record fields not in the known set into a JSON object for vendor_property.
-fn collect_vendor_properties(record: &ImportRecord, known: &[&str]) -> Map<String, Json> {
+///
+/// Fields that do not match the JSCalendar vendor property naming convention
+/// (containing `:`) produce a warning, since they may be misspellings of
+/// mapped properties.
+// r[impl model.export.jscalendar.vendor+2]
+fn collect_vendor_properties(
+    record: &ImportRecord,
+    known: &[&str],
+    kind: &str,
+    warnings: &mut Vec<String>,
+) -> Map<String, Json> {
     let mut obj = Map::new();
     for (key, value) in record {
         if known.contains(&key.as_str()) {
             continue;
+        }
+        if !key.contains(':') {
+            warnings.push(format!(
+                "unrecognised non-vendor field '{key}' on {kind} record"
+            ));
         }
         obj.insert(key.clone(), import_value_to_json(value));
     }
@@ -852,6 +1421,52 @@ mod tests {
         assert!(event.categories().as_ref().unwrap().contains("work"));
         assert!(event.categories().as_ref().unwrap().contains("meeting"));
         assert!(event.keywords().as_ref().unwrap().contains("important"));
+    }
+
+    // r[verify model.export.jscalendar.vendor+2]
+    #[test]
+    fn non_vendor_unknown_fields_produce_warnings() {
+        let cal = make_cal("550e8400-e29b-41d4-a716-446655440000");
+        let event = ImportValue::Record(make_record(&[
+            ("type", ImportValue::String("event".into())),
+            (
+                "uid",
+                ImportValue::String("a8df6573-0474-496d-8496-033ad45d7fea".into()),
+            ),
+            ("start", make_datetime(2026, 1, 1, 0, 0, 0)),
+            // This is a valid vendor property (contains ':')
+            (
+                "com.example:custom",
+                ImportValue::String("vendor-value".into()),
+            ),
+            // This is NOT a vendor property (no ':') and not a known field
+            ("x_custom_field", ImportValue::String("legacy".into())),
+        ]));
+
+        let mut warnings = vec![];
+        let mut result = String::new();
+        emit_jscalendar(&mut result, &cal, &[event], &mut warnings).unwrap();
+
+        // The non-vendor field should produce a warning.
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("x_custom_field") && w.contains("event")),
+            "expected warning for x_custom_field, got: {warnings:?}"
+        );
+        // The vendor property should NOT produce a warning.
+        assert!(
+            !warnings
+                .iter()
+                .any(|w| w.contains("com.example:custom")),
+            "vendor property should not produce a warning"
+        );
+
+        // Both should still be in the output.
+        let parsed: Json = serde_json::from_str(&result).unwrap();
+        let entries = parsed["entries"].as_array().unwrap();
+        assert_eq!(entries[0]["com.example:custom"], "vendor-value");
+        assert_eq!(entries[0]["x_custom_field"], "legacy");
     }
 
     // r[verify model.export.jscalendar.roundtrip]

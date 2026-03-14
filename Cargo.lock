@@ -536,6 +536,7 @@ dependencies = [
  "expect-test",
  "gnomon-import",
  "jscalendar",
+ "mitsein",
  "serde_json",
 ]
 
