@@ -1976,7 +1976,7 @@ END:VCALENDAR\r\n";
 
     // r[verify model.export.icalendar.roundtrip_task]
     #[test]
-    fn roundtrip_task_fields() {
+    fn roundtrip_task_fields_with_tzid() {
         let ics = "\
 BEGIN:VCALENDAR\r\n\
 VERSION:2.0\r\n\
