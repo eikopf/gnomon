@@ -78,10 +78,7 @@ mod tests {
 
     #[test]
     fn crlf_returns_owned() {
-        assert!(matches!(
-            preprocess("a\r\nb"),
-            std::borrow::Cow::Owned(_)
-        ));
+        assert!(matches!(preprocess("a\r\nb"), std::borrow::Cow::Owned(_)));
     }
 
     // r[verify lexer.input-format.bom-removal]
