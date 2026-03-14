@@ -1683,6 +1683,109 @@ END:VCALENDAR\r\n";
         assert_eq!(event.location().unwrap().value, "Conference Room A");
     }
 
+    // r[verify model.export.icalendar.roundtrip]
+    #[test]
+    fn roundtrip_task_fields() {
+        // RFC 5545 §3.6.2: DUE and DURATION are mutually exclusive in VTODO.
+        // This test covers DUE, PERCENT-COMPLETE, STATUS, and COMPLETED via
+        // a full iCalendar import→export→re-parse cycle.  The estimated_duration
+        // (DURATION) property is verified in the second half of the test using a
+        // directly-constructed record, since it cannot coexist with DUE.
+        let ics = "\
+BEGIN:VCALENDAR\r\n\
+VERSION:2.0\r\n\
+PRODID:-//Roundtrip//Task//EN\r\n\
+BEGIN:VTODO\r\n\
+UID:roundtrip-task-uid-1\r\n\
+SUMMARY:Roundtrip Task\r\n\
+DESCRIPTION:A task for round-trip testing\r\n\
+DUE:20260320T180000\r\n\
+PERCENT-COMPLETE:75\r\n\
+STATUS:IN-PROCESS\r\n\
+COMPLETED:20260319T120000Z\r\n\
+END:VTODO\r\n\
+END:VCALENDAR\r\n";
+
+        let import_result = translate_icalendar(ics).unwrap();
+        let ImportValue::List(calendars) = import_result else {
+            panic!("expected list")
+        };
+        let ImportValue::Record(cal_rec) = &calendars[0] else {
+            panic!("expected record")
+        };
+        let ImportValue::List(entries) = cal_rec.get("entries").unwrap() else {
+            panic!("expected entries list")
+        };
+
+        let mut emitted = String::new();
+        emit_icalendar(&mut emitted, cal_rec, entries, &mut vec![]).unwrap();
+        let re_parsed =
+            calico::model::component::Calendar::parse(&emitted).expect("re-parse failed");
+        let cal = &re_parsed[0];
+
+        assert_eq!(cal.prod_id().value, "-//Roundtrip//Task//EN");
+
+        let todo = cal.components().iter().find_map(|c| {
+            if let calico::model::component::CalendarComponent::Todo(t) = c {
+                Some(t)
+            } else {
+                None
+            }
+        });
+        let todo = todo.expect("todo not found");
+
+        assert_eq!(todo.uid().unwrap().value.as_str(), "roundtrip-task-uid-1");
+        assert_eq!(todo.summary().unwrap().value, "Roundtrip Task");
+        assert_eq!(
+            todo.description().unwrap().value,
+            "A task for round-trip testing"
+        );
+        assert!(todo.due().is_some(), "DUE should be present");
+        assert!(
+            todo.percent_complete().is_some(),
+            "PERCENT-COMPLETE should be present"
+        );
+        assert_eq!(todo.percent_complete().unwrap().value.get(), 75);
+        assert!(todo.completed().is_some(), "COMPLETED should be present");
+
+        // Verify DURATION (estimated_duration) round-trips correctly.  Because
+        // RFC 5545 forbids DUE and DURATION in the same VTODO, this leg uses a
+        // directly-constructed task record.
+        let duration_val = ImportValue::Record(make_record(&[
+            ("weeks", ImportValue::Integer(0)),
+            ("days", ImportValue::Integer(0)),
+            ("hours", ImportValue::Integer(0)),
+            ("minutes", ImportValue::Integer(30)),
+            ("seconds", ImportValue::Integer(0)),
+        ]));
+        let duration_entry = ImportValue::Record(make_record(&[
+            ("type", ImportValue::String("task".into())),
+            ("uid", ImportValue::String("roundtrip-task-dur-uid".into())),
+            ("title", ImportValue::String("Duration Task".into())),
+            ("estimated_duration", duration_val),
+        ]));
+        let cal_rec2 = make_cal("-//Roundtrip//Task//EN");
+        let mut emitted2 = String::new();
+        emit_icalendar(&mut emitted2, &cal_rec2, &[duration_entry], &mut vec![]).unwrap();
+        let re_parsed2 =
+            calico::model::component::Calendar::parse(&emitted2).expect("duration re-parse failed");
+        let todo2 = re_parsed2[0]
+            .components()
+            .iter()
+            .find_map(|c| {
+                if let calico::model::component::CalendarComponent::Todo(t) = c {
+                    Some(t)
+                } else {
+                    None
+                }
+            })
+            .expect("duration todo not found");
+        assert!(
+            todo2.duration().is_some(),
+            "DURATION (estimated_duration) should be present"
+        );
+    }
+
     // r[verify model.export.icalendar.status_priority]
     #[test]
     fn emit_status_and_priority() {
@@ -1873,7 +1976,7 @@ END:VCALENDAR\r\n";
 
     // r[verify model.export.icalendar.roundtrip_task]
     #[test]
-    fn roundtrip_task_fields() {
+    fn roundtrip_task_fields_with_tzid() {
         let ics = "\
 BEGIN:VCALENDAR\r\n\
 VERSION:2.0\r\n\
