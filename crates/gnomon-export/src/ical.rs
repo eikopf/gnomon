@@ -193,27 +193,28 @@ pub fn emit_icalendar(
 
     // Restore properties from the structured icalendar.properties field.
     if let Some(ImportValue::Record(ical_rec)) = calendar.get("icalendar")
-        && let Some(ImportValue::List(props)) = ical_rec.get("properties") {
-            for prop_value in props {
-                let ImportValue::List(jcal) = prop_value else {
-                    continue;
-                };
-                if jcal.len() < 4 {
-                    continue;
-                }
-                let ImportValue::String(name) = &jcal[0] else {
-                    continue;
-                };
-                let params = if let ImportValue::Record(params_rec) = &jcal[1] {
-                    import_record_to_params(params_rec)
-                } else {
-                    Params::default()
-                };
-                let value = jcal_value_to_ical_value(&jcal[2], &jcal[3]);
-                let prop = Prop { value, params };
-                cal.insert_x_property(name.to_uppercase().into(), vec![prop]);
+        && let Some(ImportValue::List(props)) = ical_rec.get("properties")
+    {
+        for prop_value in props {
+            let ImportValue::List(jcal) = prop_value else {
+                continue;
+            };
+            if jcal.len() < 4 {
+                continue;
             }
+            let ImportValue::String(name) = &jcal[0] else {
+                continue;
+            };
+            let params = if let ImportValue::Record(params_rec) = &jcal[1] {
+                import_record_to_params(params_rec)
+            } else {
+                Params::default()
+            };
+            let value = jcal_value_to_ical_value(&jcal[2], &jcal[3]);
+            let prop = Prop { value, params };
+            cal.insert_x_property(name.to_uppercase().into(), vec![prop]);
         }
+    }
 
     // Process remaining unknown fields.
     for (key, val) in calendar {
@@ -224,11 +225,8 @@ pub fn emit_icalendar(
             // JSCalendar vendor → JSPROP.
             let json_str = import_value_to_json(val).to_string();
             let mut params = Params::default();
-            if let Ok(pv) =
-                Box::<calico::model::string::ParamValue>::try_from(key.to_string())
-            {
-                let jsptr_key =
-                    calico::model::string::CaselessStr::from_box_str("JSPTR".into());
+            if let Ok(pv) = Box::<calico::model::string::ParamValue>::try_from(key.to_string()) {
+                let jsptr_key = calico::model::string::CaselessStr::from_box_str("JSPTR".into());
                 params.insert_unknown_param(jsptr_key, mitsein::vec1![pv]);
             }
             let prop = Prop {
@@ -736,9 +734,10 @@ fn handle_x_properties(
 ) {
     // 1. Restore properties from the structured icalendar.properties field.
     if let Some(ImportValue::Record(ical_rec)) = record.get("icalendar")
-        && let Some(ImportValue::List(props)) = ical_rec.get("properties") {
-            restore_icalendar_properties(component, props);
-        }
+        && let Some(ImportValue::List(props)) = ical_rec.get("properties")
+    {
+        restore_icalendar_properties(component, props);
+    }
 
     // 2. Process remaining unknown fields.
     for (key, val) in record {
@@ -828,12 +827,14 @@ fn jcal_value_to_ical_value(
             _ => import_value_to_ical_value(value),
         },
         "integer" => match value {
-            ImportValue::Integer(n) => {
-                Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX))
+            ImportValue::Integer(n) => Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX)),
+            ImportValue::SignedInteger(n) => {
+                Value::Integer(i32::try_from(*n).unwrap_or(if *n < 0 {
+                    i32::MIN
+                } else {
+                    i32::MAX
+                }))
             }
-            ImportValue::SignedInteger(n) => Value::Integer(
-                i32::try_from(*n).unwrap_or(if *n < 0 { i32::MIN } else { i32::MAX }),
-            ),
             _ => import_value_to_ical_value(value),
         },
         "uri" | "cal-address" => match value {

@@ -4,11 +4,12 @@ use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
 use std::str::FromStr;
 
+use calico::model::primitive::DateTimeOrDate;
 use gnomon_import::{ImportRecord, ImportValue};
 use jscalendar::json::{IntoJson, TryFromJson, UnsignedInt};
 use jscalendar::model::object::{
-    Event, Group, Link, Location, Participant, PatchObject, Relation, ReplyTo, Task,
-    TaskOrEvent, TaskParticipant, VirtualLocation,
+    Event, Group, Link, Location, Participant, PatchObject, Relation, ReplyTo, Task, TaskOrEvent,
+    TaskParticipant, VirtualLocation,
 };
 use jscalendar::model::rrule::{
     ByMonthDayRule, ByPeriodDayRules, CoreByRules, FreqByRules, Interval, RRule, Termination,
@@ -22,7 +23,6 @@ use jscalendar::model::time::{
     Date, DateTime, Day, Duration, ExactDuration, Hour, Local, Minute, Month, NominalDuration,
     Second, Time, TimeFormat, Utc, Weekday, Year,
 };
-use calico::model::primitive::DateTimeOrDate;
 use serde_json::{Map, Value as Json};
 
 use calendar_types::set::Token;
@@ -705,7 +705,9 @@ fn build_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, Location<Js
     Some(locations)
 }
 
-fn build_virtual_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, VirtualLocation<Json>>> {
+fn build_virtual_locations(
+    record: &ImportRecord,
+) -> Option<HashMap<Box<Id>, VirtualLocation<Json>>> {
     let conferences = get_string_list(record, "conferences")?;
     let mut vl_map = HashMap::new();
     for (i, uri_str) in conferences.iter().enumerate() {
@@ -715,7 +717,11 @@ fn build_virtual_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, Vir
             vl_map.insert(id, vloc);
         }
     }
-    if vl_map.is_empty() { None } else { Some(vl_map) }
+    if vl_map.is_empty() {
+        None
+    } else {
+        Some(vl_map)
+    }
 }
 
 fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
@@ -724,13 +730,14 @@ fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
 
     // url → link
     if let Some(url_str) = get_str(record, "url")
-        && let Ok(uri) = Uri::new(url_str) {
-            let link = Link::new(uri.into());
-            if let Some(id) = make_id(&id_counter.to_string()) {
-                links.insert(id, link);
-                id_counter += 1;
-            }
+        && let Ok(uri) = Uri::new(url_str)
+    {
+        let link = Link::new(uri.into());
+        if let Some(id) = make_id(&id_counter.to_string()) {
+            links.insert(id, link);
+            id_counter += 1;
         }
+    }
 
     // attachments → links
     if let Some(items) = get_list(record, "attachments") {
@@ -748,8 +755,7 @@ fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
                 ImportValue::Record(attach_rec) => {
                     if let Some(data) = get_str(attach_rec, "data") {
                         // base64 data → data URI
-                        let uri_str =
-                            format!("data:application/octet-stream;base64,{data}");
+                        let uri_str = format!("data:application/octet-stream;base64,{data}");
                         if let Ok(uri) = Uri::new(&uri_str) {
                             let link = Link::new(uri.into());
                             if let Some(id) = make_id(&id_counter.to_string()) {
@@ -772,14 +778,15 @@ fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
                 _ => None,
             };
             if let Some(uri_str) = uri_str
-                && let Ok(uri) = Uri::new(uri_str) {
-                    let mut link = Link::new(uri.into());
-                    link.set_relation(LinkRelation::Icon);
-                    if let Some(id) = make_id(&id_counter.to_string()) {
-                        links.insert(id, link);
-                        id_counter += 1;
-                    }
+                && let Ok(uri) = Uri::new(uri_str)
+            {
+                let mut link = Link::new(uri.into());
+                link.set_relation(LinkRelation::Icon);
+                if let Some(id) = make_id(&id_counter.to_string()) {
+                    links.insert(id, link);
+                    id_counter += 1;
                 }
+            }
         }
     }
 
@@ -897,20 +904,19 @@ fn build_jscal_rrule(recur: &ImportRecord) -> Option<RRule> {
     };
 
     if let Some(interval) = get_u64(recur, "interval")
-        && let Some(nz) = NonZero::new(interval) {
-            rrule.interval = Some(Interval::new(nz));
-        }
+        && let Some(nz) = NonZero::new(interval)
+    {
+        rrule.interval = Some(Interval::new(nz));
+    }
 
     if let Some(count) = get_u64(recur, "count") {
         rrule.termination = Some(Termination::Count(count));
     } else if let Some(until_dt) = get_datetime(recur, "until") {
-        rrule.termination = Some(Termination::Until(
-            DateTimeOrDate::DateTime(DateTime {
-                date: until_dt.date,
-                time: until_dt.time,
-                marker: TimeFormat::Local,
-            }),
-        ));
+        rrule.termination = Some(Termination::Until(DateTimeOrDate::DateTime(DateTime {
+            date: until_dt.date,
+            time: until_dt.time,
+            marker: TimeFormat::Local,
+        })));
     }
 
     if let Some(wkst) = get_str(recur, "week_start") {
@@ -938,13 +944,14 @@ fn build_recurrence_overrides(
     if let Some(exdates) = get_list(record, "exdates") {
         for exdate in exdates {
             if let ImportValue::Record(dt_rec) = exdate
-                && let Some(dt) = record_to_local_datetime(dt_rec) {
-                    let mut patch_map = Map::new();
-                    patch_map.insert("excluded".to_string(), Json::Bool(true));
-                    if let Ok(patch) = PatchObject::try_from_json(Json::Object(patch_map)) {
-                        overrides.insert(dt, patch);
-                    }
+                && let Some(dt) = record_to_local_datetime(dt_rec)
+            {
+                let mut patch_map = Map::new();
+                patch_map.insert("excluded".to_string(), Json::Bool(true));
+                if let Ok(patch) = PatchObject::try_from_json(Json::Object(patch_map)) {
+                    overrides.insert(dt, patch);
                 }
+            }
         }
     }
 
@@ -952,9 +959,10 @@ fn build_recurrence_overrides(
     if let Some(rdates) = get_list(record, "rdates") {
         for rdate in rdates {
             if let ImportValue::Record(dt_rec) = rdate
-                && let Some(dt) = record_to_local_datetime(dt_rec) {
-                    overrides.entry(dt).or_default();
-                }
+                && let Some(dt) = record_to_local_datetime(dt_rec)
+            {
+                overrides.entry(dt).or_default();
+            }
         }
     }
 
@@ -1456,9 +1464,7 @@ mod tests {
         );
         // The vendor property should NOT produce a warning.
         assert!(
-            !warnings
-                .iter()
-                .any(|w| w.contains("com.example:custom")),
+            !warnings.iter().any(|w| w.contains("com.example:custom")),
             "vendor property should not produce a warning"
         );
 

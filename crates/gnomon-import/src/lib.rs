@@ -1042,10 +1042,7 @@ fn params_to_import_record(params: &Params) -> ImportRecord {
 
     // RANGE (ThisAndFuture is the only value).
     if params.recurrence_range().is_some() {
-        record.insert(
-            "RANGE".into(),
-            ImportValue::String("THISANDFUTURE".into()),
-        );
+        record.insert("RANGE".into(), ImportValue::String("THISANDFUTURE".into()));
     }
 
     // RELATED (TriggerRelation).
