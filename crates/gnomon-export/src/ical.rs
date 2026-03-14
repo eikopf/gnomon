@@ -159,8 +159,9 @@ pub fn emit_icalendar(
         }
     }
 
-    if let Some(lm_val) = calendar.get("last_modified")
-        && let Some(dt) = record_to_utc_datetime(lm_val)
+    // LAST-MODIFIED ← updated (VCALENDAR has no DTSTAMP)
+    if let Some(updated_val) = calendar.get("updated")
+        && let Some(dt) = record_to_utc_datetime(updated_val)
     {
         cal.set_last_modified(Prop {
             value: dt,
@@ -221,7 +222,7 @@ const CALENDAR_KNOWN: &[&str] = &[
     "color",
     "url",
     "categories",
-    "last_modified",
+    "updated",
     "refresh_interval",
     "source",
 ];
@@ -241,11 +242,10 @@ const COMMON_KNOWN: &[&str] = &[
     "location",
     "color",
     "categories",
-    "dtstamp",
-    "class",
+    "updated",
+    "privacy",
     "created",
     "geo",
-    "last_modified",
     "organizer",
     "sequence",
     "url",
@@ -264,7 +264,7 @@ const COMMON_KNOWN: &[&str] = &[
     "request_statuses",
 ];
 
-const EVENT_EXTRA_KNOWN: &[&str] = &["duration", "transparency"];
+const EVENT_EXTRA_KNOWN: &[&str] = &["duration", "free_busy_status"];
 const TODO_EXTRA_KNOWN: &[&str] = &["due", "completed", "estimated_duration", "percent_complete"];
 
 // ── Shared property-setting macro ─────────────────────────────
@@ -361,18 +361,24 @@ macro_rules! set_common_ical_fields {
             }
         }
 
-        // DTSTAMP
-        if let Some(dtstamp_val) = $record.get("dtstamp")
-            && let Some(dt) = record_to_utc_datetime(dtstamp_val)
+        // DTSTAMP + LAST-MODIFIED ← updated
+        // Per draft-ietf-calext-jscalendar-icalendar-22, `updated` maps to
+        // both DTSTAMP and LAST-MODIFIED when exporting to iCalendar.
+        if let Some(updated_val) = $record.get("updated")
+            && let Some(dt) = record_to_utc_datetime(updated_val)
         {
             $component.set_dtstamp(Prop {
+                value: dt.clone(),
+                params: Params::default(),
+            });
+            $component.set_last_modified(Prop {
                 value: dt,
                 params: Params::default(),
             });
         }
 
-        // CLASS
-        if let Some(class_str) = $record.get("class").and_then(|v| as_str(v)) {
+        // CLASS ← privacy
+        if let Some(class_str) = $record.get("privacy").and_then(|v| as_str(v)) {
             let class_val = str_to_class(class_str);
             $component.set_class(Prop {
                 value: class_val,
@@ -396,16 +402,6 @@ macro_rules! set_common_ical_fields {
         {
             $component.set_geo(Prop {
                 value: geo,
-                params: Params::default(),
-            });
-        }
-
-        // LAST-MODIFIED
-        if let Some(lm_val) = $record.get("last_modified")
-            && let Some(dt) = record_to_utc_datetime(lm_val)
-        {
-            $component.set_last_modified(Prop {
-                value: dt,
                 params: Params::default(),
             });
         }
@@ -741,8 +737,8 @@ fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Even
         });
     }
 
-    // TRANSP ← transparency (event-only)
-    if let Some(transp_str) = record.get("transparency").and_then(|v| as_str(v)) {
+    // TRANSP ← free_busy_status (event-only)
+    if let Some(transp_str) = record.get("free_busy_status").and_then(|v| as_str(v)) {
         let transp = str_to_transp(transp_str);
         event.set_transp(Prop {
             value: transp,

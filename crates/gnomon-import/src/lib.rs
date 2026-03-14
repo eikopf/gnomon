@@ -157,7 +157,7 @@ fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
         }
     }
     if let Some(lm) = cal.last_modified() {
-        fields.push(("last_modified", translate_utc_datetime(&lm.value)));
+        fields.push(("updated", translate_utc_datetime(&lm.value)));
     }
     if let Some(ri) = cal.refresh_interval()
         && let Some(val) = translate_signed_duration(&ri.value)
@@ -203,6 +203,9 @@ macro_rules! translate_common_ical_fields {
             if let Some(tz) = dtstart.params.tz_id() {
                 $fields.push(("time_zone", ImportValue::String(tz.as_str().to_string())));
             }
+            if matches!(dtstart.value, DateTimeOrDate::Date(_)) {
+                $fields.push(("show_without_time", ImportValue::Bool(true)));
+            }
         }
         if let Some(status_prop) = $component.status() {
             $fields.push(("status", translate_status(&status_prop.value)));
@@ -231,20 +234,22 @@ macro_rules! translate_common_ical_fields {
         }
 
         // Expanded properties.
-        if let Some(dtstamp) = $component.dtstamp() {
-            $fields.push(("dtstamp", translate_utc_datetime(&dtstamp.value)));
+        // DTSTAMP and LAST-MODIFIED both map to `updated` per
+        // draft-ietf-calext-jscalendar-icalendar-22. Prefer LAST-MODIFIED
+        // when present; fall back to DTSTAMP.
+        if let Some(lm) = $component.last_modified() {
+            $fields.push(("updated", translate_utc_datetime(&lm.value)));
+        } else if let Some(dtstamp) = $component.dtstamp() {
+            $fields.push(("updated", translate_utc_datetime(&dtstamp.value)));
         }
         if let Some(class) = $component.class() {
-            $fields.push(("class", translate_class(&class.value)));
+            $fields.push(("privacy", translate_class(&class.value)));
         }
         if let Some(created) = $component.created() {
             $fields.push(("created", translate_utc_datetime(&created.value)));
         }
         if let Some(geo) = $component.geo() {
             $fields.push(("geo", translate_geo(&geo.value)));
-        }
-        if let Some(lm) = $component.last_modified() {
-            $fields.push(("last_modified", translate_utc_datetime(&lm.value)));
         }
         if let Some(org) = $component.organizer() {
             $fields.push((
@@ -397,9 +402,24 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
         fields.push(("duration", val));
     }
 
+    // Event-specific: end_time_zone (when DTEND has a different TZID than DTSTART)
+    // r[impl record.event.end-time-zone]
+    if let (Some(dtstart), Some(dtend)) = (event.dtstart(), event.dtend()) {
+        let start_tz = dtstart.params.tz_id();
+        let end_tz = dtend.params.tz_id();
+        if let Some(etz) = end_tz {
+            if start_tz.map(|s| s.as_str()) != Some(etz.as_str()) {
+                fields.push((
+                    "end_time_zone",
+                    ImportValue::String(etz.as_str().to_string()),
+                ));
+            }
+        }
+    }
+
     // Event-specific: TRANSP
     if let Some(transp) = event.transp() {
-        fields.push(("transparency", translate_transp(&transp.value)));
+        fields.push(("free_busy_status", translate_transp(&transp.value)));
     }
 
     let mut record = make_record(&fields);
@@ -1724,16 +1744,16 @@ END:VCALENDAR\r\n";
         let (_cal, entries) = split_ical_result(&result);
         let rec = entries[0];
 
-        assert!(has_field(rec, "dtstamp"));
+        // LAST-MODIFIED takes precedence over DTSTAMP; both collapse to `updated`.
+        assert!(has_field(rec, "updated"));
         assert!(has_field(rec, "created"));
-        assert!(has_field(rec, "last_modified"));
 
         assert_eq!(
-            get_field(rec, "class"),
+            get_field(rec, "privacy"),
             &ImportValue::String("confidential".into())
         );
         assert_eq!(
-            get_field(rec, "transparency"),
+            get_field(rec, "free_busy_status"),
             &ImportValue::String("transparent".into())
         );
         assert_eq!(get_field(rec, "sequence"), &ImportValue::SignedInteger(3));
