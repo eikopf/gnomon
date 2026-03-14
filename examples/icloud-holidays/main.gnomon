@@ -1,6 +1,16 @@
 ;; a collection of several iCloud holiday calendars
 
-let us-holidays = import <https://calendars.icloud.com/holidays/us_en.ics> in
-let ch-holidays = import <https://calendars.icloud.com/holidays/ch_de-ch.ics> in
+;; imported calendars
+let us-holidays = import <https://calendars.icloud.com/holidays/us_en.ics>
+let ch-holidays = import <https://calendars.icloud.com/holidays/ch_de-ch.ics>
 
-us-holidays ++ ch-holidays
+;; fixed UIDs
+let us-uuid = "3bf625c9-232b-40a6-90d8-19587356138c"
+let ch-uuid = "4beb2d81-cee9-4d9c-94ec-db0359ff02ca"
+
+in
+
+[
+  us-holidays[0] // { uid: us-uuid },
+  ch-holidays[0] // { uid: ch-uuid },
+]
