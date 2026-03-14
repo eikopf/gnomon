@@ -407,13 +407,13 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
     if let (Some(dtstart), Some(dtend)) = (event.dtstart(), event.dtend()) {
         let start_tz = dtstart.params.tz_id();
         let end_tz = dtend.params.tz_id();
-        if let Some(etz) = end_tz {
-            if start_tz.map(|s| s.as_str()) != Some(etz.as_str()) {
-                fields.push((
-                    "end_time_zone",
-                    ImportValue::String(etz.as_str().to_string()),
-                ));
-            }
+        if let Some(etz) = end_tz
+            && start_tz.map(|s| s.as_str()) != Some(etz.as_str())
+        {
+            fields.push((
+                "end_time_zone",
+                ImportValue::String(etz.as_str().to_string()),
+            ));
         }
     }
 
