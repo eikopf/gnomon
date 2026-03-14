@@ -9,11 +9,13 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use calico::model::component::{Calendar as ICalCalendar, CalendarComponent};
+use calico::model::parameter::Params;
 use calico::model::primitive::{
     Attachment, ClassValue, DateTime, DateTimeOrDate, Duration, ExactDuration, Geo,
     NominalDuration, RDateSeq, RequestStatus, Sign, SignedDuration, Status, TimeTransparency,
     Token, Utc, Weekday,
 };
+use calico::model::property::Prop;
 use calico::model::rrule::{FreqByRules, RRule};
 use calico::model::string::CaselessStr;
 
@@ -172,7 +174,9 @@ fn translate_vcalendar_properties(cal: &ICalCalendar) -> ImportRecord {
     }
 
     let mut record = make_record(&fields);
-    append_x_properties(cal, &mut record);
+    if let Some(ical) = build_icalendar_record(cal) {
+        record.insert("icalendar".to_string(), ical);
+    }
     record
 }
 
@@ -423,7 +427,9 @@ fn translate_ical_event(event: &calico::model::component::Event) -> ImportRecord
     }
 
     let mut record = make_record(&fields);
-    append_x_properties(event, &mut record);
+    if let Some(ical) = build_icalendar_record(event) {
+        record.insert("icalendar".to_string(), ical);
+    }
     record
 }
 
@@ -463,7 +469,9 @@ fn translate_ical_todo(todo: &calico::model::component::Todo) -> ImportRecord {
     }
 
     let mut record = make_record(&fields);
-    append_x_properties(todo, &mut record);
+    if let Some(ical) = build_icalendar_record(todo) {
+        record.insert("icalendar".to_string(), ical);
+    }
     record
 }
 
@@ -884,42 +892,207 @@ fn translate_ical_value(val: &calico::model::primitive::Value<String>) -> Import
     }
 }
 
-/// Trait for components that have x_property_iter().
-trait HasXProperties {
-    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)>;
+type ICalXProp = Prop<calico::model::primitive::Value<String>, Params>;
+
+/// Trait for components that expose full x-property data (name, params, and value).
+trait HasXPropertiesFull {
+    fn x_properties_full(&self) -> Vec<(&CaselessStr, &Vec<ICalXProp>)>;
 }
 
-impl HasXProperties for ICalCalendar {
-    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
+impl HasXPropertiesFull for ICalCalendar {
+    fn x_properties_full(&self) -> Vec<(&CaselessStr, &Vec<ICalXProp>)> {
         self.x_property_iter()
-            .flat_map(|(k, props)| props.iter().map(move |prop| (k.as_ref(), &prop.value)))
+            .map(|(k, props)| (k.as_ref(), props))
             .collect()
     }
 }
 
-impl HasXProperties for calico::model::component::Event {
-    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
+impl HasXPropertiesFull for calico::model::component::Event {
+    fn x_properties_full(&self) -> Vec<(&CaselessStr, &Vec<ICalXProp>)> {
         self.x_property_iter()
-            .flat_map(|(k, props)| props.iter().map(move |prop| (k.as_ref(), &prop.value)))
+            .map(|(k, props)| (k.as_ref(), props))
             .collect()
     }
 }
 
-impl HasXProperties for calico::model::component::Todo {
-    fn x_property_pairs(&self) -> Vec<(&CaselessStr, &calico::model::primitive::Value<String>)> {
+impl HasXPropertiesFull for calico::model::component::Todo {
+    fn x_properties_full(&self) -> Vec<(&CaselessStr, &Vec<ICalXProp>)> {
         self.x_property_iter()
-            .flat_map(|(k, props)| props.iter().map(move |prop| (k.as_ref(), &prop.value)))
+            .map(|(k, props)| (k.as_ref(), props))
             .collect()
     }
 }
 
-// r[impl model.import.icalendar.extension]
+// r[impl model.import.icalendar.extension+2]
 // r[impl model.import.preserve]
-/// Append x-property fields to a record.
-fn append_x_properties<T: HasXProperties>(component: &T, record: &mut ImportRecord) {
-    for (key, value) in component.x_property_pairs() {
-        let field_name = key.as_str().to_lowercase().replace('-', "_");
-        record.insert(field_name, translate_ical_value(value));
+/// Build a structured `icalendar` record from x-properties using jCal format (RFC 7265).
+///
+/// Returns `None` if no x-properties are present.
+fn build_icalendar_record(component: &impl HasXPropertiesFull) -> Option<ImportValue> {
+    let mut properties: Vec<ImportValue> = Vec::new();
+
+    for (key, props) in component.x_properties_full() {
+        let name = key.as_str().to_lowercase();
+        for prop in props {
+            let params_record = params_to_import_record(&prop.params);
+            let type_str = value_type_to_jcal_string(&prop.value);
+            let value = translate_ical_value(&prop.value);
+
+            // jCal array: [name, params, type, value]
+            let jcal_array = ImportValue::List(vec![
+                ImportValue::String(name.clone()),
+                ImportValue::Record(params_record),
+                ImportValue::String(type_str.to_string()),
+                value,
+            ]);
+            properties.push(jcal_array);
+        }
+    }
+
+    if properties.is_empty() {
+        return None;
+    }
+
+    let mut record = ImportRecord::new();
+    record.insert("properties".to_string(), ImportValue::List(properties));
+    record.insert("components".to_string(), ImportValue::List(Vec::new()));
+    Some(ImportValue::Record(record))
+}
+
+/// Convert calico `Params` to an `ImportRecord` preserving all parameters.
+fn params_to_import_record(params: &Params) -> ImportRecord {
+    let mut record = ImportRecord::new();
+
+    // String-valued known params.
+    if let Some(v) = params.tz_id() {
+        record.insert("TZID".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.language() {
+        record.insert("LANGUAGE".into(), ImportValue::String(v.to_string()));
+    }
+    if let Some(v) = params.common_name() {
+        record.insert("CN".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.alternate_representation() {
+        record.insert("ALTREP".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.format_type() {
+        record.insert("FMTTYPE".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.sent_by() {
+        record.insert("SENT-BY".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.directory_reference() {
+        record.insert("DIR".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.email() {
+        record.insert("EMAIL".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.label() {
+        record.insert("LABEL".into(), ImportValue::String(v.as_str().into()));
+    }
+    if let Some(v) = params.schema() {
+        record.insert("SCHEMA".into(), ImportValue::String(v.as_str().into()));
+    }
+
+    // Encoding param.
+    if let Some(v) = params.inline_encoding() {
+        record.insert("ENCODING".into(), ImportValue::String(v.to_string()));
+    }
+
+    // Token-valued known params (Known → Display, Unknown → as_str).
+    macro_rules! token_param {
+        ($method:ident, $name:expr) => {
+            if let Some(v) = params.$method() {
+                record.insert($name.into(), ImportValue::String(v.to_string()));
+            }
+        };
+    }
+    token_param!(calendar_user_type, "CUTYPE");
+    token_param!(free_busy_type, "FBTYPE");
+    token_param!(participation_status, "PARTSTAT");
+    token_param!(relationship_type, "RELTYPE");
+    token_param!(participation_role, "ROLE");
+    token_param!(display_type, "DISPLAY");
+    token_param!(feature_type, "FEATURE");
+
+    // URI-list params.
+    macro_rules! uri_list_param {
+        ($method:ident, $name:expr) => {
+            if let Some(uris) = params.$method() {
+                let vals: Vec<ImportValue> = uris
+                    .iter()
+                    .map(|u| ImportValue::String(u.as_str().to_string()))
+                    .collect();
+                record.insert($name.into(), ImportValue::List(vals));
+            }
+        };
+    }
+    uri_list_param!(delegated_from, "DELEGATED-FROM");
+    uri_list_param!(delegated_to, "DELEGATED-TO");
+    uri_list_param!(membership, "MEMBER");
+
+    // Boolean params.
+    if let Some(v) = params.rsvp_expectation() {
+        record.insert("RSVP".into(), ImportValue::Bool(*v));
+    }
+    if let Some(v) = params.derived() {
+        record.insert("DERIVED".into(), ImportValue::Bool(*v));
+    }
+
+    // RANGE (ThisAndFuture is the only value).
+    if params.recurrence_range().is_some() {
+        record.insert("RANGE".into(), ImportValue::String("THISANDFUTURE".into()));
+    }
+
+    // RELATED (TriggerRelation).
+    if let Some(v) = params.trigger_relationship() {
+        record.insert("RELATED".into(), ImportValue::String(v.to_string()));
+    }
+
+    // ORDER (PositiveInteger = NonZero<u32>).
+    if let Some(v) = params.order() {
+        record.insert("ORDER".into(), ImportValue::Integer(u64::from(v.get())));
+    }
+
+    // Unknown params.
+    for (name, values) in params.unknown_param_iter() {
+        let val_strs: Vec<ImportValue> = values
+            .iter()
+            .map(|v| ImportValue::String(v.as_str().to_string()))
+            .collect();
+        if val_strs.len() == 1 {
+            record.insert(
+                name.as_str().to_string(),
+                val_strs.into_iter().next().unwrap(),
+            );
+        } else {
+            record.insert(name.as_str().to_string(), ImportValue::List(val_strs));
+        }
+    }
+
+    record
+}
+
+/// Map a calico `Value<String>` to its jCal type string.
+fn value_type_to_jcal_string(value: &calico::model::primitive::Value<String>) -> &'static str {
+    use calico::model::primitive::Value;
+    match value {
+        Value::Binary(_) => "binary",
+        Value::Boolean(_) => "boolean",
+        Value::CalAddress(_) => "cal-address",
+        Value::Date(_) => "date",
+        Value::DateTime(_) => "date-time",
+        Value::Duration(_) => "duration",
+        Value::Float(_) => "float",
+        Value::Integer(_) => "integer",
+        Value::Period(_) => "period",
+        Value::Recur(_) => "recur",
+        Value::Text(_) => "text",
+        Value::Time(..) => "time",
+        Value::Uri(_) => "uri",
+        Value::UtcOffset(_) => "utc-offset",
+        Value::Other { .. } => "unknown",
     }
 }
 
@@ -1708,10 +1881,24 @@ END:VCALENDAR\r\n";
         let result = translate_icalendar(ics).unwrap();
         let (_cal, entries) = split_ical_result(&result);
         let rec = entries[0];
-        assert_eq!(
-            get_field(rec, "x_custom_field"),
-            &ImportValue::String("hello world".into())
-        );
+
+        // X-properties are now in the structured icalendar.properties field.
+        let ical_field = get_field(rec, "icalendar");
+        let ImportValue::Record(ical_rec) = ical_field else {
+            panic!("expected icalendar record");
+        };
+        let ImportValue::List(props) = ical_rec.get("properties").unwrap() else {
+            panic!("expected properties list");
+        };
+        assert_eq!(props.len(), 1);
+
+        // Each property is a jCal array: [name, params, type, value]
+        let ImportValue::List(jcal) = &props[0] else {
+            panic!("expected jCal array");
+        };
+        assert_eq!(jcal[0], ImportValue::String("x-custom-field".into()));
+        assert_eq!(jcal[2], ImportValue::String("text".into()));
+        assert_eq!(jcal[3], ImportValue::String("hello world".into()));
     }
 
     #[test]

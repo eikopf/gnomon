@@ -188,24 +188,72 @@ pub fn emit_icalendar(
 
     // ── X-properties and unknown fields ─────────────────────
 
-    // r[impl model.export.icalendar.extension]
-    // r[impl model.export.icalendar.unknown+2]
+    // r[impl model.export.icalendar.extension+2]
+    // r[impl model.export.icalendar.unknown+3]
+
+    // Restore properties from the structured icalendar.properties field.
+    if let Some(ImportValue::Record(ical_rec)) = calendar.get("icalendar")
+        && let Some(ImportValue::List(props)) = ical_rec.get("properties")
+    {
+        for prop_value in props {
+            let ImportValue::List(jcal) = prop_value else {
+                continue;
+            };
+            if jcal.len() < 4 {
+                continue;
+            }
+            let ImportValue::String(name) = &jcal[0] else {
+                continue;
+            };
+            let params = if let ImportValue::Record(params_rec) = &jcal[1] {
+                import_record_to_params(params_rec)
+            } else {
+                Params::default()
+            };
+            let value = jcal_value_to_ical_value(&jcal[2], &jcal[3]);
+            let prop = Prop { value, params };
+            cal.insert_x_property(name.to_uppercase().into(), vec![prop]);
+        }
+    }
+
+    // Process remaining unknown fields.
     for (key, val) in calendar {
         if CALENDAR_KNOWN.contains(&key.as_str()) {
             continue;
         }
-        if !key.starts_with("x_") {
+        if key.contains(':') {
+            // JSCalendar vendor → JSPROP.
+            let json_str = import_value_to_json(val).to_string();
+            let mut params = Params::default();
+            if let Ok(pv) = Box::<calico::model::string::ParamValue>::try_from(key.to_string()) {
+                let jsptr_key = calico::model::string::CaselessStr::from_box_str("JSPTR".into());
+                params.insert_unknown_param(jsptr_key, mitsein::vec1![pv]);
+            }
+            let prop = Prop {
+                value: calico::model::primitive::Value::Text(json_str),
+                params,
+            };
+            cal.insert_x_property("JSPROP".into(), vec![prop]);
+        } else if key.starts_with("x_") {
+            let prop_name = field_name_to_x_property(key);
+            let x_val = import_value_to_ical_value(val);
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
+            cal.insert_x_property(prop_name.into(), vec![prop]);
+        } else {
             warnings.push(format!(
                 "unrecognised non-extension field '{key}' on calendar record"
             ));
+            let prop_name = field_name_to_x_property(key);
+            let x_val = import_value_to_ical_value(val);
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
+            cal.insert_x_property(prop_name.into(), vec![prop]);
         }
-        let prop_name = field_name_to_x_property(key);
-        let x_val = import_value_to_ical_value(val);
-        let prop = Prop {
-            value: x_val,
-            params: Params::default(),
-        };
-        cal.insert_x_property(prop_name.into(), vec![prop]);
     }
 
     w.write_str(&cal.to_ical_string())
@@ -225,6 +273,7 @@ const CALENDAR_KNOWN: &[&str] = &[
     "updated",
     "refresh_interval",
     "source",
+    "icalendar",
 ];
 
 // ── Shared fields for event/todo known-field filtering ────────
@@ -262,6 +311,15 @@ const COMMON_KNOWN: &[&str] = &[
     "images",
     "conferences",
     "request_statuses",
+    "icalendar",
+    "end_time_zone",
+    "recurrence_id_time_zone",
+    "dtstamp",
+    "class",
+    "transparency",
+    "show_without_time",
+    "keywords",
+    "locale",
 ];
 
 const EVENT_EXTRA_KNOWN: &[&str] = &["duration", "free_busy_status"];
@@ -663,7 +721,10 @@ macro_rules! set_common_ical_fields {
     };
 }
 
-/// Emit x-properties and warn about unrecognised non-extension fields.
+// r[impl model.export.icalendar.extension+2]
+// r[impl model.export.icalendar.unknown+3]
+/// Emit x-properties, JSPROP vendor properties, and restore structured
+/// icalendar properties. Warns about unrecognised non-extension fields.
 fn handle_x_properties(
     component: &mut impl XPropertySink,
     record: &ImportRecord,
@@ -671,23 +732,190 @@ fn handle_x_properties(
     kind: &str,
     warnings: &mut Vec<String>,
 ) {
+    // 1. Restore properties from the structured icalendar.properties field.
+    if let Some(ImportValue::Record(ical_rec)) = record.get("icalendar")
+        && let Some(ImportValue::List(props)) = ical_rec.get("properties")
+    {
+        restore_icalendar_properties(component, props);
+    }
+
+    // 2. Process remaining unknown fields.
     for (key, val) in record {
         if COMMON_KNOWN.contains(&key.as_str()) || extra_known.contains(&key.as_str()) {
             continue;
         }
-        if !key.starts_with("x_") {
+
+        if key.contains(':') {
+            // JSCalendar vendor convention (e.g., "com.example:foo") → JSPROP.
+            emit_jsprop(component, key, val);
+        } else if key.starts_with("x_") {
+            // Traditional x_ fields → X-PROPERTY.
+            let prop_name = field_name_to_x_property(key);
+            let x_val = import_value_to_ical_value(val);
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
+            component.insert_x(prop_name, vec![prop]);
+        } else {
+            // Other unknown fields → X-PROPERTY with warning.
             warnings.push(format!(
                 "unrecognised non-extension field '{key}' on {kind} record"
             ));
+            let prop_name = field_name_to_x_property(key);
+            let x_val = import_value_to_ical_value(val);
+            let prop = Prop {
+                value: x_val,
+                params: Params::default(),
+            };
+            component.insert_x(prop_name, vec![prop]);
         }
-        let prop_name = field_name_to_x_property(key);
-        let x_val = import_value_to_ical_value(val);
-        let prop = Prop {
-            value: x_val,
-            params: Params::default(),
+    }
+}
+
+/// Restore iCalendar properties from jCal-format arrays stored in the
+/// `icalendar.properties` field.
+fn restore_icalendar_properties(component: &mut impl XPropertySink, props: &[ImportValue]) {
+    for prop_value in props {
+        let ImportValue::List(jcal) = prop_value else {
+            continue;
         };
+        if jcal.len() < 4 {
+            continue;
+        }
+
+        // [name, params_record, type_str, value]
+        let ImportValue::String(name) = &jcal[0] else {
+            continue;
+        };
+
+        let params = if let ImportValue::Record(params_rec) = &jcal[1] {
+            import_record_to_params(params_rec)
+        } else {
+            Params::default()
+        };
+
+        // Reconstruct the value from the jCal type hint and raw value.
+        let value = jcal_value_to_ical_value(&jcal[2], &jcal[3]);
+
+        let prop = Prop { value, params };
+        // Uppercase the property name for iCalendar.
+        let prop_name = name.to_uppercase();
         component.insert_x(prop_name, vec![prop]);
     }
+}
+
+/// Convert a jCal type string + value back to a calico `Value<String>`.
+fn jcal_value_to_ical_value(
+    type_hint: &ImportValue,
+    value: &ImportValue,
+) -> calico::model::primitive::Value<String> {
+    use calico::model::primitive::Value;
+
+    let type_str = match type_hint {
+        ImportValue::String(s) => s.as_str(),
+        _ => return import_value_to_ical_value(value),
+    };
+
+    // For most types we just delegate to the existing converter, which
+    // produces a TEXT value for strings and an INTEGER for numbers.
+    // The type_str is primarily preserved for round-trip metadata; the
+    // actual value representation is what matters for calico serialization.
+    match type_str {
+        "boolean" => match value {
+            ImportValue::Bool(b) => Value::Boolean(*b),
+            _ => import_value_to_ical_value(value),
+        },
+        "integer" => match value {
+            ImportValue::Integer(n) => Value::Integer(i32::try_from(*n).unwrap_or(i32::MAX)),
+            ImportValue::SignedInteger(n) => {
+                Value::Integer(i32::try_from(*n).unwrap_or(if *n < 0 {
+                    i32::MIN
+                } else {
+                    i32::MAX
+                }))
+            }
+            _ => import_value_to_ical_value(value),
+        },
+        "uri" | "cal-address" => match value {
+            ImportValue::String(s) => Value::Uri(make_calico_uri(s)),
+            _ => import_value_to_ical_value(value),
+        },
+        // text, date-time, date, duration, etc. — use the raw TEXT representation
+        // which calico will serialize as-is for X-properties.
+        _ => import_value_to_ical_value(value),
+    }
+}
+
+/// Reconstruct calico `Params` from an `ImportRecord`.
+///
+/// All parameters are placed in the unknown-param bucket. calico serializes
+/// unknown params identically to known params in the output.
+fn import_record_to_params(record: &ImportRecord) -> Params {
+    use calico::model::string::CaselessStr;
+    use calico::model::string::ParamValue;
+
+    let mut params = Params::default();
+
+    for (key, val) in record {
+        match val {
+            ImportValue::String(s) => {
+                if let Ok(pv) = Box::<ParamValue>::try_from(s.clone()) {
+                    let k = CaselessStr::from_box_str(key.clone().into_boxed_str());
+                    params.insert_unknown_param(k, mitsein::vec1![pv]);
+                }
+            }
+            ImportValue::Integer(n) => {
+                if let Ok(pv) = Box::<ParamValue>::try_from(n.to_string()) {
+                    let k = CaselessStr::from_box_str(key.clone().into_boxed_str());
+                    params.insert_unknown_param(k, mitsein::vec1![pv]);
+                }
+            }
+            ImportValue::Bool(b) => {
+                let s = if *b { "TRUE" } else { "FALSE" };
+                if let Ok(pv) = Box::<ParamValue>::try_from(s.to_string()) {
+                    let k = CaselessStr::from_box_str(key.clone().into_boxed_str());
+                    params.insert_unknown_param(k, mitsein::vec1![pv]);
+                }
+            }
+            ImportValue::List(items) => {
+                let vals: Vec<Box<ParamValue>> = items
+                    .iter()
+                    .filter_map(|v| match v {
+                        ImportValue::String(s) => Box::<ParamValue>::try_from(s.clone()).ok(),
+                        _ => None,
+                    })
+                    .collect();
+                if let Ok(v1) = mitsein::prelude::Vec1::try_from(vals) {
+                    let k = CaselessStr::from_box_str(key.clone().into_boxed_str());
+                    params.insert_unknown_param(k, v1);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    params
+}
+
+/// Emit a JSPROP property for a JSCalendar vendor field.
+fn emit_jsprop(component: &mut impl XPropertySink, key: &str, val: &ImportValue) {
+    use calico::model::string::{CaselessStr, ParamValue};
+
+    let json_str = import_value_to_json(val).to_string();
+    let mut params = Params::default();
+
+    // Set JSPTR parameter to the field key.
+    if let Ok(pv) = Box::<ParamValue>::try_from(key.to_string()) {
+        let jsptr_key = CaselessStr::from_box_str("JSPTR".into());
+        params.insert_unknown_param(jsptr_key, mitsein::vec1![pv]);
+    }
+
+    let prop = Prop {
+        value: calico::model::primitive::Value::Text(json_str),
+        params,
+    };
+    component.insert_x("JSPROP".to_string(), vec![prop]);
 }
 
 /// Minimal trait to abstract x-property insertion over Event and Todo.
