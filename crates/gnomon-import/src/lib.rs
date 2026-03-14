@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 
+use base64::Engine as _;
 use calico::model::component::{Calendar as ICalCalendar, CalendarComponent};
 use calico::model::primitive::{
     Attachment, ClassValue, DateTime, DateTimeOrDate, Duration, ExactDuration, Geo,
@@ -523,37 +524,9 @@ fn translate_attachment(val: &Attachment) -> ImportValue {
     }
 }
 
-/// Simple base64 encoder (no external dep needed — just use a manual implementation).
+/// Encode binary data as standard base64.
 fn base64_encode(data: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity(data.len().div_ceil(3) * 4);
-    for chunk in data.chunks(3) {
-        let b0 = u32::from(chunk[0]);
-        let b1 = if chunk.len() > 1 {
-            u32::from(chunk[1])
-        } else {
-            0
-        };
-        let b2 = if chunk.len() > 2 {
-            u32::from(chunk[2])
-        } else {
-            0
-        };
-        let triple = (b0 << 16) | (b1 << 8) | b2;
-        result.push(ALPHABET[((triple >> 18) & 0x3F) as usize] as char);
-        result.push(ALPHABET[((triple >> 12) & 0x3F) as usize] as char);
-        if chunk.len() > 1 {
-            result.push(ALPHABET[((triple >> 6) & 0x3F) as usize] as char);
-        } else {
-            result.push('=');
-        }
-        if chunk.len() > 2 {
-            result.push(ALPHABET[(triple & 0x3F) as usize] as char);
-        } else {
-            result.push('=');
-        }
-    }
-    result
+    base64::engine::general_purpose::STANDARD.encode(data)
 }
 
 /// Translate a REQUEST-STATUS property to a string.

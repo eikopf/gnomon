@@ -543,6 +543,7 @@ dependencies = [
 name = "gnomon-import"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "calico",
  "expect-test",
  "jscalendar",

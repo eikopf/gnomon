@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+base64 = "0.22"
 calico = "0.5"
 jscalendar = { version = "0.1", features = ["serde_json"] }
 serde_json = "1"
