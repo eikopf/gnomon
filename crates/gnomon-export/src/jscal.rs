@@ -217,11 +217,10 @@ fn build_event(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Even
     {
         event.set_updated(dt);
     }
-    if let Some(n) = get_u64(record, "sequence") {
-        if let Some(ui) = UnsignedInt::new(n) {
+    if let Some(n) = get_u64(record, "sequence")
+        && let Some(ui) = UnsignedInt::new(n) {
             event.set_sequence(ui);
         }
-    }
     if let Some(s) = get_str(record, "method") {
         let m = Token::<Method, Box<str>>::from_str(s).unwrap();
         event.set_method(m);
@@ -409,11 +408,10 @@ fn build_task(record: &ImportRecord, warnings: &mut Vec<String>) -> Result<Task<
     {
         task.set_updated(dt);
     }
-    if let Some(n) = get_u64(record, "sequence") {
-        if let Some(ui) = UnsignedInt::new(n) {
+    if let Some(n) = get_u64(record, "sequence")
+        && let Some(ui) = UnsignedInt::new(n) {
             task.set_sequence(ui);
         }
-    }
     if let Some(s) = get_str(record, "method") {
         let m = Token::<Method, Box<str>>::from_str(s).unwrap();
         task.set_method(m);
@@ -728,11 +726,10 @@ fn get_recurrence_rules(record: &ImportRecord) -> Option<Vec<RRule>> {
         }
     }
     // Fall back to iCalendar-style single record.
-    if let Some(ImportValue::Record(rec)) = record.get("recur") {
-        if let Some(rrule) = record_to_rrule(rec) {
+    if let Some(ImportValue::Record(rec)) = record.get("recur")
+        && let Some(rrule) = record_to_rrule(rec) {
             return Some(vec![rrule]);
         }
-    }
     None
 }
 
@@ -1008,17 +1005,13 @@ fn record_to_rrule(rec: &ImportRecord) -> Option<RRule> {
     // TERMINATION (COUNT or UNTIL)
     let termination = if let Some(count) = get_u64(rec, "count") {
         Some(Termination::Count(count))
-    } else if let Some(dt) = get_datetime(rec, "until") {
-        Some(Termination::Until(
+    } else { get_datetime(rec, "until").map(|dt| Termination::Until(
             rfc5545_types::time::DateTimeOrDate::DateTime(DateTime {
                 date: dt.date,
                 time: dt.time,
                 marker: TimeFormat::Local,
             }),
-        ))
-    } else {
-        None
-    };
+        )) };
 
     // WKST
     let week_start = get_str(rec, "week_start").and_then(str_to_weekday);
@@ -1058,8 +1051,8 @@ fn build_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, Location<Js
     if let Some(ImportValue::Record(locs)) = record.get("locations") {
         let mut map = HashMap::new();
         for (id_str, val) in locs {
-            if let Ok(id) = Id::new(id_str) {
-                if let ImportValue::Record(loc_rec) = val {
+            if let Ok(id) = Id::new(id_str)
+                && let ImportValue::Record(loc_rec) = val {
                     let mut loc = Location::new();
                     if let Some(name) = get_str(loc_rec, "name") {
                         loc.set_name(name.to_string());
@@ -1070,14 +1063,12 @@ fn build_locations(record: &ImportRecord) -> Option<HashMap<Box<Id>, Location<Js
                     if let Some(tz) = get_str(loc_rec, "time_zone") {
                         loc.set_time_zone(tz.to_string());
                     }
-                    if let Some(coords) = get_str(loc_rec, "coordinates") {
-                        if let Ok(geo) = GeoUri::new(coords) {
+                    if let Some(coords) = get_str(loc_rec, "coordinates")
+                        && let Ok(geo) = GeoUri::new(coords) {
                             loc.set_coordinates(geo.into());
                         }
-                    }
                     map.insert(id.into(), loc);
                 }
-            }
         }
         if !map.is_empty() {
             return Some(map);
@@ -1123,8 +1114,8 @@ fn build_virtual_locations(
     };
     let mut map = HashMap::new();
     for (id_str, val) in vlocs {
-        if let Ok(id) = Id::new(id_str) {
-            if let ImportValue::Record(vloc_rec) = val {
+        if let Ok(id) = Id::new(id_str)
+            && let ImportValue::Record(vloc_rec) = val {
                 let uri_str = get_str(vloc_rec, "uri").unwrap_or("https://example.com");
                 if let Ok(uri) = Uri::new(uri_str) {
                     let mut vloc = VirtualLocation::new(uri.into());
@@ -1137,7 +1128,6 @@ fn build_virtual_locations(
                     map.insert(id.into(), vloc);
                 }
             }
-        }
     }
     if map.is_empty() { None } else { Some(map) }
 }
@@ -1155,15 +1145,14 @@ fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
     if let Some(ImportValue::Record(links_map)) = record.get("links") {
         let mut map = HashMap::new();
         for (id_str, val) in links_map {
-            if let Ok(id) = Id::new(id_str) {
-                if let ImportValue::Record(link_rec) = val {
+            if let Ok(id) = Id::new(id_str)
+                && let ImportValue::Record(link_rec) = val {
                     let href_str = get_str(link_rec, "href").unwrap_or("https://example.com");
                     if let Ok(href) = Uri::new(href_str) {
                         let link = Link::new(href.into());
                         map.insert(id.into(), link);
                     }
                 }
-            }
         }
         if !map.is_empty() {
             return Some(map);
@@ -1174,15 +1163,14 @@ fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
     let mut map: HashMap<Box<Id>, Link<Json>> = HashMap::new();
     let mut counter = 1u32;
 
-    if let Some(url_str) = get_str(record, "url") {
-        if let Ok(href) = Uri::new(url_str) {
+    if let Some(url_str) = get_str(record, "url")
+        && let Ok(href) = Uri::new(url_str) {
             let id_str = counter.to_string();
             if let Ok(id) = Id::new(&id_str) {
                 map.insert(id.into(), Link::new(href.into()));
                 counter += 1;
             }
         }
-    }
 
     if let Some(ImportValue::List(attachments)) = record.get("attachments") {
         for att in attachments {
@@ -1191,15 +1179,14 @@ fn build_links(record: &ImportRecord) -> Option<HashMap<Box<Id>, Link<Json>>> {
                 ImportValue::Record(rec) => get_str(rec, "uri").or_else(|| get_str(rec, "url")),
                 _ => None,
             };
-            if let Some(uri_str) = uri_str {
-                if let Ok(href) = Uri::new(uri_str) {
+            if let Some(uri_str) = uri_str
+                && let Ok(href) = Uri::new(uri_str) {
                     let id_str = counter.to_string();
                     if let Ok(id) = Id::new(&id_str) {
                         map.insert(id.into(), Link::new(href.into()));
                         counter += 1;
                     }
                 }
-            }
         }
     }
 
@@ -1219,12 +1206,11 @@ fn build_related_to(record: &ImportRecord) -> Option<HashMap<Box<Uid>, Relation<
             // iCalendar-style: list of UID strings.
             let mut map: HashMap<Box<Uid>, Relation<Json>> = HashMap::new();
             for item in items {
-                if let ImportValue::String(s) = item {
-                    if let Ok(uid) = Uid::new(s) {
+                if let ImportValue::String(s) = item
+                    && let Ok(uid) = Uid::new(s) {
                         let relation = Relation::new(HashSet::new());
                         map.insert(uid.into(), relation);
                     }
-                }
             }
             if map.is_empty() { None } else { Some(map) }
         }
@@ -1234,8 +1220,8 @@ fn build_related_to(record: &ImportRecord) -> Option<HashMap<Box<Uid>, Relation<
             for (uid_str, val) in rel_map {
                 if let Ok(uid) = Uid::new(uid_str) {
                     let mut relation_types = HashSet::new();
-                    if let ImportValue::Record(rel_rec) = val {
-                        if let Some(ImportValue::List(rels)) = rel_rec.get("relation") {
+                    if let ImportValue::Record(rel_rec) = val
+                        && let Some(ImportValue::List(rels)) = rel_rec.get("relation") {
                             for rel in rels {
                                 if let ImportValue::String(r) = rel {
                                     let rv =
@@ -1244,7 +1230,6 @@ fn build_related_to(record: &ImportRecord) -> Option<HashMap<Box<Uid>, Relation<
                                 }
                             }
                         }
-                    }
                     let relation = Relation::new(relation_types);
                     map.insert(uid.into(), relation);
                 }
@@ -1265,20 +1250,18 @@ fn build_event_participants(
     if let Some(ImportValue::Record(parts)) = record.get("participants") {
         let mut map = HashMap::new();
         for (id_str, val) in parts {
-            if let Ok(id) = Id::new(id_str) {
-                if let ImportValue::Record(part_rec) = val {
+            if let Ok(id) = Id::new(id_str)
+                && let ImportValue::Record(part_rec) = val {
                     let mut participant = Participant::new();
                     if let Some(name) = get_str(part_rec, "name") {
                         participant.set_name(name.to_string());
                     }
-                    if let Some(email) = get_str(part_rec, "email") {
-                        if let Ok(addr) = EmailAddr::new(email) {
+                    if let Some(email) = get_str(part_rec, "email")
+                        && let Ok(addr) = EmailAddr::new(email) {
                             participant.set_email(addr.into());
                         }
-                    }
                     map.insert(id.into(), participant);
                 }
-            }
         }
         if !map.is_empty() {
             return Some(map);
@@ -1350,20 +1333,18 @@ fn build_task_participants(
     if let Some(ImportValue::Record(parts)) = record.get("participants") {
         let mut map = HashMap::new();
         for (id_str, val) in parts {
-            if let Ok(id) = Id::new(id_str) {
-                if let ImportValue::Record(part_rec) = val {
+            if let Ok(id) = Id::new(id_str)
+                && let ImportValue::Record(part_rec) = val {
                     let mut participant = TaskParticipant::new();
                     if let Some(name) = get_str(part_rec, "name") {
                         participant.set_name(name.to_string());
                     }
-                    if let Some(email) = get_str(part_rec, "email") {
-                        if let Ok(addr) = EmailAddr::new(email) {
+                    if let Some(email) = get_str(part_rec, "email")
+                        && let Ok(addr) = EmailAddr::new(email) {
                             participant.set_email(addr.into());
                         }
-                    }
                     map.insert(id.into(), participant);
                 }
-            }
         }
         if !map.is_empty() {
             return Some(map);
@@ -1436,16 +1417,14 @@ fn build_reply_to(record: &ImportRecord) -> Option<ReplyTo> {
     };
 
     let mut reply_to = ReplyTo::new();
-    if let Some(imip_str) = get_str(rt_rec, "imip") {
-        if let Ok(addr) = CalAddress::new(imip_str) {
+    if let Some(imip_str) = get_str(rt_rec, "imip")
+        && let Ok(addr) = CalAddress::new(imip_str) {
             reply_to.set_imip(addr.into());
         }
-    }
-    if let Some(web_str) = get_str(rt_rec, "web") {
-        if let Ok(uri) = Uri::new(web_str) {
+    if let Some(web_str) = get_str(rt_rec, "web")
+        && let Ok(uri) = Uri::new(web_str) {
             reply_to.set_web(uri.into());
         }
-    }
 
     Some(reply_to)
 }
