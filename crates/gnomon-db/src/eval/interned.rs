@@ -15,36 +15,50 @@ impl fmt::Debug for FieldName<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PathSegment<'db> {
-    Field(FieldName<'db>),
+/// A segment of a [`FieldPath`]. Uses [`salsa::Id`] instead of [`FieldName`]
+/// to keep the type `'static`, allowing `FieldPath` to be salsa-interned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PathSegment {
+    Field(salsa::Id),
     Index(usize),
 }
 
 /// A path into a record structure, e.g. `[Field("alerts"), Index(0), Field("trigger")]`.
 ///
-/// Not salsa-interned because it contains `FieldName<'db>` values that carry a
-/// non-`'static` lifetime.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FieldPath<'db>(pub Vec<PathSegment<'db>>);
+/// Salsa-interned for O(1) cloning — paths are stored in every [`super::types::Blame`]
+/// value, so cheap clones matter.
+#[salsa::interned]
+pub struct FieldPath<'db> {
+    #[returns(ref)]
+    pub segments: Vec<PathSegment>,
+}
+
+impl fmt::Debug for FieldPath<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let id: salsa::Id = salsa::plumbing::AsId::as_id(self);
+        f.debug_tuple("FieldPath").field(&id).finish()
+    }
+}
 
 impl<'db> FieldPath<'db> {
-    pub fn root() -> Self {
-        Self(Vec::new())
+    pub fn root(db: &'db dyn crate::Db) -> Self {
+        FieldPath::new(db, Vec::new())
     }
 
-    pub fn push(&self, segment: PathSegment<'db>) -> Self {
-        let mut segments = self.0.clone();
-        segments.push(segment);
-        Self(segments)
+    pub fn field(&self, db: &'db dyn crate::Db, name: FieldName<'db>) -> Self {
+        self.push(db, PathSegment::Field(salsa::plumbing::AsId::as_id(&name)))
     }
 
-    pub fn field(&self, name: FieldName<'db>) -> Self {
-        self.push(PathSegment::Field(name))
+    pub fn index(&self, db: &'db dyn crate::Db, i: usize) -> Self {
+        self.push(db, PathSegment::Index(i))
     }
 
-    pub fn index(&self, i: usize) -> Self {
-        self.push(PathSegment::Index(i))
+    fn push(&self, db: &'db dyn crate::Db, segment: PathSegment) -> Self {
+        let segs = self.segments(db);
+        let mut new = Vec::with_capacity(segs.len() + 1);
+        new.extend_from_slice(segs);
+        new.push(segment);
+        FieldPath::new(db, new)
     }
 }
 

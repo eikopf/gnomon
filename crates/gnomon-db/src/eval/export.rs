@@ -73,7 +73,7 @@ mod tests {
         let source = SourceFile::new(db, "/test".into(), String::new());
         Blame {
             decl: DeclId::new(db, source, 0, DeclKind::Expr),
-            path: FieldPath::root(),
+            path: FieldPath::root(db),
         }
     }
 
@@ -88,7 +88,7 @@ mod tests {
             FieldName::new(&db, "name".to_string()),
             Blamed {
                 value: Value::String("hello".to_string()),
-                blame: blame.clone(),
+                blame,
             },
         );
         record.insert(
@@ -96,7 +96,7 @@ mod tests {
             FieldName::new(&db, "count".to_string()),
             Blamed {
                 value: Value::Integer(42),
-                blame: blame.clone(),
+                blame,
             },
         );
 
@@ -129,7 +129,7 @@ mod tests {
             FieldName::new(&db, "uid".to_string()),
             Blamed {
                 value: Value::String("cal-1".to_string()),
-                blame: blame.clone(),
+                blame,
             },
         );
         props.insert(
@@ -137,7 +137,7 @@ mod tests {
             FieldName::new(&db, "type".to_string()),
             Blamed {
                 value: Value::String("calendar".to_string()),
-                blame: blame.clone(),
+                blame,
             },
         );
 
@@ -147,7 +147,7 @@ mod tests {
             FieldName::new(&db, "type".to_string()),
             Blamed {
                 value: Value::String("event".to_string()),
-                blame: blame.clone(),
+                blame,
             },
         );
         entry.insert(
@@ -155,7 +155,7 @@ mod tests {
             FieldName::new(&db, "title".to_string()),
             Blamed {
                 value: Value::String("Standup".to_string()),
-                blame: blame.clone(),
+                blame,
             },
         );
 
@@ -163,7 +163,7 @@ mod tests {
             properties: props,
             entries: vec![Blamed {
                 value: entry,
-                blame: blame.clone(),
+                blame,
             }],
             foreign_import: false,
         };

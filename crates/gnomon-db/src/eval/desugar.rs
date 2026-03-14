@@ -141,7 +141,7 @@ pub fn desugar_every<'db>(
                 "by_year_day",
                 Value::List(vec![Blamed {
                     value: Value::Integer(year_day),
-                    blame: blame.clone(),
+                    blame: *blame,
                 }]),
             ));
         }
@@ -156,7 +156,7 @@ pub fn desugar_every<'db>(
             "by_day",
             Value::List(vec![Blamed {
                 value: Value::Record(nday_record),
-                blame: blame.clone(),
+                blame: *blame,
             }]),
         ));
     } else {
@@ -199,7 +199,7 @@ pub(super) fn make_record<'db>(
             field_name,
             Blamed {
                 value: value.clone(),
-                blame: blame.clone(),
+                blame: *blame,
             },
         );
     }
@@ -241,7 +241,7 @@ mod tests {
         let decl_id = DeclId::new(db, source, 0, DeclKind::Event);
         Blame {
             decl: decl_id,
-            path: FieldPath::root(),
+            path: FieldPath::root(db),
         }
     }
 

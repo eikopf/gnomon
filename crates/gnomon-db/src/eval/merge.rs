@@ -105,7 +105,7 @@ pub fn validate_calendar<'db>(
                             );
                             calendar.entries.push(Blamed {
                                 value: r.clone(),
-                                blame: item.blame.clone(),
+                                blame: item.blame,
                             });
                         }
                     }
@@ -241,7 +241,7 @@ fn derive_uids<'db>(
             uid_key,
             Blamed {
                 value: Value::String(derived.to_string()),
-                blame: entry.blame.clone(),
+                blame: entry.blame,
             },
         );
     }
@@ -289,7 +289,7 @@ fn flatten_to_records<'db>(
 
     let default_blame = || super::types::Blame {
         decl: DeclId::new(db, source, 0, DeclKind::Calendar),
-        path: FieldPath::root(),
+        path: FieldPath::root(db),
     };
 
     match value {
@@ -297,7 +297,7 @@ fn flatten_to_records<'db>(
             let blame = r
                 .values()
                 .next()
-                .map(|b| b.blame.clone())
+                .map(|b| b.blame)
                 .unwrap_or_else(default_blame);
             vec![(r, blame)]
         }

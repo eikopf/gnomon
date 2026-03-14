@@ -441,7 +441,7 @@ mod tests {
         let decl_id = DeclId::new(db, source, 0, DeclKind::Event);
         Blame {
             decl: decl_id,
-            path: FieldPath::root(),
+            path: FieldPath::root(db),
         }
     }
 
@@ -524,7 +524,7 @@ mod tests {
                 "by_day",
                 Value::List(vec![Blamed {
                     value: Value::Record(nday_record),
-                    blame: blame.clone(),
+                    blame,
                 }]),
             ),
         ];
