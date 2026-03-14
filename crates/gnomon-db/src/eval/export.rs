@@ -73,7 +73,7 @@ mod tests {
         let source = SourceFile::new(db, "/test".into(), String::new());
         Blame {
             decl: DeclId::new(db, source, 0, DeclKind::Expr),
-            path: FieldPath::root(),
+            path: FieldPath::root(db),
         }
     }
 

@@ -289,7 +289,7 @@ fn flatten_to_records<'db>(
 
     let default_blame = || super::types::Blame {
         decl: DeclId::new(db, source, 0, DeclKind::Calendar),
-        path: FieldPath::root(),
+        path: FieldPath::root(db),
     };
 
     match value {

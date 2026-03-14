@@ -107,7 +107,7 @@ impl<'db> LowerCtx<'db> {
                 let name = name_tok.text().to_string();
                 let decl_id = self.make_decl_id(0, DeclKind::Expr);
                 let value = match binding.value_expr() {
-                    Some(expr) => self.lower_top_expr(&expr, decl_id, &FieldPath::root()),
+                    Some(expr) => self.lower_top_expr(&expr, decl_id, &FieldPath::root(self.db)),
                     None => Value::Undefined,
                 };
                 self.env.push((name, value));
@@ -131,7 +131,7 @@ impl<'db> LowerCtx<'db> {
                     .enumerate()
                     .map(|(i, expr)| {
                         let decl_id = self.make_decl_id(i, decl_kind_for_expr(expr));
-                        let value = self.lower_top_expr(expr, decl_id, &FieldPath::root());
+                        let value = self.lower_top_expr(expr, decl_id, &FieldPath::root(self.db));
                         Blamed {
                             value,
                             blame: self.root_blame(decl_id),
@@ -142,13 +142,13 @@ impl<'db> LowerCtx<'db> {
             } else {
                 // Single expression mode
                 let decl_id = self.make_decl_id(0, DeclKind::Expr);
-                self.lower_top_expr(&exprs[0], decl_id, &FieldPath::root())
+                self.lower_top_expr(&exprs[0], decl_id, &FieldPath::root(self.db))
             }
         }
     }
 
     fn lower_event(&mut self, ev: &ast::EventExpr, decl_id: DeclId<'db>) -> Record<'db> {
-        let base_path = FieldPath::root();
+        let base_path = FieldPath::root(self.db);
 
         if ev.name().is_some() {
             // r[impl decl.short-event.desugar+2]
@@ -173,7 +173,7 @@ impl<'db> LowerCtx<'db> {
                     self.insert_field(&mut record, "start", value, decl_id, &base_path);
                 }
                 if let Some(dur_token) = span.duration() {
-                    let blame = self.make_blame(decl_id, &base_path.field(self.intern("duration")));
+                    let blame = self.make_blame(decl_id, &base_path.field(self.db,self.intern("duration")));
                     if let Some(value) =
                         desugar::desugar_duration(self.db, dur_token.text(), &blame)
                     {
@@ -210,7 +210,7 @@ impl<'db> LowerCtx<'db> {
     }
 
     fn lower_task(&mut self, task: &ast::TaskExpr, decl_id: DeclId<'db>) -> Record<'db> {
-        let base_path = FieldPath::root();
+        let base_path = FieldPath::root(self.db);
 
         if task.name().is_some() {
             // r[impl decl.short-task.desugar+2]
@@ -277,7 +277,7 @@ impl<'db> LowerCtx<'db> {
             };
 
             let field_name = self.intern(name_token.text());
-            let field_path = base_path.field(field_name);
+            let field_path = base_path.field(self.db,field_name);
             let blame = self.make_blame(decl_id, &field_path);
 
             let value = self.lower_top_expr(&value_expr, decl_id, &field_path);
@@ -556,7 +556,7 @@ impl<'db> LowerCtx<'db> {
     ) -> Value<'db> {
         let mut items = Vec::new();
         for (i, elem) in list.elements().enumerate() {
-            let elem_path = base_path.index(i);
+            let elem_path = base_path.index(self.db,i);
             let blame = self.make_blame(decl_id, &elem_path);
             let value = self.lower_top_expr(&elem, decl_id, &elem_path);
             items.push(Blamed { value, blame });
@@ -571,7 +571,7 @@ impl<'db> LowerCtx<'db> {
         base_path: &FieldPath<'db>,
         field_name: &str,
     ) -> Option<Value<'db>> {
-        let blame = self.make_blame(decl_id, &base_path.field(self.intern(field_name)));
+        let blame = self.make_blame(decl_id, &base_path.field(self.db,self.intern(field_name)));
         if let Some(datetime_token) = dt.datetime() {
             desugar::desugar_datetime(self.db, datetime_token.text(), &blame)
         } else {
@@ -783,7 +783,7 @@ impl<'db> LowerCtx<'db> {
             }
             ImportFormat::ICalendar => {
                 let decl_id = self.make_decl_id(0, DeclKind::Expr);
-                let blame = self.make_blame(decl_id, &FieldPath::root());
+                let blame = self.make_blame(decl_id, &FieldPath::root(self.db));
                 match super::import::translate_icalendar(self.db, &content, &blame) {
                     Ok(value) => value,
                     Err(msg) => {
@@ -794,7 +794,7 @@ impl<'db> LowerCtx<'db> {
             }
             ImportFormat::JSCalendar => {
                 let decl_id = self.make_decl_id(0, DeclKind::Expr);
-                let blame = self.make_blame(decl_id, &FieldPath::root());
+                let blame = self.make_blame(decl_id, &FieldPath::root(self.db));
                 match super::import::translate_jscalendar(self.db, &content, &blame) {
                     Ok(value) => value,
                     Err(msg) => {
@@ -820,7 +820,7 @@ impl<'db> LowerCtx<'db> {
     fn root_blame(&self, decl_id: DeclId<'db>) -> Blame<'db> {
         Blame {
             decl: decl_id,
-            path: FieldPath::root(),
+            path: FieldPath::root(self.db),
         }
     }
 
@@ -840,7 +840,7 @@ impl<'db> LowerCtx<'db> {
         base_path: &FieldPath<'db>,
     ) {
         let field_name = self.intern(name);
-        let blame = self.make_blame(decl_id, &base_path.field(field_name));
+        let blame = self.make_blame(decl_id, &base_path.field(self.db,field_name));
         record.insert(self.db, field_name, Blamed { value, blame });
     }
 

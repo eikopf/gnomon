@@ -1,6 +1,6 @@
 use super::interned::{DeclId, FieldName, FieldPath};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Blame<'db> {
     pub decl: DeclId<'db>,
     pub path: FieldPath<'db>,
@@ -131,7 +131,7 @@ mod tests {
         let source = SourceFile::new(db, "/test".into(), String::new());
         Blame {
             decl: DeclId::new(db, source, 0, DeclKind::Expr),
-            path: FieldPath::root(),
+            path: FieldPath::root(db),
         }
     }
 

@@ -111,10 +111,13 @@ impl<'db> RenderWithDb<'db> for DeclId<'db> {
     }
 }
 
-impl<'db> RenderWithDb<'db> for PathSegment<'db> {
+impl<'db> RenderWithDb<'db> for PathSegment {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
         match self {
-            PathSegment::Field(name) => name.render_fmt(f, db),
+            PathSegment::Field(id) => {
+                let name: FieldName<'db> = salsa::plumbing::FromId::from_id(*id);
+                name.render_fmt(f, db)
+            }
             PathSegment::Index(i) => write!(f, "[{i}]"),
         }
     }
@@ -122,7 +125,7 @@ impl<'db> RenderWithDb<'db> for PathSegment<'db> {
 
 impl<'db> RenderWithDb<'db> for FieldPath<'db> {
     fn render_fmt(&self, f: &mut fmt::Formatter<'_>, db: &'db dyn Db) -> fmt::Result {
-        for (i, segment) in self.0.iter().enumerate() {
+        for (i, segment) in self.segments(db).iter().enumerate() {
             if i > 0 && matches!(segment, PathSegment::Field(_)) {
                 write!(f, ".")?;
             }

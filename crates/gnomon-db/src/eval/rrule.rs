@@ -441,7 +441,7 @@ mod tests {
         let decl_id = DeclId::new(db, source, 0, DeclKind::Event);
         Blame {
             decl: decl_id,
-            path: FieldPath::root(),
+            path: FieldPath::root(db),
         }
     }
 
