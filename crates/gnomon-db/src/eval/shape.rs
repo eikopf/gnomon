@@ -2236,7 +2236,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("mixed positive and negative")),
+            diags
+                .iter()
+                .any(|d| d.contains("mixed positive and negative")),
             "expected mixed-sign duration error, got: {diags:?}"
         );
     }
@@ -2322,7 +2324,9 @@ mod tests {
             )],
         );
         assert!(
-            diags.iter().any(|d| d.contains("mixed positive and negative")),
+            diags
+                .iter()
+                .any(|d| d.contains("mixed positive and negative")),
             "expected mixed-sign estimated_duration error, got: {diags:?}"
         );
     }
