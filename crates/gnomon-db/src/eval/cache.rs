@@ -6,7 +6,7 @@
 //!
 //! All filesystem errors are silently ignored — the cache is best-effort.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, io};
 
@@ -137,7 +137,7 @@ pub fn store(url: &str, content: &str, content_type: &str, format_hint: &str) {
 }
 
 /// Remove cache entries older than `MAX_CACHE_AGE_SECS`.
-fn evict_expired(dir: &PathBuf) {
+fn evict_expired(dir: &Path) {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
