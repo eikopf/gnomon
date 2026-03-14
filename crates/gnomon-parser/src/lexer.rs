@@ -238,7 +238,10 @@ mod tests {
 
     fn kinds(input: &str) -> Vec<(SyntaxKind, &str)> {
         let tokens = lex(input);
-        tokens.iter().map(|tok| (tok.kind, tok.text(input))).collect()
+        tokens
+            .iter()
+            .map(|tok| (tok.kind, tok.text(input)))
+            .collect()
     }
 
     // ── Ambiguity resolution ─────────────────────────────────────
