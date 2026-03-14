@@ -16,21 +16,21 @@ pub struct ParseError {
 
 pub struct Parser {
     tokens: Vec<Token>,
+    /// The original source string; tokens reference it via byte ranges.
+    source: String,
     pos: usize,
     builder: GreenNodeBuilder<'static>,
     errors: Vec<ParseError>,
-    /// Cumulative byte offset up to (but not including) `tokens[pos]`.
-    offset: usize,
 }
 
 impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
+    pub fn new(tokens: Vec<Token>, source: String) -> Self {
         Self {
             tokens,
+            source,
             pos: 0,
             builder: GreenNodeBuilder::new(),
             errors: Vec::new(),
-            offset: 0,
         }
     }
 
@@ -80,7 +80,7 @@ impl Parser {
                 continue;
             }
             if remaining == 0 {
-                return &self.tokens[pos].text;
+                return self.tokens[pos].text(&self.source);
             }
             remaining -= 1;
             pos += 1;
@@ -108,8 +108,7 @@ impl Parser {
     fn skip_trivia(&mut self) {
         while self.pos < self.tokens.len() && self.tokens[self.pos].kind.is_trivia() {
             let tok = &self.tokens[self.pos];
-            self.builder.token(tok.kind.into(), &tok.text);
-            self.offset += tok.text.len();
+            self.builder.token(tok.kind.into(), tok.text(&self.source));
             self.pos += 1;
         }
     }
@@ -119,8 +118,7 @@ impl Parser {
         self.skip_trivia();
         if self.pos < self.tokens.len() {
             let tok = &self.tokens[self.pos];
-            self.builder.token(tok.kind.into(), &tok.text);
-            self.offset += tok.text.len();
+            self.builder.token(tok.kind.into(), tok.text(&self.source));
             self.pos += 1;
         }
     }
@@ -132,8 +130,7 @@ impl Parser {
         self.skip_trivia();
         if self.pos < self.tokens.len() {
             let tok = &self.tokens[self.pos];
-            self.builder.token(kind.into(), &tok.text);
-            self.offset += tok.text.len();
+            self.builder.token(kind.into(), tok.text(&self.source));
             self.pos += 1;
         }
     }
@@ -175,16 +172,14 @@ impl Parser {
     fn current_range(&self) -> std::ops::Range<usize> {
         // Skip trivia to find the actual next token range
         let mut pos = self.pos;
-        let mut off = self.offset;
         while pos < self.tokens.len() && self.tokens[pos].kind.is_trivia() {
-            off += self.tokens[pos].text.len();
             pos += 1;
         }
         if pos < self.tokens.len() {
-            let len = self.tokens[pos].text.len();
-            off..off + len
+            self.tokens[pos].span.clone()
         } else {
-            off..off
+            let end = self.source.len();
+            end..end
         }
     }
 
