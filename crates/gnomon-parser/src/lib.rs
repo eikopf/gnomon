@@ -59,7 +59,7 @@ impl Parse {
 pub fn parse(source: &str) -> Parse {
     let preprocessed = preprocess::preprocess(source);
     let tokens = lexer::lex(&preprocessed);
-    let parser = parser::Parser::new(tokens, preprocessed);
+    let parser = parser::Parser::new(tokens, String::from(preprocessed));
     let (green_node, errors) = parser.parse();
     Parse { green_node, errors }
 }
