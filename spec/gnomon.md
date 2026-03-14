@@ -1540,7 +1540,7 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 > r[model.import.jscalendar.types]
 > A JSCalendar import MUST translate `Event` objects into event records and `Task` objects into task records. `Group` objects MUST be flattened: each entry in the group is translated individually.
 
-> r[model.import.jscalendar.event]
+> r[model.import.jscalendar.event+2]
 > A JSCalendar `Event` MUST be translated to a record with the following field mapping:
 >
 > | JSCalendar Property | Gnomon Field | Type |
@@ -1561,8 +1561,22 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 > | `showWithoutTime` | `show_without_time` | boolean |
 > | `categories` | `categories` | list of strings |
 > | `keywords` | `keywords` | list of strings |
+> | `created` | `created` | UTC datetime record |
+> | `updated` | `updated` | UTC datetime record |
+> | `sequence` | `sequence` | integer |
+> | `method` | `method` | string |
+> | `recurrenceId` | `recurrence_id` | datetime record |
+> | `recurrenceRules` | `recurrence_rules` | list of recurrence rule records |
+> | `excludedRecurrenceRules` | `excluded_recurrence_rules` | list of recurrence rule records |
+> | `locations` | `locations` | id-keyed map of location records |
+> | `virtualLocations` | `virtual_locations` | id-keyed map of virtual location records |
+> | `links` | `links` | id-keyed map of link records |
+> | `relatedTo` | `related_to` | uid-keyed map of relation records |
+> | `participants` | `participants` | id-keyed map of participant records |
+> | `replyTo` | `reply_to` | record |
+> | `requestStatus` | `request_status` | request status record |
 
-> r[model.import.jscalendar.task]
+> r[model.import.jscalendar.task+2]
 > A JSCalendar `Task` MUST be translated to a record with the following field mapping:
 >
 > | JSCalendar Property | Gnomon Field | Type |
@@ -1585,6 +1599,20 @@ When an import source is in a foreign format, it MUST be translated into the Gno
 > | `showWithoutTime` | `show_without_time` | boolean |
 > | `categories` | `categories` | list of strings |
 > | `keywords` | `keywords` | list of strings |
+> | `created` | `created` | UTC datetime record |
+> | `updated` | `updated` | UTC datetime record |
+> | `sequence` | `sequence` | integer |
+> | `method` | `method` | string |
+> | `recurrenceId` | `recurrence_id` | datetime record |
+> | `recurrenceRules` | `recurrence_rules` | list of recurrence rule records |
+> | `excludedRecurrenceRules` | `excluded_recurrence_rules` | list of recurrence rule records |
+> | `locations` | `locations` | id-keyed map of location records |
+> | `virtualLocations` | `virtual_locations` | id-keyed map of virtual location records |
+> | `links` | `links` | id-keyed map of link records |
+> | `relatedTo` | `related_to` | uid-keyed map of relation records |
+> | `participants` | `participants` | id-keyed map of participant records |
+> | `replyTo` | `reply_to` | record |
+> | `requestStatus` | `request_status` | request status record |
 
 > r[model.import.jscalendar.vendor]
 > Vendor-specific properties (property names not defined by RFC 9553) on JSCalendar objects MUST be preserved in the translated record. JSON values MUST be translated recursively: objects to records, arrays to lists, strings to strings, numbers to integers or signed integers, booleans to booleans, and null to `undefined`.
@@ -1630,14 +1658,17 @@ When compiling a Gnomon calendar to a foreign format, each validated `Calendar` 
 > r[model.export.jscalendar.calendar+2]
 > A JSCalendar export MUST produce one JSCalendar Group object per calendar. Each Group MUST contain the calendar's entries and calendar-level properties (uid, title, etc.). If there is a single calendar, the output MUST be the Group object. If there are multiple calendars, the output MUST be a JSON array of Group objects.
 
-> r[model.export.jscalendar.event]
-> An event record MUST be translated to a JSCalendar Event object (with `@type` set to `"Event"`) using the inverse of the JSCalendar import event mapping table. Gnomon field names MUST be converted to their camelCase JSCalendar equivalents (e.g. `time_zone` → `timeZone`, `free_busy_status` → `freeBusyStatus`).
+> r[model.export.jscalendar.event+2]
+> An event record MUST be translated to a JSCalendar Event object (with `@type` set to `"Event"`) using the inverse of the JSCalendar import event mapping table. Gnomon field names MUST be converted to their camelCase JSCalendar equivalents (e.g. `time_zone` → `timeZone`, `free_busy_status` → `freeBusyStatus`). All standardized JSCalendar properties (metadata, recurrence, location, participant, link, and scheduling properties) MUST be mapped to their proper JSCalendar types.
 
-> r[model.export.jscalendar.task]
-> A task record MUST be translated to a JSCalendar Task object (with `@type` set to `"Task"`) using the inverse of the JSCalendar import task mapping table.
+> r[model.export.jscalendar.task+2]
+> A task record MUST be translated to a JSCalendar Task object (with `@type` set to `"Task"`) using the inverse of the JSCalendar import task mapping table. All standardized JSCalendar properties MUST be mapped as for events.
 
 > r[model.export.jscalendar.vendor]
 > Record fields that do not correspond to any defined JSCalendar property MUST be emitted as vendor-specific properties in the JSON output. Values MUST be translated recursively using the inverse of the import JSON value translation.
+
+> r[model.export.jscalendar.unknown]
+> Record fields that do not correspond to any defined JSCalendar property mapping and do not follow the vendor property naming convention (containing a colon, e.g. `com.example:custom`) SHOULD produce a warning, since the field may be a misspelling of a mapped property.
 
 ### Shape-checking
 
