@@ -149,7 +149,7 @@ mod tests {
             FieldName::new(&db, "zebra".to_string()),
             Blamed {
                 value: Value::Integer(3),
-                blame: blame.clone(),
+                blame,
             },
         );
         record.insert(
@@ -157,7 +157,7 @@ mod tests {
             FieldName::new(&db, "apple".to_string()),
             Blamed {
                 value: Value::Integer(1),
-                blame: blame.clone(),
+                blame,
             },
         );
         record.insert(
@@ -165,7 +165,7 @@ mod tests {
             FieldName::new(&db, "mango".to_string()),
             Blamed {
                 value: Value::Integer(2),
-                blame: blame.clone(),
+                blame,
             },
         );
 
@@ -187,7 +187,7 @@ mod tests {
             name,
             Blamed {
                 value: Value::Integer(1),
-                blame: blame.clone(),
+                blame,
             },
         );
         record.insert(
@@ -195,7 +195,7 @@ mod tests {
             name,
             Blamed {
                 value: Value::Integer(2),
-                blame: blame.clone(),
+                blame,
             },
         );
 

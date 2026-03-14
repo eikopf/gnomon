@@ -524,7 +524,7 @@ mod tests {
                 "by_day",
                 Value::List(vec![Blamed {
                     value: Value::Record(nday_record),
-                    blame: blame.clone(),
+                    blame,
                 }]),
             ),
         ];

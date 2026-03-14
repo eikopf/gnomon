@@ -173,7 +173,8 @@ impl<'db> LowerCtx<'db> {
                     self.insert_field(&mut record, "start", value, decl_id, &base_path);
                 }
                 if let Some(dur_token) = span.duration() {
-                    let blame = self.make_blame(decl_id, &base_path.field(self.db,self.intern("duration")));
+                    let blame = self
+                        .make_blame(decl_id, &base_path.field(self.db, self.intern("duration")));
                     if let Some(value) =
                         desugar::desugar_duration(self.db, dur_token.text(), &blame)
                     {
@@ -277,7 +278,7 @@ impl<'db> LowerCtx<'db> {
             };
 
             let field_name = self.intern(name_token.text());
-            let field_path = base_path.field(self.db,field_name);
+            let field_path = base_path.field(self.db, field_name);
             let blame = self.make_blame(decl_id, &field_path);
 
             let value = self.lower_top_expr(&value_expr, decl_id, &field_path);
@@ -556,7 +557,7 @@ impl<'db> LowerCtx<'db> {
     ) -> Value<'db> {
         let mut items = Vec::new();
         for (i, elem) in list.elements().enumerate() {
-            let elem_path = base_path.index(self.db,i);
+            let elem_path = base_path.index(self.db, i);
             let blame = self.make_blame(decl_id, &elem_path);
             let value = self.lower_top_expr(&elem, decl_id, &elem_path);
             items.push(Blamed { value, blame });
@@ -571,7 +572,7 @@ impl<'db> LowerCtx<'db> {
         base_path: &FieldPath<'db>,
         field_name: &str,
     ) -> Option<Value<'db>> {
-        let blame = self.make_blame(decl_id, &base_path.field(self.db,self.intern(field_name)));
+        let blame = self.make_blame(decl_id, &base_path.field(self.db, self.intern(field_name)));
         if let Some(datetime_token) = dt.datetime() {
             desugar::desugar_datetime(self.db, datetime_token.text(), &blame)
         } else {
@@ -827,7 +828,7 @@ impl<'db> LowerCtx<'db> {
     fn make_blame(&self, decl_id: DeclId<'db>, path: &FieldPath<'db>) -> Blame<'db> {
         Blame {
             decl: decl_id,
-            path: path.clone(),
+            path: *path,
         }
     }
 
@@ -840,7 +841,7 @@ impl<'db> LowerCtx<'db> {
         base_path: &FieldPath<'db>,
     ) {
         let field_name = self.intern(name);
-        let blame = self.make_blame(decl_id, &base_path.field(self.db,field_name));
+        let blame = self.make_blame(decl_id, &base_path.field(self.db, field_name));
         record.insert(self.db, field_name, Blamed { value, blame });
     }
 

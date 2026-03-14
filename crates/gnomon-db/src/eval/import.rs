@@ -24,7 +24,7 @@ fn import_value_to_value<'db>(
                 .into_iter()
                 .map(|v| Blamed {
                     value: import_value_to_value(db, v, blame),
-                    blame: blame.clone(),
+                    blame: *blame,
                 })
                 .collect();
             Value::List(blamed_items)
@@ -46,7 +46,7 @@ fn import_record_to_record<'db>(
             field_name,
             Blamed {
                 value: import_value_to_value(db, val, blame),
-                blame: blame.clone(),
+                blame: *blame,
             },
         );
     }
